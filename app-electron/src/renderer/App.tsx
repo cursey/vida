@@ -702,7 +702,7 @@ export function App() {
                     onClick={() => void navigateToRva(func.start)}
                   >
                     <span className="function-meta">{func.kind}</span>
-                    <span>{func.name}</span>
+                    <span className="function-name">{func.name}</span>
                     <code>{func.start}</code>
                   </button>
                 </li>

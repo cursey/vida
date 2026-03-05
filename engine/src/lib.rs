@@ -517,7 +517,7 @@ impl EngineState {
             pe.entry as u64,
             FunctionSeed {
                 start: to_hex(pe.entry as u64),
-                name: "entry".to_owned(),
+                name: default_function_name(pe.entry as u64),
                 kind: "entry",
             },
         );
@@ -526,7 +526,7 @@ impl EngineState {
             let rva = export.rva as u64;
             ordered.entry(rva).or_insert_with(|| FunctionSeed {
                 start: to_hex(rva),
-                name: export.name.unwrap_or("<unnamed>").to_owned(),
+                name: default_function_name(rva),
                 kind: "export",
             });
         }
@@ -534,7 +534,7 @@ impl EngineState {
         for rva in collect_exception_function_starts(&pe) {
             ordered.entry(rva).or_insert_with(|| FunctionSeed {
                 start: to_hex(rva),
-                name: format!("exception_{}", to_hex(rva)),
+                name: default_function_name(rva),
                 kind: "exception",
             });
         }
@@ -1399,6 +1399,10 @@ fn parse_hex_u64(value: &str) -> Result<u64, EngineError> {
 
 fn to_hex(value: u64) -> String {
     format!("0x{value:X}")
+}
+
+fn default_function_name(rva: u64) -> String {
+    format!("sub_{:08x}", rva)
 }
 
 fn rpc_error(id: Value, error: EngineError, details: Option<Value>) -> RpcResponse {

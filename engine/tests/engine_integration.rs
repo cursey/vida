@@ -91,6 +91,26 @@ fn opens_module_lists_functions_and_disassembles() {
             matches!(kind, "entry" | "export" | "exception"),
             "Unexpected function seed kind: {kind}"
         );
+
+        let name = seed
+            .get("name")
+            .and_then(Value::as_str)
+            .expect("function name should be string");
+        assert!(
+            name.starts_with("sub_"),
+            "Function name should start with sub_: {name}"
+        );
+        assert_eq!(
+            name.len(),
+            12,
+            "Function name should be sub_ plus 8 hex chars: {name}"
+        );
+        assert!(
+            name[4..]
+                .chars()
+                .all(|value| value.is_ascii_digit() || ('a'..='f').contains(&value)),
+            "Function name suffix should be lowercase hex: {name}"
+        );
     }
 
     let start = list_result
