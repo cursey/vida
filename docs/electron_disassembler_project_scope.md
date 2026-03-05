@@ -111,6 +111,15 @@ Reasons:
 
 Split responsibilities between **UI** and **analysis engine**.
 
+## Locked MVP1 Implementation Decisions (March 4, 2026)
+
+-   Renderer stack: **React + Vite + TypeScript**
+-   Engine transport: **JSON-RPC over stdio**
+-   Engine lifecycle: **single persistent Rust child process**
+-   Rust analysis stack: **goblin + iced-x86**
+-   Protocol source of truth: **JSON Schema** in `/shared/schemas`
+-   Initial architecture support: **PE32+ x64 only**
+
 ## Electron UI (TypeScript)
 
 Responsibilities:

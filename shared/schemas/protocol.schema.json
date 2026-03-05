@@ -1,0 +1,296 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://electron-disassembler.dev/schemas/protocol.schema.json",
+  "title": "ElectronDisassemblerProtocol",
+  "description": "JSON-RPC protocol definitions for Electron <-> Rust engine",
+  "type": "object",
+  "oneOf": [
+    { "$ref": "#/$defs/Request" },
+    { "$ref": "#/$defs/Response" }
+  ],
+  "$defs": {
+    "JsonRpcVersion": {
+      "type": "string",
+      "const": "2.0"
+    },
+    "RequestId": {
+      "oneOf": [
+        { "type": "integer", "minimum": 1 },
+        { "type": "string", "minLength": 1 }
+      ]
+    },
+    "HexAddress": {
+      "type": "string",
+      "pattern": "^0x[0-9A-Fa-f]+$"
+    },
+    "ModuleId": {
+      "type": "string",
+      "pattern": "^m[0-9]+$"
+    },
+    "EngineError": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "message"],
+      "properties": {
+        "code": { "type": "integer" },
+        "message": { "type": "string" },
+        "data": {
+          "type": "object",
+          "additionalProperties": true,
+          "required": ["code"],
+          "properties": {
+            "code": { "type": "string" },
+            "details": {}
+          }
+        }
+      }
+    },
+    "EnginePingParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {}
+    },
+    "EnginePingResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version"],
+      "properties": {
+        "version": { "type": "string" }
+      }
+    },
+    "ModuleOpenParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1 }
+      }
+    },
+    "ModuleOpenResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["moduleId", "arch", "imageBase", "entryRva"],
+      "properties": {
+        "moduleId": { "$ref": "#/$defs/ModuleId" },
+        "arch": { "type": "string", "const": "x64" },
+        "imageBase": { "$ref": "#/$defs/HexAddress" },
+        "entryRva": { "$ref": "#/$defs/HexAddress" }
+      }
+    },
+    "SectionInfo": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "startRva", "endRva", "rawOffset", "rawSize"],
+      "properties": {
+        "name": { "type": "string" },
+        "startRva": { "$ref": "#/$defs/HexAddress" },
+        "endRva": { "$ref": "#/$defs/HexAddress" },
+        "rawOffset": { "type": "integer", "minimum": 0 },
+        "rawSize": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "ImportInfo": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["library", "name", "addressRva"],
+      "properties": {
+        "library": { "type": "string" },
+        "name": { "type": "string" },
+        "addressRva": { "$ref": "#/$defs/HexAddress" }
+      }
+    },
+    "ExportInfo": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "start"],
+      "properties": {
+        "name": { "type": "string" },
+        "start": { "$ref": "#/$defs/HexAddress" }
+      }
+    },
+    "ModuleInfoParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["moduleId"],
+      "properties": {
+        "moduleId": { "$ref": "#/$defs/ModuleId" }
+      }
+    },
+    "ModuleInfoResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sections", "imports", "exports"],
+      "properties": {
+        "sections": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/SectionInfo" }
+        },
+        "imports": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/ImportInfo" }
+        },
+        "exports": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/ExportInfo" }
+        }
+      }
+    },
+    "FunctionSeed": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["start", "name", "kind"],
+      "properties": {
+        "start": { "$ref": "#/$defs/HexAddress" },
+        "name": { "type": "string" },
+        "kind": { "type": "string", "enum": ["entry", "export"] }
+      }
+    },
+    "FunctionListParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["moduleId"],
+      "properties": {
+        "moduleId": { "$ref": "#/$defs/ModuleId" }
+      }
+    },
+    "FunctionListResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["functions"],
+      "properties": {
+        "functions": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/FunctionSeed" }
+        }
+      }
+    },
+    "LinearDisassemblyParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["moduleId", "start"],
+      "properties": {
+        "moduleId": { "$ref": "#/$defs/ModuleId" },
+        "start": { "$ref": "#/$defs/HexAddress" },
+        "maxInstructions": { "type": "integer", "minimum": 1, "maximum": 4096 }
+      }
+    },
+    "InstructionRow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["address", "bytes", "mnemonic", "operands"],
+      "properties": {
+        "address": { "$ref": "#/$defs/HexAddress" },
+        "bytes": { "type": "string" },
+        "mnemonic": { "type": "string" },
+        "operands": { "type": "string" },
+        "branchTarget": { "$ref": "#/$defs/HexAddress" },
+        "callTarget": { "$ref": "#/$defs/HexAddress" }
+      }
+    },
+    "LinearDisassemblyResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["instructions", "stopReason"],
+      "properties": {
+        "instructions": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/InstructionRow" }
+        },
+        "stopReason": {
+          "type": "string",
+          "enum": ["ret", "left_section", "invalid_instruction_streak", "max_instructions", "end_of_data"]
+        }
+      }
+    },
+    "EnginePingRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["jsonrpc", "id", "method", "params"],
+      "properties": {
+        "jsonrpc": { "$ref": "#/$defs/JsonRpcVersion" },
+        "id": { "$ref": "#/$defs/RequestId" },
+        "method": { "type": "string", "const": "engine.ping" },
+        "params": { "$ref": "#/$defs/EnginePingParams" }
+      }
+    },
+    "ModuleOpenRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["jsonrpc", "id", "method", "params"],
+      "properties": {
+        "jsonrpc": { "$ref": "#/$defs/JsonRpcVersion" },
+        "id": { "$ref": "#/$defs/RequestId" },
+        "method": { "type": "string", "const": "module.open" },
+        "params": { "$ref": "#/$defs/ModuleOpenParams" }
+      }
+    },
+    "ModuleInfoRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["jsonrpc", "id", "method", "params"],
+      "properties": {
+        "jsonrpc": { "$ref": "#/$defs/JsonRpcVersion" },
+        "id": { "$ref": "#/$defs/RequestId" },
+        "method": { "type": "string", "const": "module.info" },
+        "params": { "$ref": "#/$defs/ModuleInfoParams" }
+      }
+    },
+    "FunctionListRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["jsonrpc", "id", "method", "params"],
+      "properties": {
+        "jsonrpc": { "$ref": "#/$defs/JsonRpcVersion" },
+        "id": { "$ref": "#/$defs/RequestId" },
+        "method": { "type": "string", "const": "function.list" },
+        "params": { "$ref": "#/$defs/FunctionListParams" }
+      }
+    },
+    "LinearDisassemblyRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["jsonrpc", "id", "method", "params"],
+      "properties": {
+        "jsonrpc": { "$ref": "#/$defs/JsonRpcVersion" },
+        "id": { "$ref": "#/$defs/RequestId" },
+        "method": { "type": "string", "const": "function.disassembleLinear" },
+        "params": { "$ref": "#/$defs/LinearDisassemblyParams" }
+      }
+    },
+    "Request": {
+      "oneOf": [
+        { "$ref": "#/$defs/EnginePingRequest" },
+        { "$ref": "#/$defs/ModuleOpenRequest" },
+        { "$ref": "#/$defs/ModuleInfoRequest" },
+        { "$ref": "#/$defs/FunctionListRequest" },
+        { "$ref": "#/$defs/LinearDisassemblyRequest" }
+      ]
+    },
+    "SuccessResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["jsonrpc", "id", "result"],
+      "properties": {
+        "jsonrpc": { "$ref": "#/$defs/JsonRpcVersion" },
+        "id": { "$ref": "#/$defs/RequestId" },
+        "result": {}
+      }
+    },
+    "ErrorResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["jsonrpc", "id", "error"],
+      "properties": {
+        "jsonrpc": { "$ref": "#/$defs/JsonRpcVersion" },
+        "id": { "$ref": "#/$defs/RequestId" },
+        "error": { "$ref": "#/$defs/EngineError" }
+      }
+    },
+    "Response": {
+      "oneOf": [
+        { "$ref": "#/$defs/SuccessResponse" },
+        { "$ref": "#/$defs/ErrorResponse" }
+      ]
+    }
+  }
+}

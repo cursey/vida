@@ -7,6 +7,7 @@ app-electron/.DS_Store
 # Rust
 target/
 engine/target/
+engine/tests/fixture_builder/
 
 # Logs / temp
 *.log
@@ -18,4 +19,3 @@ engine/target/
 .vscode/
 Thumbs.db
 .DS_Store
-

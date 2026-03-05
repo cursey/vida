@@ -8,13 +8,29 @@ This repository is for a minimal IDA-like Electron disassembler:
 Scope reference: `docs/electron_disassembler_project_scope.md`.
 
 ## Current State
-No implementation code exists yet. This file defines the baseline standards that all future contributions must follow.
+The repository is initialized with:
+- Electron main/preload + React/Vite renderer skeleton.
+- Rust engine with JSON-RPC stdio server skeleton and MVP1 linear disassembly flow.
+- Shared protocol schemas in `shared/schemas`.
 
 ## Planned Repository Layout
 - `app-electron/` - Electron UI, renderer, graph UI
 - `engine/` - Rust analysis service
 - `shared/` - shared message contracts/schemas
 - `docs/` - architecture and algorithm notes
+
+## Change Tracking
+- For every substantial implementation, append an entry to `docs/work_log.md`.
+- Keep `docs/change_files.md` updated with the files changed by each logged work item.
+- Work log entries must include: date, summary, and validation commands executed.
+- Change file entries should be grouped by subsystem (`app-electron`, `engine`, `shared`, `docs`, root).
+
+## Architecture Defaults (Current)
+- Renderer stack: React + Vite + TypeScript.
+- Engine transport: JSON-RPC over stdio.
+- Engine lifecycle: single persistent Rust child process for app session.
+- MVP1 binary scope: PE32+ x64 only.
+- Protocol source of truth: JSON Schema files in `shared/schemas`, with generated TypeScript types in app code.
 
 ## Command Runner Policy
 Use `just` and a root `justfile` as the primary command interface.

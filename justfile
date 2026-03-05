@@ -6,6 +6,9 @@ default:
 setup:
   cd app-electron; npm install
 
+app-gen-protocol:
+  cd app-electron; npm run gen:protocol
+
 app-build:
   cd app-electron; npm run build
 
