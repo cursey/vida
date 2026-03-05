@@ -81,6 +81,8 @@ body {
 
 .transport-strip {
   height: var(--strip-height);
+  min-height: var(--strip-height);
+  max-height: var(--strip-height);
   display: grid;
   grid-template-columns: auto 1fr minmax(240px, 30%);
   align-items: center;
@@ -89,6 +91,7 @@ body {
   border: var(--line-width-strong) solid var(--line-strong);
   border-radius: var(--radius-md);
   background: var(--bg-strip);
+  overflow: hidden;
   animation: fade-in-up 180ms ease-out;
 }
 
@@ -96,6 +99,7 @@ body {
 .transport-right {
   display: flex;
   align-items: center;
+  height: 100%;
   gap: var(--space-2);
   min-width: 0;
 }
@@ -105,6 +109,7 @@ body {
   grid-template-columns: auto minmax(160px, 240px) auto;
   justify-content: center;
   align-items: center;
+  height: 100%;
   gap: var(--space-2);
 }
 
@@ -112,6 +117,7 @@ body {
   color: var(--text-secondary);
   text-transform: uppercase;
   font-size: 11px;
+  line-height: 1;
 }
 
 .app-badge {
@@ -145,6 +151,7 @@ input {
 button {
   padding: 6px 10px;
   height: 27px;
+  line-height: 1;
   cursor: pointer;
 }
 
@@ -224,10 +231,14 @@ button:focus-visible {
 }
 
 .module-path {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  line-height: 1;
   color: var(--text-muted);
   font-family: var(--font-mono);
   font-size: 11px;
@@ -634,83 +645,5 @@ code {
   to {
     opacity: 1;
     transform: translateY(0);
-  }
-}
-
-@media (max-width: 1250px) {
-  .layout {
-    grid-template-columns: 250px minmax(0, 1fr);
-    grid-template-rows: minmax(360px, 1fr) minmax(220px, auto);
-    gap: var(--space-3);
-  }
-
-  .splitter {
-    display: none;
-  }
-
-  .panel-nav {
-    grid-column: 1;
-    grid-row: 1;
-  }
-
-  .panel-disassembly {
-    grid-column: 2;
-    grid-row: 1;
-  }
-
-  .panel-inspector {
-    grid-column: 1 / span 2;
-    grid-row: 2;
-  }
-
-  .transport-strip {
-    grid-template-columns: 1fr;
-    height: auto;
-    padding: var(--space-2);
-  }
-
-  .transport-center {
-    justify-content: flex-start;
-    grid-template-columns: auto 1fr auto;
-  }
-}
-
-@media (max-width: 860px) {
-  body {
-    overflow: auto;
-  }
-
-  .shell {
-    height: auto;
-    min-height: 100vh;
-    overflow: auto;
-    padding: var(--space-2);
-  }
-
-  .layout {
-    grid-template-columns: 1fr;
-    grid-template-rows: none;
-    overflow: visible;
-  }
-
-  .panel-nav,
-  .panel-disassembly,
-  .panel-inspector {
-    grid-column: 1;
-    grid-row: auto;
-  }
-
-  .transport-right,
-  .transport-left {
-    flex-wrap: wrap;
-  }
-
-  .transport-center {
-    width: 100%;
-    grid-template-columns: 1fr;
-  }
-
-  .transport-center label {
-    display: none;
   }
 }
