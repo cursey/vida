@@ -1,3 +1,4 @@
+import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   type CSSProperties,
   type FormEvent,
@@ -9,9 +10,9 @@ import {
 } from "react";
 import type {
   FunctionSeed,
-  LinearInstruction,
+  LinearRow,
+  MethodResult,
   SectionInfo,
-  StopReason,
 } from "../shared/protocol";
 
 type ResizeSide = "left" | "right";
@@ -35,6 +36,11 @@ const MIN_PANEL_WIDTH = 220;
 const MAX_PANEL_WIDTH = 420;
 const MIN_CENTER_WIDTH = 420;
 const SPLITTER_WIDTH = 8;
+
+const PAGE_SIZE = 512;
+const OVERSCAN_ROWS = 40;
+const MAX_CACHED_PAGES = 32;
+
 const MAX_COLUMN_WIDTH = 1200;
 const MIN_COLUMN_WIDTHS: Record<DisassemblyColumn, number> = {
   address: 90,
@@ -47,6 +53,10 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
 }
 
+function makePageKey(index: number): number {
+  return Math.floor(index / PAGE_SIZE);
+}
+
 export function App() {
   const [engineStatus, setEngineStatus] = useState<string>("checking");
   const [modulePath, setModulePath] = useState<string>("");
@@ -55,12 +65,16 @@ export function App() {
   const [goToAddress, setGoToAddress] = useState<string>("");
   const [functions, setFunctions] = useState<FunctionSeed[]>([]);
   const [sections, setSections] = useState<SectionInfo[]>([]);
-  const [instructions, setInstructions] = useState<LinearInstruction[]>([]);
-  const [stopReason, setStopReason] = useState<StopReason | "">("");
+  const [linearInfo, setLinearInfo] = useState<
+    MethodResult["linear.getViewInfo"] | null
+  >(null);
+  const [pendingScrollRow, setPendingScrollRow] = useState<number | null>(null);
+
   const [errorText, setErrorText] = useState<string>("");
   const [isLoading, setIsLoading] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
   const [isColumnResizing, setIsColumnResizing] = useState(false);
+  const [cacheEpoch, setCacheEpoch] = useState(0);
   const [panelWidths, setPanelWidths] = useState({ left: 268, right: 300 });
   const [disassemblyColumnWidths, setDisassemblyColumnWidths] = useState({
     address: 110,
@@ -72,6 +86,14 @@ export function App() {
   const layoutRef = useRef<HTMLElement | null>(null);
   const dragStateRef = useRef<DragState | null>(null);
   const columnDragStateRef = useRef<ColumnDragState | null>(null);
+  const disassemblyScrollRef = useRef<HTMLDivElement | null>(null);
+  const pageCacheRef = useRef<Map<number, LinearRow[]>>(new Map());
+  const inflightPagesRef = useRef<Set<number>>(new Set());
+  const activeModuleIdRef = useRef("");
+
+  useEffect(() => {
+    activeModuleIdRef.current = moduleId;
+  }, [moduleId]);
 
   useEffect(() => {
     void window.electronAPI
@@ -108,7 +130,7 @@ export function App() {
     [panelWidths.left, panelWidths.right],
   );
 
-  const disassemblyTableStyle = useMemo(
+  const disassemblyColumnStyle = useMemo(
     () =>
       ({
         "--col-address-width": `${disassemblyColumnWidths.address}px`,
@@ -118,6 +140,21 @@ export function App() {
       }) as CSSProperties,
     [disassemblyColumnWidths],
   );
+
+  const rowCount = linearInfo?.rowCount ?? 0;
+  const rowHeight = linearInfo?.rowHeight ?? 24;
+
+  const rowVirtualizer = useVirtualizer({
+    count: rowCount,
+    getScrollElement: () => disassemblyScrollRef.current,
+    estimateSize: () => rowHeight,
+    overscan: OVERSCAN_ROWS,
+  });
+
+  const virtualItems = rowVirtualizer.getVirtualItems();
+  const visibleStart = virtualItems.length > 0 ? virtualItems[0].index : 0;
+  const visibleEnd =
+    virtualItems.length > 0 ? virtualItems[virtualItems.length - 1].index : 0;
 
   useEffect(() => {
     function clampPanelWidths() {
@@ -268,6 +305,101 @@ export function App() {
     };
   }, [isColumnResizing]);
 
+  useEffect(() => {
+    if (
+      !moduleId ||
+      !linearInfo ||
+      rowCount <= 0 ||
+      virtualItems.length === 0
+    ) {
+      return;
+    }
+
+    const firstPage = makePageKey(visibleStart);
+    const lastPage = makePageKey(visibleEnd);
+
+    for (let page = firstPage - 1; page <= lastPage + 1; page += 1) {
+      if (page < 0) {
+        continue;
+      }
+      void fetchLinearPage(moduleId, page);
+    }
+  }, [
+    moduleId,
+    linearInfo,
+    rowCount,
+    visibleStart,
+    visibleEnd,
+    virtualItems.length,
+  ]);
+
+  useEffect(() => {
+    if (pendingScrollRow === null || rowCount === 0) {
+      return;
+    }
+
+    const nextIndex = clamp(pendingScrollRow, 0, rowCount - 1);
+    rowVirtualizer.scrollToIndex(nextIndex, { align: "center" });
+    setPendingScrollRow(null);
+  }, [pendingScrollRow, rowCount, rowVirtualizer]);
+
+  function resetLinearCache() {
+    pageCacheRef.current.clear();
+    inflightPagesRef.current.clear();
+    setCacheEpoch((value) => value + 1);
+  }
+
+  function readRow(index: number): LinearRow | undefined {
+    const page = makePageKey(index);
+    const pageRows = pageCacheRef.current.get(page);
+    if (!pageRows) {
+      return undefined;
+    }
+
+    return pageRows[index % PAGE_SIZE];
+  }
+
+  async function fetchLinearPage(currentModuleId: string, page: number) {
+    if (pageCacheRef.current.has(page) || inflightPagesRef.current.has(page)) {
+      return;
+    }
+
+    inflightPagesRef.current.add(page);
+
+    try {
+      const payload = {
+        moduleId: currentModuleId,
+        startRow: page * PAGE_SIZE,
+        rowCount: PAGE_SIZE,
+      };
+      const response = await window.electronAPI.getLinearRows(payload);
+      if (currentModuleId !== activeModuleIdRef.current) {
+        return;
+      }
+
+      if (pageCacheRef.current.has(page)) {
+        pageCacheRef.current.delete(page);
+      }
+      pageCacheRef.current.set(page, response.rows);
+
+      while (pageCacheRef.current.size > MAX_CACHED_PAGES) {
+        const oldestKey = pageCacheRef.current.keys().next().value;
+        if (oldestKey === undefined) {
+          break;
+        }
+        pageCacheRef.current.delete(oldestKey);
+      }
+
+      setCacheEpoch((value) => value + 1);
+    } catch (error: unknown) {
+      setErrorText(
+        error instanceof Error ? error.message : "Failed to load linear rows",
+      );
+    } finally {
+      inflightPagesRef.current.delete(page);
+    }
+  }
+
   function startResizing(
     side: ResizeSide,
     event: PointerEvent<HTMLDivElement>,
@@ -313,11 +445,14 @@ export function App() {
       const opened = await window.electronAPI.openModule(chosenPath);
       const info = await window.electronAPI.getModuleInfo(opened.moduleId);
       const listed = await window.electronAPI.listFunctions(opened.moduleId);
-      const initialStart = listed.functions[0]?.start ?? opened.entryRva;
-      const linear = await window.electronAPI.disassembleLinear({
+      const initialRva = listed.functions[0]?.start ?? opened.entryRva;
+
+      const viewInfo = await window.electronAPI.getLinearViewInfo(
+        opened.moduleId,
+      );
+      const rowLookup = await window.electronAPI.findLinearRowByRva({
         moduleId: opened.moduleId,
-        start: initialStart,
-        maxInstructions: 250,
+        rva: initialRva,
       });
 
       setModulePath(chosenPath);
@@ -325,9 +460,10 @@ export function App() {
       setEntryRva(opened.entryRva);
       setSections(info.sections);
       setFunctions(listed.functions);
-      setInstructions(linear.instructions);
-      setStopReason(linear.stopReason);
-      setGoToAddress(initialStart);
+      setLinearInfo(viewInfo);
+      setGoToAddress(initialRva);
+      resetLinearCache();
+      setPendingScrollRow(rowLookup.rowIndex);
     } catch (error: unknown) {
       setErrorText(
         error instanceof Error ? error.message : "Failed to open executable",
@@ -337,35 +473,30 @@ export function App() {
     }
   }
 
-  async function disassembleAt(start: string) {
+  async function navigateToRva(rva: string) {
     if (!moduleId) {
       return;
     }
 
-    setIsLoading(true);
     setErrorText("");
 
     try {
-      const linear = await window.electronAPI.disassembleLinear({
+      const found = await window.electronAPI.findLinearRowByRva({
         moduleId,
-        start,
-        maxInstructions: 250,
+        rva,
       });
-      setInstructions(linear.instructions);
-      setStopReason(linear.stopReason);
-      setGoToAddress(start);
+      setGoToAddress(rva);
+      setPendingScrollRow(found.rowIndex);
     } catch (error: unknown) {
       setErrorText(
-        error instanceof Error ? error.message : "Disassembly failed",
+        error instanceof Error ? error.message : "Address lookup failed",
       );
-    } finally {
-      setIsLoading(false);
     }
   }
 
   function handleGoToSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    void disassembleAt(goToAddress);
+    void navigateToRva(goToAddress);
   }
 
   return (
@@ -425,7 +556,7 @@ export function App() {
                   <button
                     className={func.start === goToAddress ? "is-active" : ""}
                     type="button"
-                    onClick={() => void disassembleAt(func.start)}
+                    onClick={() => void navigateToRva(func.start)}
                   >
                     <span className="function-meta">{func.kind}</span>
                     <span>{func.name}</span>
@@ -450,123 +581,136 @@ export function App() {
           <header className="panel-header">
             <h2>Disassembly</h2>
             <span className="panel-stop">
-              {stopReason ? `Stop ${stopReason}` : "Ready"}
+              {linearInfo ? `${linearInfo.rowCount} rows` : "Ready"}
             </span>
           </header>
-          <div className="panel-body table-body">
-            <table className="disassembly-table" style={disassemblyTableStyle}>
-              <colgroup>
-                <col className="col-address" />
-                <col className="col-bytes" />
-                <col className="col-instruction" />
-                <col className="col-operands" />
-                <col className="col-comment" />
-              </colgroup>
-              <thead>
-                <tr>
-                  <th>
-                    <div className="column-header-cell">
-                      <span>Address</span>
-                      <button
-                        className="column-resizer"
-                        type="button"
-                        aria-label="Resize Address column"
-                        onPointerDown={(event) =>
-                          startColumnResizing("address", event)
-                        }
-                      />
-                    </div>
-                  </th>
-                  <th>
-                    <div className="column-header-cell">
-                      <span>Bytes</span>
-                      <button
-                        className="column-resizer"
-                        type="button"
-                        aria-label="Resize Bytes column"
-                        onPointerDown={(event) =>
-                          startColumnResizing("bytes", event)
-                        }
-                      />
-                    </div>
-                  </th>
-                  <th>
-                    <div className="column-header-cell">
-                      <span>Instruction</span>
-                      <button
-                        className="column-resizer"
-                        type="button"
-                        aria-label="Resize Instruction column"
-                        onPointerDown={(event) =>
-                          startColumnResizing("instruction", event)
-                        }
-                      />
-                    </div>
-                  </th>
-                  <th>
-                    <div className="column-header-cell">
-                      <span>Operands</span>
-                      <button
-                        className="column-resizer"
-                        type="button"
-                        aria-label="Resize Operands column"
-                        onPointerDown={(event) =>
-                          startColumnResizing("operands", event)
-                        }
-                      />
-                    </div>
-                  </th>
-                  <th>Comment</th>
-                </tr>
-              </thead>
-              <tbody>
-                {instructions.map((instruction) => {
-                  const branchTarget = instruction.branchTarget;
-                  const callTarget = instruction.callTarget;
+          <div className="panel-body table-body" style={disassemblyColumnStyle}>
+            <div className="disassembly-columns-header">
+              <div className="column-header-cell">
+                <span>Address</span>
+                <button
+                  className="column-resizer"
+                  type="button"
+                  aria-label="Resize Address column"
+                  onPointerDown={(event) =>
+                    startColumnResizing("address", event)
+                  }
+                />
+              </div>
+              <div className="column-header-cell">
+                <span>Bytes</span>
+                <button
+                  className="column-resizer"
+                  type="button"
+                  aria-label="Resize Bytes column"
+                  onPointerDown={(event) => startColumnResizing("bytes", event)}
+                />
+              </div>
+              <div className="column-header-cell">
+                <span>Instruction</span>
+                <button
+                  className="column-resizer"
+                  type="button"
+                  aria-label="Resize Instruction column"
+                  onPointerDown={(event) =>
+                    startColumnResizing("instruction", event)
+                  }
+                />
+              </div>
+              <div className="column-header-cell">
+                <span>Operands</span>
+                <button
+                  className="column-resizer"
+                  type="button"
+                  aria-label="Resize Operands column"
+                  onPointerDown={(event) =>
+                    startColumnResizing("operands", event)
+                  }
+                />
+              </div>
+              <div className="column-header-cell">
+                <span>Comment</span>
+              </div>
+            </div>
+
+            <div
+              className="disassembly-scroll-region"
+              ref={disassemblyScrollRef}
+            >
+              <div
+                className="disassembly-rows-canvas"
+                style={{ height: `${rowVirtualizer.getTotalSize()}px` }}
+              >
+                {virtualItems.map((virtualRow) => {
+                  const row = readRow(virtualRow.index);
+                  const top = virtualRow.start;
+
+                  if (!row) {
+                    return (
+                      <div
+                        key={`loading-${virtualRow.index}`}
+                        className="disassembly-row row-loading"
+                        style={{ transform: `translateY(${top}px)` }}
+                      >
+                        <div className="cell">
+                          <code>...</code>
+                        </div>
+                        <div className="cell">
+                          <code>...</code>
+                        </div>
+                        <div className="cell">loading</div>
+                        <div className="cell" />
+                        <div className="cell" />
+                      </div>
+                    );
+                  }
 
                   return (
-                    <tr key={`${instruction.address}-${instruction.bytes}`}>
-                      <td>
-                        <code>{instruction.address}</code>
-                      </td>
-                      <td>
-                        <code>{instruction.bytes}</code>
-                      </td>
-                      <td>{instruction.mnemonic}</td>
-                      <td>
-                        <span>{instruction.operands}</span>
-                      </td>
-                      <td className="comment-cell">
-                        {branchTarget ? (
+                    <div
+                      key={`${virtualRow.index}-${cacheEpoch}-${row.address}`}
+                      className={`disassembly-row kind-${row.kind}`}
+                      style={{ transform: `translateY(${top}px)` }}
+                    >
+                      <div className="cell">
+                        <code>{row.address}</code>
+                      </div>
+                      <div className="cell">
+                        <code>{row.bytes}</code>
+                      </div>
+                      <div className="cell">{row.mnemonic}</div>
+                      <div className="cell">{row.operands}</div>
+                      <div className="cell comment-cell">
+                        {row.comment ? <span>{`; ${row.comment}`}</span> : null}
+                        {row.branchTarget ? (
                           <a
                             className="comment-link"
-                            href={`#${branchTarget}`}
+                            href={`#${row.branchTarget}`}
                             onClick={(event) => {
                               event.preventDefault();
-                              void disassembleAt(branchTarget);
+                              void navigateToRva(row.branchTarget ?? "");
                             }}
                           >
-                            ; branch -&gt; {branchTarget}
+                            ; branch -&gt; {row.branchTarget}
                           </a>
                         ) : null}
-                        {callTarget ? (
+                        {row.callTarget ? (
                           <a
                             className="comment-link"
-                            href={`#${callTarget}`}
+                            href={`#${row.callTarget}`}
                             onClick={(event) => {
                               event.preventDefault();
-                              void disassembleAt(callTarget);
+                              void navigateToRva(row.callTarget ?? "");
                             }}
                           >
-                            ; call -&gt; {callTarget}
+                            ; call -&gt; {row.callTarget}
                           </a>
                         ) : null}
-                      </td>
-                    </tr>
+                      </div>
+                    </div>
                   );
                 })}
-              </tbody>
-            </table>
+              </div>
+            </div>
           </div>
         </section>
 

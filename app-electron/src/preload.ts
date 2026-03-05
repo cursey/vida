@@ -20,6 +20,18 @@ const electronApi: ElectronApi = {
     payload: MethodParams["function.disassembleLinear"],
   ): Promise<MethodResult["function.disassembleLinear"]> =>
     ipcRenderer.invoke("engine:disassembleLinear", payload),
+  getLinearViewInfo: (
+    moduleId: string,
+  ): Promise<MethodResult["linear.getViewInfo"]> =>
+    ipcRenderer.invoke("engine:getLinearViewInfo", moduleId),
+  getLinearRows: (
+    payload: MethodParams["linear.getRows"],
+  ): Promise<MethodResult["linear.getRows"]> =>
+    ipcRenderer.invoke("engine:getLinearRows", payload),
+  findLinearRowByRva: (
+    payload: MethodParams["linear.findRowByRva"],
+  ): Promise<MethodResult["linear.findRowByRva"]> =>
+    ipcRenderer.invoke("engine:findLinearRowByRva", payload),
 };
 
 contextBridge.exposeInMainWorld("electronAPI", electronApi);

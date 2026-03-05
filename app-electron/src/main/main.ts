@@ -63,6 +63,24 @@ ipcMain.handle(
   },
 );
 
+ipcMain.handle("engine:getLinearViewInfo", async (_event, moduleId: string) => {
+  return engineClient.request("linear.getViewInfo", { moduleId });
+});
+
+ipcMain.handle(
+  "engine:getLinearRows",
+  async (_event, payload: MethodParams["linear.getRows"]) => {
+    return engineClient.request("linear.getRows", payload);
+  },
+);
+
+ipcMain.handle(
+  "engine:findLinearRowByRva",
+  async (_event, payload: MethodParams["linear.findRowByRva"]) => {
+    return engineClient.request("linear.findRowByRva", payload);
+  },
+);
+
 app.whenReady().then(async () => {
   engineClient.start();
   createWindow();

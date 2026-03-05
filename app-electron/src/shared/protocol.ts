@@ -13,7 +13,10 @@ export type EngineMethod =
   | "module.open"
   | "module.info"
   | "function.list"
-  | "function.disassembleLinear";
+  | "function.disassembleLinear"
+  | "linear.getViewInfo"
+  | "linear.getRows"
+  | "linear.findRowByRva";
 
 export type MethodParams = {
   "engine.ping": EnginePingParams;
@@ -21,6 +24,18 @@ export type MethodParams = {
   "module.info": ModuleInfoParams;
   "function.list": FunctionListParams;
   "function.disassembleLinear": LinearDisassemblyParams;
+  "linear.getViewInfo": {
+    moduleId: string;
+  };
+  "linear.getRows": {
+    moduleId: string;
+    startRow: number;
+    rowCount: number;
+  };
+  "linear.findRowByRva": {
+    moduleId: string;
+    rva: HexAddress;
+  };
 };
 
 export type StopReason =
@@ -62,6 +77,18 @@ export type LinearInstruction = {
   operands: string;
   branchTarget?: HexAddress;
   callTarget?: HexAddress;
+  comment?: string;
+};
+
+export type LinearRow = {
+  kind: "instruction" | "data" | "gap";
+  address: HexAddress;
+  bytes: string;
+  mnemonic: string;
+  operands: string;
+  branchTarget?: HexAddress;
+  callTarget?: HexAddress;
+  comment?: string;
 };
 
 export type MethodResult = {
@@ -86,6 +113,19 @@ export type MethodResult = {
     instructions: LinearInstruction[];
     stopReason: StopReason;
   };
+  "linear.getViewInfo": {
+    rowCount: number;
+    minRva: HexAddress;
+    maxRva: HexAddress;
+    rowHeight: number;
+    dataGroupSize: number;
+  };
+  "linear.getRows": {
+    rows: LinearRow[];
+  };
+  "linear.findRowByRva": {
+    rowIndex: number;
+  };
 };
 
 export type ElectronApi = {
@@ -97,4 +137,13 @@ export type ElectronApi = {
   disassembleLinear: (
     payload: MethodParams["function.disassembleLinear"],
   ) => Promise<MethodResult["function.disassembleLinear"]>;
+  getLinearViewInfo: (
+    moduleId: string,
+  ) => Promise<MethodResult["linear.getViewInfo"]>;
+  getLinearRows: (
+    payload: MethodParams["linear.getRows"],
+  ) => Promise<MethodResult["linear.getRows"]>;
+  findLinearRowByRva: (
+    payload: MethodParams["linear.findRowByRva"],
+  ) => Promise<MethodResult["linear.findRowByRva"]>;
 };

@@ -1,5 +1,22 @@
 # Work Log
 
+## 2026-03-05 - Linear Mapped-File View with Virtualized Paging
+
+Summary:
+- Added new engine RPC methods for linear mapped view metadata, paged row retrieval, and RVA-to-row lookup.
+- Implemented engine-side linear segment indexing that emits executable rows as disassembly and non-executable rows as `db` byte directives, with explicit gap rows for unmapped ranges.
+- Reworked the disassembly panel to a virtualized, paged renderer to keep the UI responsive on large binaries while preserving existing navigation flows.
+- Added module-switch safety in renderer paging to prevent stale page responses from previous modules polluting the active view.
+
+Validation commands executed:
+- `just fmt`
+- `just check`
+- `just test`
+- `just build`
+
+Changed files index:
+- See `docs/change_files.md` for the detailed file list for this work item.
+
 ## 2026-03-05 - Branch/Call Follow Actions as Comment Hyperlinks
 
 Summary:

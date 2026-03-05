@@ -1,5 +1,23 @@
 # Change Files
 
+## 2026-03-05 - Linear Mapped-File View with Virtualized Paging
+
+Docs:
+- `docs/work_log.md`
+- `docs/change_files.md`
+
+Electron app:
+- `app-electron/package.json`
+- `app-electron/package-lock.json`
+- `app-electron/src/main/main.ts`
+- `app-electron/src/preload.ts`
+- `app-electron/src/renderer/App.tsx`
+- `app-electron/src/renderer/styles.css`
+- `app-electron/src/shared/protocol.ts`
+
+Engine:
+- `engine/src/lib.rs`
+
 ## 2026-03-05 - Branch/Call Follow Actions as Comment Hyperlinks
 
 Docs:
