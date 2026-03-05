@@ -1,5 +1,26 @@
 # Change Files
 
+## 2026-03-05 - Ableton Styling Correction Pass
+
+Docs:
+- `docs/visual_guidelines.md`
+- `docs/work_log.md`
+- `docs/change_files.md`
+
+Electron app:
+- `app-electron/src/renderer/styles.css`
+
+## 2026-03-05 - Ableton-Inspired Visual System and Layout Refresh
+
+Docs:
+- `docs/visual_guidelines.md`
+- `docs/work_log.md`
+- `docs/change_files.md`
+
+Electron app:
+- `app-electron/src/renderer/App.tsx`
+- `app-electron/src/renderer/styles.css`
+
 ## 2026-03-04 to 2026-03-05 - MVP1 Vertical Slice Foundation
 
 Root:
@@ -44,4 +65,3 @@ Engine:
 - `engine/tests/contract_schema_tests.rs`
 - `engine/tests/engine_integration.rs`
 - `engine/tests/fixtures/minimal_x64.exe`
-

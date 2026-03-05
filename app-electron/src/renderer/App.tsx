@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useState } from "react";
 import type {
   FunctionSeed,
   LinearInstruction,
@@ -32,6 +32,18 @@ export function App() {
         );
       });
   }, []);
+
+  const engineStateClass = useMemo(() => {
+    if (engineStatus.startsWith("online")) {
+      return "state-online";
+    }
+
+    if (engineStatus === "checking") {
+      return "state-checking";
+    }
+
+    return "state-offline";
+  }, [engineStatus]);
 
   async function openExecutable() {
     setErrorText("");
@@ -96,129 +108,169 @@ export function App() {
     }
   }
 
+  function handleGoToSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    void disassembleAt(goToAddress);
+  }
+
   return (
     <div className="shell">
-      <header className="toolbar">
-        <button onClick={openExecutable} type="button" disabled={isLoading}>
-          Open EXE
-        </button>
-        <div className="status">Engine: {engineStatus}</div>
-        <div className="path" title={modulePath}>
-          {modulePath || "No module loaded"}
+      <header className="transport-strip">
+        <div className="transport-left">
+          <div className="app-badge" aria-label="Application identity">
+            ELECTRON DISASSEMBLER
+          </div>
+          <button
+            className="transport-button"
+            onClick={openExecutable}
+            type="button"
+            disabled={isLoading}
+          >
+            Open EXE
+          </button>
+        </div>
+
+        <form className="transport-center" onSubmit={handleGoToSubmit}>
+          <label htmlFor="goto-address">Go To</label>
+          <input
+            id="goto-address"
+            value={goToAddress}
+            onChange={(event) => setGoToAddress(event.target.value)}
+            placeholder="0x140001000"
+          />
+          <button type="submit" disabled={!moduleId || isLoading}>
+            Jump
+          </button>
+        </form>
+
+        <div className="transport-right">
+          <span className={`engine-state ${engineStateClass}`}>
+            Engine {engineStatus}
+          </span>
+          <span className="module-path" title={modulePath}>
+            {modulePath || "No module loaded"}
+          </span>
         </div>
       </header>
 
-      {errorText ? <div className="error">{errorText}</div> : null}
+      {errorText ? <div className="error-banner">{errorText}</div> : null}
 
       <main className="layout">
-        <section className="panel nav">
-          <h2>Functions</h2>
-          <ul>
-            {functions.map((func) => (
-              <li key={`${func.kind}-${func.start}`}>
-                <button
-                  type="button"
-                  onClick={() => void disassembleAt(func.start)}
-                >
-                  <span>{func.name}</span>
-                  <code>{func.start}</code>
-                </button>
-              </li>
-            ))}
-          </ul>
-        </section>
-
-        <section className="panel disassembly">
-          <div className="disassembly-header">
-            <h2>Disassembly</h2>
-            <form
-              onSubmit={(event) => {
-                event.preventDefault();
-                void disassembleAt(goToAddress);
-              }}
-            >
-              <input
-                value={goToAddress}
-                onChange={(event) => setGoToAddress(event.target.value)}
-                placeholder="0x140001000"
-              />
-              <button type="submit" disabled={!moduleId || isLoading}>
-                Go
-              </button>
-            </form>
-          </div>
-          <table>
-            <thead>
-              <tr>
-                <th>Address</th>
-                <th>Bytes</th>
-                <th>Instruction</th>
-                <th>Operands</th>
-              </tr>
-            </thead>
-            <tbody>
-              {instructions.map((instruction) => (
-                <tr key={instruction.address}>
-                  <td>
-                    <code>{instruction.address}</code>
-                  </td>
-                  <td>
-                    <code>{instruction.bytes}</code>
-                  </td>
-                  <td>{instruction.mnemonic}</td>
-                  <td>
-                    <span>{instruction.operands}</span>
-                    {instruction.branchTarget ? (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (instruction.branchTarget) {
-                            void disassembleAt(instruction.branchTarget);
-                          }
-                        }}
-                      >
-                        {instruction.branchTarget}
-                      </button>
-                    ) : null}
-                    {instruction.callTarget ? (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (instruction.callTarget) {
-                            void disassembleAt(instruction.callTarget);
-                          }
-                        }}
-                      >
-                        {instruction.callTarget}
-                      </button>
-                    ) : null}
-                  </td>
-                </tr>
+        <section className="panel panel-nav">
+          <header className="panel-header">
+            <h2>Browser</h2>
+            <span>{functions.length} functions</span>
+          </header>
+          <div className="panel-body">
+            <ul className="function-list">
+              {functions.map((func) => (
+                <li key={`${func.kind}-${func.start}`}>
+                  <button
+                    className={func.start === goToAddress ? "is-active" : ""}
+                    type="button"
+                    onClick={() => void disassembleAt(func.start)}
+                  >
+                    <span className="function-meta">{func.kind}</span>
+                    <span>{func.name}</span>
+                    <code>{func.start}</code>
+                  </button>
+                </li>
               ))}
-            </tbody>
-          </table>
-          {stopReason ? (
-            <div className="stop-reason">Stop reason: {stopReason}</div>
-          ) : null}
+            </ul>
+          </div>
         </section>
 
-        <section className="panel inspector">
-          <h2>Inspector</h2>
-          <div>
-            <strong>Module ID:</strong> {moduleId || "-"}
+        <section className="panel panel-disassembly">
+          <header className="panel-header">
+            <h2>Disassembly</h2>
+            <span className="panel-stop">
+              {stopReason ? `Stop ${stopReason}` : "Ready"}
+            </span>
+          </header>
+          <div className="panel-body table-body">
+            <table className="disassembly-table">
+              <thead>
+                <tr>
+                  <th>Address</th>
+                  <th>Bytes</th>
+                  <th>Instruction</th>
+                  <th>Operands</th>
+                </tr>
+              </thead>
+              <tbody>
+                {instructions.map((instruction) => (
+                  <tr key={`${instruction.address}-${instruction.bytes}`}>
+                    <td>
+                      <code>{instruction.address}</code>
+                    </td>
+                    <td>
+                      <code>{instruction.bytes}</code>
+                    </td>
+                    <td>{instruction.mnemonic}</td>
+                    <td>
+                      <span>{instruction.operands || "-"}</span>
+                      {instruction.branchTarget ? (
+                        <button
+                          className="address-chip"
+                          type="button"
+                          onClick={() => {
+                            if (instruction.branchTarget) {
+                              void disassembleAt(instruction.branchTarget);
+                            }
+                          }}
+                        >
+                          {instruction.branchTarget}
+                        </button>
+                      ) : null}
+                      {instruction.callTarget ? (
+                        <button
+                          className="address-chip"
+                          type="button"
+                          onClick={() => {
+                            if (instruction.callTarget) {
+                              void disassembleAt(instruction.callTarget);
+                            }
+                          }}
+                        >
+                          {instruction.callTarget}
+                        </button>
+                      ) : null}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-          <div>
-            <strong>Entry RVA:</strong> {entryRva || "-"}
+        </section>
+
+        <section className="panel panel-inspector">
+          <header className="panel-header">
+            <h2>Inspector</h2>
+            <span>{moduleId || "No module"}</span>
+          </header>
+          <div className="panel-body inspector-grid">
+            <div className="detail-row">
+              <span>Module ID</span>
+              <code>{moduleId || "-"}</code>
+            </div>
+            <div className="detail-row">
+              <span>Entry RVA</span>
+              <code>{entryRva || "-"}</code>
+            </div>
+            <h3>Sections</h3>
+            <ul className="section-list">
+              {sections.map((section) => (
+                <li key={`${section.name}-${section.startRva}`}>
+                  <div>
+                    <code>{section.name}</code>
+                  </div>
+                  <div>
+                    {section.startRva} - {section.endRva}
+                  </div>
+                </li>
+              ))}
+            </ul>
           </div>
-          <h3>Sections</h3>
-          <ul>
-            {sections.map((section) => (
-              <li key={section.name + section.startRva}>
-                <code>{section.name}</code> {section.startRva} -{" "}
-                {section.endRva}
-              </li>
-            ))}
-          </ul>
         </section>
       </main>
     </div>
