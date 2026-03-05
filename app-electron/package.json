@@ -1,0 +1,21 @@
+{
+  "name": "app-electron",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Electron UI skeleton for electron-disassembler",
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "electron dist/main.js",
+    "dev": "npm run build && npm run start",
+    "lint": "biome lint .",
+    "fmt": "biome format --write .",
+    "check": "biome check .",
+    "test": "node --test test/**/*.test.js"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.4",
+    "electron": "^37.2.0",
+    "typescript": "^5.9.2"
+  }
+}

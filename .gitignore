@@ -1,0 +1,21 @@
+# Node / Electron
+node_modules/
+app-electron/node_modules/
+app-electron/dist/
+app-electron/.DS_Store
+
+# Rust
+target/
+engine/target/
+
+# Logs / temp
+*.log
+*.tmp
+*.temp
+
+# Editor / OS
+.idea/
+.vscode/
+Thumbs.db
+.DS_Store
+

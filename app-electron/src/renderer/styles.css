@@ -1,0 +1,25 @@
+:root {
+  color-scheme: light;
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: linear-gradient(180deg, #f7f9fc 0%, #e8eef8 100%);
+  color: #162030;
+}
+
+.app {
+  max-width: 760px;
+  margin: 64px auto;
+  background: #ffffff;
+  border: 1px solid #d8e0ee;
+  border-radius: 16px;
+  padding: 24px 28px;
+  box-shadow: 0 12px 32px rgba(22, 32, 48, 0.1);
+}
+
+h1 {
+  margin-top: 0;
+}
