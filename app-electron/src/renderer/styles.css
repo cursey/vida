@@ -39,6 +39,7 @@
   --strip-height: 42px;
   --panel-title-size: 12px;
   --cell-height: 24px;
+  --splitter-width: 6px;
 }
 
 * {
@@ -49,7 +50,8 @@ html,
 body,
 #root {
   margin: 0;
-  min-height: 100vh;
+  height: 100%;
+  min-height: 100%;
 }
 
 body {
@@ -58,6 +60,7 @@ body {
   letter-spacing: 0.01em;
   background: var(--bg-canvas);
   color: var(--text-primary);
+  overflow: hidden;
 }
 
 .shell {
@@ -65,7 +68,15 @@ body {
   flex-direction: column;
   gap: var(--space-3);
   padding: var(--space-3);
-  min-height: 100vh;
+  height: 100vh;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.shell.is-resizing,
+.shell.is-resizing * {
+  cursor: col-resize;
+  user-select: none;
 }
 
 .transport-strip {
@@ -224,15 +235,67 @@ button:focus-visible {
 
 .layout {
   display: grid;
-  grid-template-columns: 268px 1fr 300px;
-  gap: var(--space-3);
-  flex: 1;
+  grid-template-columns:
+    var(--left-panel-width, 268px)
+    var(--splitter-width)
+    minmax(420px, 1fr)
+    var(--splitter-width)
+    var(--right-panel-width, 300px);
+  gap: 0;
+  flex: 1 1 auto;
   min-height: 0;
+  overflow: hidden;
+}
+
+.panel-nav {
+  grid-column: 1;
+}
+
+.splitter-left {
+  grid-column: 2;
+}
+
+.panel-disassembly {
+  grid-column: 3;
+}
+
+.panel-disassembly .panel-header,
+.panel-disassembly .panel-body,
+.panel-disassembly .panel-body * {
+  font-family: var(--font-mono);
+}
+
+.splitter-right {
+  grid-column: 4;
+}
+
+.panel-inspector {
+  grid-column: 5;
+}
+
+.splitter {
+  min-height: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  cursor: col-resize;
+  position: relative;
+  margin-inline: -2px;
+  z-index: 2;
+}
+
+.splitter::before {
+  content: none;
+}
+
+.splitter:hover {
+  background: transparent;
 }
 
 .panel {
   display: flex;
   flex-direction: column;
+  height: 100%;
   min-height: 0;
   border: var(--line-width-strong) solid var(--line-strong);
   border-radius: var(--radius-md);
@@ -245,11 +308,11 @@ button:focus-visible {
   animation-delay: 40ms;
 }
 
-.panel:nth-child(2) {
+.panel:nth-child(3) {
   animation-delay: 80ms;
 }
 
-.panel:nth-child(3) {
+.panel:nth-child(5) {
   animation-delay: 120ms;
 }
 
@@ -289,6 +352,7 @@ button:focus-visible {
   flex: 1;
   min-height: 0;
   overflow: auto;
+  overscroll-behavior: contain;
   padding: var(--space-2);
 }
 
@@ -337,15 +401,44 @@ button:focus-visible {
 }
 
 .disassembly-table {
-  width: 100%;
+  width: max(
+    100%,
+    calc(
+      var(--col-address-width, 110px) +
+      var(--col-bytes-width, 180px) +
+      var(--col-instruction-width, 160px) +
+      var(--col-operands-width, 320px) +
+      var(--col-comment-min-width, 180px)
+    )
+  );
   border-collapse: collapse;
+  table-layout: fixed;
   font-size: 12px;
+}
+
+.disassembly-table .col-address {
+  width: var(--col-address-width, 110px);
+}
+
+.disassembly-table .col-bytes {
+  width: var(--col-bytes-width, 180px);
+}
+
+.disassembly-table .col-instruction {
+  width: var(--col-instruction-width, 160px);
+}
+
+.disassembly-table .col-operands {
+  width: var(--col-operands-width, 320px);
+}
+
+.disassembly-table .col-comment {
+  width: auto;
 }
 
 .disassembly-table th,
 .disassembly-table td {
   height: var(--cell-height);
-  border-bottom: 1px solid var(--line-soft);
   text-align: left;
   padding: 0 8px;
   white-space: nowrap;
@@ -356,15 +449,53 @@ button:focus-visible {
   position: sticky;
   top: 0;
   z-index: 1;
+  border-bottom: 1px solid var(--line-soft);
   font-size: 11px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-muted);
   background: #2d2d2d;
+  overflow: visible;
 }
 
 .disassembly-table td {
+  border-bottom: 0;
   color: #d2d2d2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.disassembly-table .comment-cell {
+  color: var(--text-muted);
+}
+
+.column-header-cell {
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: 100%;
+  padding-right: 10px;
+}
+
+.column-resizer {
+  position: absolute;
+  right: 0;
+  top: 0;
+  height: 100%;
+  width: 8px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  cursor: col-resize;
+  transform: translateX(50%);
+  touch-action: none;
+}
+
+.column-resizer:hover,
+.column-resizer:focus-visible {
+  background: transparent;
+  outline: none;
 }
 
 .disassembly-table tbody tr:hover {
@@ -446,12 +577,28 @@ code {
 
 @media (max-width: 1250px) {
   .layout {
-    grid-template-columns: 250px 1fr;
+    grid-template-columns: 250px minmax(0, 1fr);
     grid-template-rows: minmax(360px, 1fr) minmax(220px, auto);
+    gap: var(--space-3);
+  }
+
+  .splitter {
+    display: none;
+  }
+
+  .panel-nav {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .panel-disassembly {
+    grid-column: 2;
+    grid-row: 1;
   }
 
   .panel-inspector {
     grid-column: 1 / span 2;
+    grid-row: 2;
   }
 
   .transport-strip {
@@ -467,17 +614,28 @@ code {
 }
 
 @media (max-width: 860px) {
+  body {
+    overflow: auto;
+  }
+
   .shell {
+    height: auto;
+    min-height: 100vh;
+    overflow: auto;
     padding: var(--space-2);
   }
 
   .layout {
     grid-template-columns: 1fr;
     grid-template-rows: none;
+    overflow: visible;
   }
 
+  .panel-nav,
+  .panel-disassembly,
   .panel-inspector {
-    grid-column: auto;
+    grid-column: 1;
+    grid-row: auto;
   }
 
   .transport-right,

@@ -1,5 +1,90 @@
 # Change Files
 
+## 2026-03-05 - Add Comment Column with Remaining-Width Fill
+
+Docs:
+- `docs/work_log.md`
+- `docs/change_files.md`
+
+Electron app:
+- `app-electron/src/renderer/App.tsx`
+- `app-electron/src/renderer/styles.css`
+
+## 2026-03-05 - Disassembly Column Resize Behavior Correction
+
+Docs:
+- `docs/work_log.md`
+- `docs/change_files.md`
+
+Electron app:
+- `app-electron/src/renderer/styles.css`
+
+## 2026-03-05 - Disassembly Column Width Resizing
+
+Docs:
+- `docs/work_log.md`
+- `docs/change_files.md`
+
+Electron app:
+- `app-electron/src/renderer/App.tsx`
+- `app-electron/src/renderer/styles.css`
+
+## 2026-03-05 - Remove Operand Dash Fallback in Renderer
+
+Docs:
+- `docs/work_log.md`
+- `docs/change_files.md`
+
+Electron app:
+- `app-electron/src/renderer/App.tsx`
+
+## 2026-03-05 - Disassembly Mono Typography and Row Separator Removal
+
+Docs:
+- `docs/work_log.md`
+- `docs/change_files.md`
+
+Electron app:
+- `app-electron/src/renderer/styles.css`
+
+## 2026-03-05 - Splitter Gap Tightening
+
+Docs:
+- `docs/work_log.md`
+- `docs/change_files.md`
+
+Electron app:
+- `app-electron/src/renderer/styles.css`
+
+## 2026-03-05 - Invisible Splitter UI Tweak
+
+Docs:
+- `docs/work_log.md`
+- `docs/change_files.md`
+
+Electron app:
+- `app-electron/src/renderer/styles.css`
+
+## 2026-03-05 - Independent Panel Scroll Fix
+
+Docs:
+- `docs/work_log.md`
+- `docs/change_files.md`
+
+Electron app:
+- `app-electron/src/renderer/styles.css`
+
+## 2026-03-05 - Panel Resizing and Independent Scroll Behavior
+
+Docs:
+- `docs/visual_guidelines.md`
+- `docs/work_log.md`
+- `docs/change_files.md`
+
+Electron app:
+- `app-electron/src/renderer/App.tsx`
+- `app-electron/src/renderer/styles.css`
+
 ## 2026-03-05 - Ableton Styling Correction Pass
 
 Docs:

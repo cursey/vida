@@ -1,10 +1,51 @@
-import { type FormEvent, useEffect, useMemo, useState } from "react";
+import {
+  type CSSProperties,
+  type FormEvent,
+  type PointerEvent,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import type {
   FunctionSeed,
   LinearInstruction,
   SectionInfo,
   StopReason,
 } from "../shared/protocol";
+
+type ResizeSide = "left" | "right";
+
+type DragState = {
+  side: ResizeSide;
+  startX: number;
+  startLeft: number;
+  startRight: number;
+};
+
+type DisassemblyColumn = "address" | "bytes" | "instruction" | "operands";
+
+type ColumnDragState = {
+  key: DisassemblyColumn;
+  startX: number;
+  startWidth: number;
+};
+
+const MIN_PANEL_WIDTH = 220;
+const MAX_PANEL_WIDTH = 420;
+const MIN_CENTER_WIDTH = 420;
+const SPLITTER_WIDTH = 8;
+const MAX_COLUMN_WIDTH = 1200;
+const MIN_COLUMN_WIDTHS: Record<DisassemblyColumn, number> = {
+  address: 90,
+  bytes: 120,
+  instruction: 120,
+  operands: 140,
+};
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max);
+}
 
 export function App() {
   const [engineStatus, setEngineStatus] = useState<string>("checking");
@@ -18,6 +59,19 @@ export function App() {
   const [stopReason, setStopReason] = useState<StopReason | "">("");
   const [errorText, setErrorText] = useState<string>("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isResizing, setIsResizing] = useState(false);
+  const [isColumnResizing, setIsColumnResizing] = useState(false);
+  const [panelWidths, setPanelWidths] = useState({ left: 268, right: 300 });
+  const [disassemblyColumnWidths, setDisassemblyColumnWidths] = useState({
+    address: 110,
+    bytes: 180,
+    instruction: 160,
+    operands: 320,
+  });
+
+  const layoutRef = useRef<HTMLElement | null>(null);
+  const dragStateRef = useRef<DragState | null>(null);
+  const columnDragStateRef = useRef<ColumnDragState | null>(null);
 
   useEffect(() => {
     void window.electronAPI
@@ -44,6 +98,207 @@ export function App() {
 
     return "state-offline";
   }, [engineStatus]);
+
+  const layoutStyle = useMemo(
+    () =>
+      ({
+        "--left-panel-width": `${panelWidths.left}px`,
+        "--right-panel-width": `${panelWidths.right}px`,
+      }) as CSSProperties,
+    [panelWidths.left, panelWidths.right],
+  );
+
+  const disassemblyTableStyle = useMemo(
+    () =>
+      ({
+        "--col-address-width": `${disassemblyColumnWidths.address}px`,
+        "--col-bytes-width": `${disassemblyColumnWidths.bytes}px`,
+        "--col-instruction-width": `${disassemblyColumnWidths.instruction}px`,
+        "--col-operands-width": `${disassemblyColumnWidths.operands}px`,
+      }) as CSSProperties,
+    [disassemblyColumnWidths],
+  );
+
+  useEffect(() => {
+    function clampPanelWidths() {
+      if (!layoutRef.current || window.innerWidth <= 1250) {
+        return;
+      }
+
+      const layoutWidth = layoutRef.current.clientWidth;
+      const maxLeft = Math.max(
+        MIN_PANEL_WIDTH,
+        Math.min(
+          MAX_PANEL_WIDTH,
+          layoutWidth -
+            panelWidths.right -
+            MIN_CENTER_WIDTH -
+            SPLITTER_WIDTH * 2,
+        ),
+      );
+      const clampedLeft = clamp(panelWidths.left, MIN_PANEL_WIDTH, maxLeft);
+
+      const maxRight = Math.max(
+        MIN_PANEL_WIDTH,
+        Math.min(
+          MAX_PANEL_WIDTH,
+          layoutWidth - clampedLeft - MIN_CENTER_WIDTH - SPLITTER_WIDTH * 2,
+        ),
+      );
+      const clampedRight = clamp(panelWidths.right, MIN_PANEL_WIDTH, maxRight);
+
+      if (
+        clampedLeft !== panelWidths.left ||
+        clampedRight !== panelWidths.right
+      ) {
+        setPanelWidths({ left: clampedLeft, right: clampedRight });
+      }
+    }
+
+    window.addEventListener("resize", clampPanelWidths);
+    clampPanelWidths();
+
+    return () => {
+      window.removeEventListener("resize", clampPanelWidths);
+    };
+  }, [panelWidths.left, panelWidths.right]);
+
+  useEffect(() => {
+    if (!isResizing) {
+      return;
+    }
+
+    function handlePointerMove(event: globalThis.PointerEvent) {
+      const drag = dragStateRef.current;
+      const layout = layoutRef.current;
+
+      if (!drag || !layout) {
+        return;
+      }
+
+      const dx = event.clientX - drag.startX;
+      const layoutWidth = layout.clientWidth;
+
+      if (drag.side === "left") {
+        const maxLeft = Math.max(
+          MIN_PANEL_WIDTH,
+          Math.min(
+            MAX_PANEL_WIDTH,
+            layoutWidth -
+              drag.startRight -
+              MIN_CENTER_WIDTH -
+              SPLITTER_WIDTH * 2,
+          ),
+        );
+
+        setPanelWidths((prev) => ({
+          ...prev,
+          left: clamp(drag.startLeft + dx, MIN_PANEL_WIDTH, maxLeft),
+        }));
+        return;
+      }
+
+      const maxRight = Math.max(
+        MIN_PANEL_WIDTH,
+        Math.min(
+          MAX_PANEL_WIDTH,
+          layoutWidth - drag.startLeft - MIN_CENTER_WIDTH - SPLITTER_WIDTH * 2,
+        ),
+      );
+
+      setPanelWidths((prev) => ({
+        ...prev,
+        right: clamp(drag.startRight - dx, MIN_PANEL_WIDTH, maxRight),
+      }));
+    }
+
+    function stopResizing() {
+      dragStateRef.current = null;
+      setIsResizing(false);
+    }
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", stopResizing);
+    window.addEventListener("pointercancel", stopResizing);
+
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", stopResizing);
+      window.removeEventListener("pointercancel", stopResizing);
+    };
+  }, [isResizing]);
+
+  useEffect(() => {
+    if (!isColumnResizing) {
+      return;
+    }
+
+    function handlePointerMove(event: globalThis.PointerEvent) {
+      const drag = columnDragStateRef.current;
+      if (!drag) {
+        return;
+      }
+
+      const dx = event.clientX - drag.startX;
+      const nextWidth = clamp(
+        drag.startWidth + dx,
+        MIN_COLUMN_WIDTHS[drag.key],
+        MAX_COLUMN_WIDTH,
+      );
+
+      setDisassemblyColumnWidths((prev) => ({
+        ...prev,
+        [drag.key]: nextWidth,
+      }));
+    }
+
+    function stopColumnResizing() {
+      columnDragStateRef.current = null;
+      setIsColumnResizing(false);
+    }
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", stopColumnResizing);
+    window.addEventListener("pointercancel", stopColumnResizing);
+
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", stopColumnResizing);
+      window.removeEventListener("pointercancel", stopColumnResizing);
+    };
+  }, [isColumnResizing]);
+
+  function startResizing(
+    side: ResizeSide,
+    event: PointerEvent<HTMLDivElement>,
+  ) {
+    if (window.innerWidth <= 1250) {
+      return;
+    }
+
+    event.preventDefault();
+    dragStateRef.current = {
+      side,
+      startX: event.clientX,
+      startLeft: panelWidths.left,
+      startRight: panelWidths.right,
+    };
+    setIsResizing(true);
+  }
+
+  function startColumnResizing(
+    key: DisassemblyColumn,
+    event: PointerEvent<HTMLButtonElement>,
+  ) {
+    event.preventDefault();
+    event.stopPropagation();
+    columnDragStateRef.current = {
+      key,
+      startX: event.clientX,
+      startWidth: disassemblyColumnWidths[key],
+    };
+    setIsColumnResizing(true);
+  }
 
   async function openExecutable() {
     setErrorText("");
@@ -114,7 +369,9 @@ export function App() {
   }
 
   return (
-    <div className="shell">
+    <div
+      className={`shell ${isResizing || isColumnResizing ? "is-resizing" : ""}`}
+    >
       <header className="transport-strip">
         <div className="transport-left">
           <div className="app-badge" aria-label="Application identity">
@@ -155,7 +412,7 @@ export function App() {
 
       {errorText ? <div className="error-banner">{errorText}</div> : null}
 
-      <main className="layout">
+      <main className="layout" ref={layoutRef} style={layoutStyle}>
         <section className="panel panel-nav">
           <header className="panel-header">
             <h2>Browser</h2>
@@ -180,6 +437,15 @@ export function App() {
           </div>
         </section>
 
+        <div
+          className="splitter splitter-left"
+          role="separator"
+          aria-label="Resize browser panel"
+          aria-orientation="vertical"
+          tabIndex={0}
+          onPointerDown={(event) => startResizing("left", event)}
+        />
+
         <section className="panel panel-disassembly">
           <header className="panel-header">
             <h2>Disassembly</h2>
@@ -188,13 +454,69 @@ export function App() {
             </span>
           </header>
           <div className="panel-body table-body">
-            <table className="disassembly-table">
+            <table className="disassembly-table" style={disassemblyTableStyle}>
+              <colgroup>
+                <col className="col-address" />
+                <col className="col-bytes" />
+                <col className="col-instruction" />
+                <col className="col-operands" />
+                <col className="col-comment" />
+              </colgroup>
               <thead>
                 <tr>
-                  <th>Address</th>
-                  <th>Bytes</th>
-                  <th>Instruction</th>
-                  <th>Operands</th>
+                  <th>
+                    <div className="column-header-cell">
+                      <span>Address</span>
+                      <button
+                        className="column-resizer"
+                        type="button"
+                        aria-label="Resize Address column"
+                        onPointerDown={(event) =>
+                          startColumnResizing("address", event)
+                        }
+                      />
+                    </div>
+                  </th>
+                  <th>
+                    <div className="column-header-cell">
+                      <span>Bytes</span>
+                      <button
+                        className="column-resizer"
+                        type="button"
+                        aria-label="Resize Bytes column"
+                        onPointerDown={(event) =>
+                          startColumnResizing("bytes", event)
+                        }
+                      />
+                    </div>
+                  </th>
+                  <th>
+                    <div className="column-header-cell">
+                      <span>Instruction</span>
+                      <button
+                        className="column-resizer"
+                        type="button"
+                        aria-label="Resize Instruction column"
+                        onPointerDown={(event) =>
+                          startColumnResizing("instruction", event)
+                        }
+                      />
+                    </div>
+                  </th>
+                  <th>
+                    <div className="column-header-cell">
+                      <span>Operands</span>
+                      <button
+                        className="column-resizer"
+                        type="button"
+                        aria-label="Resize Operands column"
+                        onPointerDown={(event) =>
+                          startColumnResizing("operands", event)
+                        }
+                      />
+                    </div>
+                  </th>
+                  <th>Comment</th>
                 </tr>
               </thead>
               <tbody>
@@ -208,7 +530,7 @@ export function App() {
                     </td>
                     <td>{instruction.mnemonic}</td>
                     <td>
-                      <span>{instruction.operands || "-"}</span>
+                      <span>{instruction.operands}</span>
                       {instruction.branchTarget ? (
                         <button
                           className="address-chip"
@@ -236,12 +558,22 @@ export function App() {
                         </button>
                       ) : null}
                     </td>
+                    <td className="comment-cell" />
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
         </section>
+
+        <div
+          className="splitter splitter-right"
+          role="separator"
+          aria-label="Resize inspector panel"
+          aria-orientation="vertical"
+          tabIndex={0}
+          onPointerDown={(event) => startResizing("right", event)}
+        />
 
         <section className="panel panel-inspector">
           <header className="panel-header">

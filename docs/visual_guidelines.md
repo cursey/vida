@@ -49,6 +49,8 @@ This is inspiration and not a proprietary visual clone.
   - Browser
   - Disassembly
   - Inspector
+- Panels are individually scrollable in their content regions.
+- Panel widths are user-resizable via vertical splitters (desktop view).
 - Panel headers should be narrow, uppercase, and metadata-aware.
 - Tables stay dense with sticky headers and mono alignment for addresses/bytes.
 - Active selection and actionable jump chips use orange-accent treatment.
