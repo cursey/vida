@@ -72,3 +72,25 @@ fn ping_response_validates_against_schema() {
         .validate(&response_value)
         .unwrap_or_else(|error| panic!("response failed schema validation: {error}"));
 }
+
+#[test]
+fn function_list_response_with_exception_kind_validates_against_schema() {
+    let schema = load_protocol_schema();
+    let validator = validator_for(&schema).expect("schema should compile");
+
+    let response_value = json!({
+        "jsonrpc": "2.0",
+        "id": 101,
+        "result": {
+            "functions": [
+                { "start": "0x1000", "name": "entry", "kind": "entry" },
+                { "start": "0x2000", "name": "exported", "kind": "export" },
+                { "start": "0x3000", "name": "exception_0x3000", "kind": "exception" }
+            ]
+        }
+    });
+
+    validator
+        .validate(&response_value)
+        .unwrap_or_else(|error| panic!("response failed schema validation: {error}"));
+}

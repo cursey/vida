@@ -4,6 +4,7 @@ use std::io::{self, BufRead, Write};
 use std::path::{Path, PathBuf};
 
 use goblin::pe::PE;
+use goblin::pe::exception::RuntimeFunction;
 use iced_x86::{
     Decoder, DecoderOptions, FlowControl, Formatter, GasFormatter, Instruction, Mnemonic,
 };
@@ -503,6 +504,14 @@ impl EngineState {
                 start: to_hex(rva),
                 name: export.name.unwrap_or("<unnamed>").to_owned(),
                 kind: "export",
+            });
+        }
+
+        for rva in collect_exception_function_starts(&pe) {
+            ordered.entry(rva).or_insert_with(|| FunctionSeed {
+                start: to_hex(rva),
+                name: format!("exception_{}", to_hex(rva)),
+                kind: "exception",
             });
         }
 
@@ -1187,6 +1196,63 @@ fn find_section_for_rva(pe: &PE<'_>, rva: u64) -> Option<SectionSlice> {
     None
 }
 
+fn collect_exception_function_starts(pe: &PE<'_>) -> Vec<u64> {
+    let Some(exception_data) = pe.exception_data.as_ref() else {
+        return Vec::new();
+    };
+
+    let entries = exception_data
+        .functions()
+        .filter_map(Result::ok)
+        .collect::<Vec<RuntimeFunction>>();
+
+    collect_exception_function_starts_from_entries(&entries, |rva| is_executable_rva(pe, rva))
+}
+
+fn collect_exception_function_starts_from_entries<F>(
+    entries: &[RuntimeFunction],
+    mut is_executable_start: F,
+) -> Vec<u64>
+where
+    F: FnMut(u64) -> bool,
+{
+    let mut starts = Vec::new();
+
+    for entry in entries {
+        let start = u64::from(entry.begin_address);
+        let end = u64::from(entry.end_address);
+        if !is_valid_exception_function_range(start, end) {
+            continue;
+        }
+        if !is_executable_start(start) {
+            continue;
+        }
+
+        starts.push(start);
+    }
+
+    starts
+}
+
+fn is_valid_exception_function_range(start: u64, end: u64) -> bool {
+    start != 0 && end > start
+}
+
+fn is_executable_rva(pe: &PE<'_>, rva: u64) -> bool {
+    for section in &pe.sections {
+        let start = section.virtual_address as u64;
+        let len = u64::from(section.virtual_size.max(section.size_of_raw_data));
+        let end = start.saturating_add(len);
+        if rva < start || rva >= end {
+            continue;
+        }
+
+        return section.characteristics & IMAGE_SCN_MEM_EXECUTE != 0;
+    }
+
+    false
+}
+
 fn split_instruction_text(text: &str) -> (String, String) {
     let trimmed = text.trim();
     if let Some((mnemonic, operands)) = trimmed.split_once(' ') {
@@ -1286,6 +1352,7 @@ pub fn fixture_path(name: &str) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use goblin::pe::exception::RuntimeFunction;
 
     #[test]
     fn parses_hex_addresses() {
@@ -1304,5 +1371,42 @@ mod tests {
         });
 
         assert!(matches!(response, RpcResponse::Error { .. }));
+    }
+
+    #[test]
+    fn validates_exception_function_ranges() {
+        assert!(!is_valid_exception_function_range(0, 0x1100));
+        assert!(!is_valid_exception_function_range(0x1200, 0x1200));
+        assert!(!is_valid_exception_function_range(0x1300, 0x1200));
+        assert!(is_valid_exception_function_range(0x1400, 0x1410));
+    }
+
+    #[test]
+    fn collects_exception_starts_with_exec_filtering() {
+        let entries = vec![
+            RuntimeFunction {
+                begin_address: 0,
+                end_address: 0x1100,
+                unwind_info_address: 0,
+            },
+            RuntimeFunction {
+                begin_address: 0x1200,
+                end_address: 0x1200,
+                unwind_info_address: 0,
+            },
+            RuntimeFunction {
+                begin_address: 0x1300,
+                end_address: 0x1310,
+                unwind_info_address: 0,
+            },
+            RuntimeFunction {
+                begin_address: 0x1400,
+                end_address: 0x1420,
+                unwind_info_address: 0,
+            },
+        ];
+
+        let starts = collect_exception_function_starts_from_entries(&entries, |rva| rva == 0x1400);
+        assert_eq!(starts, vec![0x1400]);
     }
 }

@@ -1,5 +1,23 @@
 # Change Files
 
+## 2026-03-05 - Add Function Discovery from PE Exception Directory
+
+Docs:
+- `docs/work_log.md`
+- `docs/change_files.md`
+
+Shared:
+- `shared/schemas/protocol.schema.json`
+
+Electron app:
+- `app-electron/src/shared/protocol.ts`
+- `app-electron/test/protocol-schema.test.js`
+
+Engine:
+- `engine/src/lib.rs`
+- `engine/tests/contract_schema_tests.rs`
+- `engine/tests/engine_integration.rs`
+
 ## 2026-03-05 - Linear Mapped-File View with Virtualized Paging
 
 Docs:

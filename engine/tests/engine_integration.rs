@@ -47,8 +47,51 @@ fn opens_module_lists_functions_and_disassembles() {
         .expect("functions array should exist");
 
     assert!(!functions.is_empty(), "Expected at least one seed function");
+    assert!(
+        functions
+            .iter()
+            .any(|seed| { seed.get("kind").and_then(Value::as_str) == Some("entry") }),
+        "Expected entry seed to be present"
+    );
 
-    let start = functions[0]
+    let starts = functions
+        .iter()
+        .map(|seed| {
+            let raw = seed
+                .get("start")
+                .and_then(Value::as_str)
+                .expect("function start should be string");
+            u64::from_str_radix(raw.trim_start_matches("0x"), 16).expect("valid hex RVA")
+        })
+        .collect::<Vec<u64>>();
+    let mut sorted_starts = starts.clone();
+    sorted_starts.sort_unstable();
+    assert_eq!(
+        starts, sorted_starts,
+        "Function seeds should be sorted by RVA"
+    );
+    sorted_starts.dedup();
+    assert_eq!(
+        starts.len(),
+        sorted_starts.len(),
+        "Function seed RVAs should be unique",
+    );
+
+    for seed in functions {
+        let kind = seed
+            .get("kind")
+            .and_then(Value::as_str)
+            .expect("function kind should be string");
+        assert!(
+            matches!(kind, "entry" | "export" | "exception"),
+            "Unexpected function seed kind: {kind}"
+        );
+    }
+
+    let start = list_result
+        .get("functions")
+        .and_then(Value::as_array)
+        .expect("functions array should exist")[0]
         .get("start")
         .and_then(Value::as_str)
         .expect("function start should be string")

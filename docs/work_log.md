@@ -1,5 +1,25 @@
 # Work Log
 
+## 2026-03-05 - Add Function Discovery from PE Exception Directory
+
+Summary:
+- Extended engine function discovery to include x64 exception directory (`.pdata`) runtime function entries.
+- Added exception-derived seeds to `function.list` with kind `exception`, while preserving entry/export precedence and deterministic RVA ordering.
+- Updated protocol schema and app shared types so `FunctionSeed.kind` supports `exception`.
+- Added engine unit/integration and schema validation tests for exception seed handling.
+
+Validation commands executed:
+- `cargo fmt --manifest-path engine/Cargo.toml`
+- `cargo test --manifest-path engine/Cargo.toml`
+- `cd app-electron; npx biome check --write src/shared/protocol.ts test/protocol-schema.test.js`
+- `cd app-electron; npx biome check src/shared/protocol.ts test/protocol-schema.test.js`
+- `cd app-electron; npx tsc -p tsconfig.main.json --noEmit`
+- `cd app-electron; npx tsc -p tsconfig.renderer.json --noEmit`
+- `cd app-electron; npm run test`
+
+Changed files index:
+- See `docs/change_files.md` for the detailed file list for this work item.
+
 ## 2026-03-05 - Linear Mapped-File View with Virtualized Paging
 
 Summary:

@@ -29,6 +29,23 @@ test("protocol request and response examples validate", () => {
     },
   };
 
+  const functionListResponse = {
+    jsonrpc: "2.0",
+    id: 2,
+    result: {
+      functions: [
+        { start: "0x1000", name: "entry", kind: "entry" },
+        { start: "0x2000", name: "exported", kind: "export" },
+        { start: "0x3000", name: "exception_0x3000", kind: "exception" },
+      ],
+    },
+  };
+
   assert.equal(validate(request), true, JSON.stringify(validate.errors));
   assert.equal(validate(response), true, JSON.stringify(validate.errors));
+  assert.equal(
+    validate(functionListResponse),
+    true,
+    JSON.stringify(validate.errors),
+  );
 });
