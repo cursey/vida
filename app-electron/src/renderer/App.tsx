@@ -3,6 +3,7 @@ import {
   type CSSProperties,
   type FormEvent,
   type PointerEvent,
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -40,6 +41,7 @@ const SPLITTER_WIDTH = 8;
 const PAGE_SIZE = 512;
 const OVERSCAN_ROWS = 40;
 const MAX_CACHED_PAGES = 32;
+const MAX_SELECTION_HISTORY = 512;
 
 const MAX_COLUMN_WIDTH = 1200;
 const MIN_COLUMN_WIDTHS: Record<DisassemblyColumn, number> = {
@@ -99,6 +101,8 @@ export function App() {
   const pageCacheRef = useRef<Map<number, LinearRow[]>>(new Map());
   const inflightPagesRef = useRef<Set<number>>(new Set());
   const activeModuleIdRef = useRef("");
+  const selectionHistoryRef = useRef<string[]>([]);
+  const selectionHistoryIndexRef = useRef(-1);
 
   useEffect(() => {
     activeModuleIdRef.current = moduleId;
@@ -389,6 +393,44 @@ export function App() {
     return pageRows[index % PAGE_SIZE];
   }
 
+  function resetSelectionHistory(initialRva: string | null = null) {
+    selectionHistoryRef.current = [];
+    selectionHistoryIndexRef.current = -1;
+
+    if (!initialRva) {
+      return;
+    }
+
+    selectionHistoryRef.current.push(initialRva);
+    selectionHistoryIndexRef.current = 0;
+  }
+
+  const pushSelectionHistory = useCallback((rva: string) => {
+    if (!rva) {
+      return;
+    }
+
+    const history = selectionHistoryRef.current;
+    const currentIndex = selectionHistoryIndexRef.current;
+
+    if (currentIndex >= 0 && history[currentIndex] === rva) {
+      return;
+    }
+
+    if (currentIndex < history.length - 1) {
+      history.splice(currentIndex + 1);
+    }
+
+    history.push(rva);
+
+    if (history.length > MAX_SELECTION_HISTORY) {
+      const overflow = history.length - MAX_SELECTION_HISTORY;
+      history.splice(0, overflow);
+    }
+
+    selectionHistoryIndexRef.current = history.length - 1;
+  }, []);
+
   async function fetchLinearPage(currentModuleId: string, page: number) {
     if (pageCacheRef.current.has(page) || inflightPagesRef.current.has(page)) {
       return;
@@ -493,6 +535,7 @@ export function App() {
       setLinearInfo(viewInfo);
       setGoToAddress(initialRva);
       setSelectedRowIndex(null);
+      resetSelectionHistory(initialRva);
       resetLinearCache();
       setPendingScrollRow(rowLookup.rowIndex);
     } catch (error: unknown) {
@@ -504,26 +547,82 @@ export function App() {
     }
   }
 
-  async function navigateToRva(rva: string) {
-    if (!moduleId) {
-      return;
-    }
+  const navigateToRva = useCallback(
+    async (
+      rva: string,
+      options: { recordHistory?: boolean } = { recordHistory: true },
+    ) => {
+      if (!moduleId) {
+        return false;
+      }
 
-    setErrorText("");
+      setErrorText("");
 
-    try {
-      const found = await window.electronAPI.findLinearRowByRva({
-        moduleId,
-        rva,
+      try {
+        const found = await window.electronAPI.findLinearRowByRva({
+          moduleId,
+          rva,
+        });
+        if (options.recordHistory !== false) {
+          pushSelectionHistory(rva);
+        }
+        setGoToAddress(rva);
+        setPendingScrollRow(found.rowIndex);
+        return true;
+      } catch (error: unknown) {
+        setErrorText(
+          error instanceof Error ? error.message : "Address lookup failed",
+        );
+        return false;
+      }
+    },
+    [moduleId, pushSelectionHistory],
+  );
+
+  const navigateSelectionHistory = useCallback(
+    async (direction: -1 | 1) => {
+      if (!moduleId) {
+        return;
+      }
+
+      const history = selectionHistoryRef.current;
+      const currentIndex = selectionHistoryIndexRef.current;
+      const nextIndex = currentIndex + direction;
+      if (nextIndex < 0 || nextIndex >= history.length) {
+        return;
+      }
+
+      const targetRva = history[nextIndex];
+      selectionHistoryIndexRef.current = nextIndex;
+      const navigated = await navigateToRva(targetRva, {
+        recordHistory: false,
       });
-      setGoToAddress(rva);
-      setPendingScrollRow(found.rowIndex);
-    } catch (error: unknown) {
-      setErrorText(
-        error instanceof Error ? error.message : "Address lookup failed",
-      );
+      if (!navigated) {
+        selectionHistoryIndexRef.current = currentIndex;
+      }
+    },
+    [moduleId, navigateToRva],
+  );
+
+  useEffect(() => {
+    function handleMouseHistoryButtons(event: MouseEvent) {
+      if (!moduleId) {
+        return;
+      }
+      if (event.button !== 3 && event.button !== 4) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      void navigateSelectionHistory(event.button === 3 ? -1 : 1);
     }
-  }
+
+    window.addEventListener("mousedown", handleMouseHistoryButtons);
+    return () => {
+      window.removeEventListener("mousedown", handleMouseHistoryButtons);
+    };
+  }, [moduleId, navigateSelectionHistory]);
 
   function handleGoToSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -718,9 +817,13 @@ export function App() {
                           : ""
                       }`}
                       style={{ transform: `translateY(${top}px)` }}
-                      onPointerDown={() => {
+                      onPointerDown={(event) => {
+                        if (event.button !== 0) {
+                          return;
+                        }
                         setSelectedRowIndex(virtualRow.index);
                         setGoToAddress(row.address);
+                        pushSelectionHistory(row.address);
                       }}
                     >
                       <div className="cell section-cell">
