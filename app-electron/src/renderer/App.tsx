@@ -26,6 +26,7 @@ type DragState = {
 };
 
 type DisassemblyColumn = "section" | "address" | "bytes" | "instruction";
+type ActivePanel = "browser" | "disassembly" | "inspector";
 
 type ColumnDragState = {
   key: DisassemblyColumn;
@@ -67,6 +68,19 @@ function parseHexRva(value: string): number | null {
   return parsed;
 }
 
+function isEditableTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) {
+    return false;
+  }
+  const tag = target.tagName;
+  return (
+    target.isContentEditable ||
+    tag === "INPUT" ||
+    tag === "TEXTAREA" ||
+    tag === "SELECT"
+  );
+}
+
 export function App() {
   const [engineStatus, setEngineStatus] = useState<string>("checking");
   const [modulePath, setModulePath] = useState<string>("");
@@ -80,6 +94,9 @@ export function App() {
   >(null);
   const [pendingScrollRow, setPendingScrollRow] = useState<number | null>(null);
   const [selectedRowIndex, setSelectedRowIndex] = useState<number | null>(null);
+  const [activePanel, setActivePanel] = useState<ActivePanel>("disassembly");
+  const [isGoToModalOpen, setIsGoToModalOpen] = useState(false);
+  const [goToInputValue, setGoToInputValue] = useState("");
 
   const [errorText, setErrorText] = useState<string>("");
   const [isLoading, setIsLoading] = useState(false);
@@ -98,6 +115,7 @@ export function App() {
   const dragStateRef = useRef<DragState | null>(null);
   const columnDragStateRef = useRef<ColumnDragState | null>(null);
   const disassemblyScrollRef = useRef<HTMLDivElement | null>(null);
+  const goToInputRef = useRef<HTMLInputElement | null>(null);
   const pageCacheRef = useRef<Map<number, LinearRow[]>>(new Map());
   const inflightPagesRef = useRef<Set<number>>(new Set());
   const activeModuleIdRef = useRef("");
@@ -107,6 +125,12 @@ export function App() {
   useEffect(() => {
     activeModuleIdRef.current = moduleId;
   }, [moduleId]);
+
+  useEffect(() => {
+    document.title = modulePath
+      ? `${modulePath} - Electron Disassembler`
+      : "Electron Disassembler";
+  }, [modulePath]);
 
   useEffect(() => {
     void window.electronAPI
@@ -120,6 +144,15 @@ export function App() {
           error instanceof Error ? error.message : "Failed to ping engine",
         );
       });
+  }, []);
+
+  useEffect(() => {
+    const unsubscribe = window.electronAPI.onMenuOpenExecutable(() => {
+      void openExecutableFromPicker();
+    });
+    return () => {
+      unsubscribe();
+    };
   }, []);
 
   const engineStateClass = useMemo(() => {
@@ -504,13 +537,7 @@ export function App() {
     setIsColumnResizing(true);
   }
 
-  async function openExecutable() {
-    setErrorText("");
-    const chosenPath = await window.electronAPI.pickExecutable();
-    if (!chosenPath) {
-      return;
-    }
-
+  async function openModuleFromPath(chosenPath: string) {
     setIsLoading(true);
 
     try {
@@ -545,6 +572,15 @@ export function App() {
     } finally {
       setIsLoading(false);
     }
+  }
+
+  async function openExecutableFromPicker() {
+    setErrorText("");
+    const chosenPath = await window.electronAPI.pickExecutable();
+    if (!chosenPath) {
+      return;
+    }
+    await openModuleFromPath(chosenPath);
   }
 
   const navigateToRva = useCallback(
@@ -604,6 +640,14 @@ export function App() {
     [moduleId, navigateToRva],
   );
 
+  const openGoToModal = useCallback(() => {
+    if (!moduleId) {
+      return;
+    }
+    setGoToInputValue(goToAddress || entryRva || "");
+    setIsGoToModalOpen(true);
+  }, [moduleId, goToAddress, entryRva]);
+
   useEffect(() => {
     function handleMouseHistoryButtons(event: MouseEvent) {
       if (!moduleId) {
@@ -624,9 +668,58 @@ export function App() {
     };
   }, [moduleId, navigateSelectionHistory]);
 
-  function handleGoToSubmit(event: FormEvent<HTMLFormElement>) {
+  useEffect(() => {
+    if (!isGoToModalOpen) {
+      return;
+    }
+    goToInputRef.current?.focus();
+    goToInputRef.current?.select();
+  }, [isGoToModalOpen]);
+
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape" && isGoToModalOpen) {
+        event.preventDefault();
+        setIsGoToModalOpen(false);
+        return;
+      }
+
+      if (event.key.toLowerCase() !== "g" || event.repeat) {
+        return;
+      }
+
+      if (event.ctrlKey || event.metaKey || event.altKey) {
+        return;
+      }
+
+      if (isEditableTarget(event.target)) {
+        return;
+      }
+
+      if (activePanel !== "disassembly" || !moduleId || isGoToModalOpen) {
+        return;
+      }
+
+      event.preventDefault();
+      openGoToModal();
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [activePanel, moduleId, isGoToModalOpen, openGoToModal]);
+
+  async function handleGoToSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    void navigateToRva(goToAddress);
+    const target = goToInputValue.trim();
+    if (!target) {
+      return;
+    }
+    const navigated = await navigateToRva(target);
+    if (navigated) {
+      setIsGoToModalOpen(false);
+    }
   }
 
   function findSectionName(address: string): string {
@@ -646,48 +739,17 @@ export function App() {
     <div
       className={`shell ${isResizing || isColumnResizing ? "is-resizing" : ""}`}
     >
-      <header className="transport-strip">
-        <div className="transport-left">
-          <div className="app-badge" aria-label="Application identity">
-            ELECTRON DISASSEMBLER
-          </div>
-          <button
-            className="transport-button"
-            onClick={openExecutable}
-            type="button"
-            disabled={isLoading}
-          >
-            Open EXE
-          </button>
-        </div>
-
-        <form className="transport-center" onSubmit={handleGoToSubmit}>
-          <label htmlFor="goto-address">Go To</label>
-          <input
-            id="goto-address"
-            value={goToAddress}
-            onChange={(event) => setGoToAddress(event.target.value)}
-            placeholder="0x140001000"
-          />
-          <button type="submit" disabled={!moduleId || isLoading}>
-            Jump
-          </button>
-        </form>
-
-        <div className="transport-right">
-          <span className={`engine-state ${engineStateClass}`}>
-            Engine {engineStatus}
-          </span>
-          <span className="module-path" title={modulePath}>
-            {modulePath || "No module loaded"}
-          </span>
-        </div>
-      </header>
-
       {errorText ? <div className="error-banner">{errorText}</div> : null}
 
       <main className="layout" ref={layoutRef} style={layoutStyle}>
-        <section className="panel panel-nav">
+        <section
+          className={`panel panel-nav ${
+            activePanel === "browser" ? "is-panel-active" : ""
+          }`}
+          onPointerDown={() => setActivePanel("browser")}
+          onWheel={() => setActivePanel("browser")}
+          onFocusCapture={() => setActivePanel("browser")}
+        >
           <header className="panel-header">
             <h2>Browser</h2>
             <span>{functions.length} functions</span>
@@ -720,7 +782,14 @@ export function App() {
           onPointerDown={(event) => startResizing("left", event)}
         />
 
-        <section className="panel panel-disassembly">
+        <section
+          className={`panel panel-disassembly ${
+            activePanel === "disassembly" ? "is-panel-active" : ""
+          }`}
+          onPointerDown={() => setActivePanel("disassembly")}
+          onWheel={() => setActivePanel("disassembly")}
+          onFocusCapture={() => setActivePanel("disassembly")}
+        >
           <header className="panel-header">
             <h2>Disassembly</h2>
             <span>{linearInfo ? `${linearInfo.rowCount} rows` : "Ready"}</span>
@@ -889,7 +958,14 @@ export function App() {
           onPointerDown={(event) => startResizing("right", event)}
         />
 
-        <section className="panel panel-inspector">
+        <section
+          className={`panel panel-inspector ${
+            activePanel === "inspector" ? "is-panel-active" : ""
+          }`}
+          onPointerDown={() => setActivePanel("inspector")}
+          onWheel={() => setActivePanel("inspector")}
+          onFocusCapture={() => setActivePanel("inspector")}
+        >
           <header className="panel-header">
             <h2>Inspector</h2>
             <span>{moduleId || "No module"}</span>
@@ -925,6 +1001,47 @@ export function App() {
           </div>
         </section>
       </main>
+
+      <footer className="status-bar">
+        <span className={`engine-state ${engineStateClass}`}>
+          Engine {engineStatus}
+        </span>
+      </footer>
+
+      {isGoToModalOpen ? (
+        <div
+          className="go-to-modal-backdrop"
+          onPointerDown={() => setIsGoToModalOpen(false)}
+        >
+          <form
+            className="go-to-modal"
+            onPointerDown={(event) => event.stopPropagation()}
+            onSubmit={(event) => {
+              void handleGoToSubmit(event);
+            }}
+          >
+            <h3>Go To Address</h3>
+            <input
+              ref={goToInputRef}
+              value={goToInputValue}
+              onChange={(event) => setGoToInputValue(event.target.value)}
+              placeholder="0x140001000"
+            />
+            <div className="go-to-modal-actions">
+              <button
+                type="button"
+                onClick={() => setIsGoToModalOpen(false)}
+                disabled={isLoading}
+              >
+                Cancel
+              </button>
+              <button type="submit" disabled={!moduleId || isLoading}>
+                Jump
+              </button>
+            </div>
+          </form>
+        </div>
+      ) : null}
     </div>
   );
 }

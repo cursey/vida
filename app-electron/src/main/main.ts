@@ -1,9 +1,54 @@
 import path from "node:path";
-import { BrowserWindow, app, dialog, ipcMain } from "electron";
+import {
+  BrowserWindow,
+  Menu,
+  type MenuItemConstructorOptions,
+  app,
+  dialog,
+  ipcMain,
+} from "electron";
 import type { MethodParams } from "../shared/protocol";
 import { EngineClient } from "./engineClient";
 
 const engineClient = new EngineClient();
+
+function sendOpenExecutableMenuEvent(): void {
+  const targetWindow =
+    BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
+  targetWindow?.webContents.send("app:menu-open-executable");
+}
+
+function setApplicationMenu(): void {
+  const fileSubmenu: MenuItemConstructorOptions[] = [
+    {
+      label: "Open...",
+      accelerator: "CmdOrCtrl+O",
+      click: () => {
+        sendOpenExecutableMenuEvent();
+      },
+    },
+    { type: "separator" },
+    process.platform === "darwin" ? { role: "close" } : { role: "quit" },
+  ];
+
+  const template: MenuItemConstructorOptions[] =
+    process.platform === "darwin"
+      ? [
+          { role: "appMenu" },
+          { label: "File", submenu: fileSubmenu },
+          { role: "editMenu" },
+          { role: "viewMenu" },
+          { role: "windowMenu" },
+        ]
+      : [
+          { label: "File", submenu: fileSubmenu },
+          { role: "editMenu" },
+          { role: "viewMenu" },
+          { role: "windowMenu" },
+        ];
+
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
 
 function createWindow(): void {
   const window = new BrowserWindow({
@@ -83,6 +128,7 @@ ipcMain.handle(
 
 app.whenReady().then(async () => {
   engineClient.start();
+  setApplicationMenu();
   createWindow();
 
   app.on("activate", () => {

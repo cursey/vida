@@ -146,6 +146,7 @@ export type MethodResult = {
 
 export type ElectronApi = {
   pickExecutable: () => Promise<string | null>;
+  onMenuOpenExecutable: (callback: () => void) => () => void;
   pingEngine: () => Promise<MethodResult["engine.ping"]>;
   openModule: (path: string) => Promise<MethodResult["module.open"]>;
   getModuleInfo: (moduleId: string) => Promise<MethodResult["module.info"]>;

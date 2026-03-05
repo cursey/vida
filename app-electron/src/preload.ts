@@ -8,6 +8,15 @@ import type {
 const electronApi: ElectronApi = {
   pickExecutable: (): Promise<string | null> =>
     ipcRenderer.invoke("app:pickExecutable"),
+  onMenuOpenExecutable: (callback: () => void): (() => void) => {
+    const listener = (): void => {
+      callback();
+    };
+    ipcRenderer.on("app:menu-open-executable", listener);
+    return () => {
+      ipcRenderer.removeListener("app:menu-open-executable", listener);
+    };
+  },
   pingEngine: (): Promise<MethodResult["engine.ping"]> =>
     ipcRenderer.invoke("engine:ping"),
   openModule: (path: string): Promise<MethodResult["module.open"]> =>
