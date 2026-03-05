@@ -520,47 +520,51 @@ export function App() {
                 </tr>
               </thead>
               <tbody>
-                {instructions.map((instruction) => (
-                  <tr key={`${instruction.address}-${instruction.bytes}`}>
-                    <td>
-                      <code>{instruction.address}</code>
-                    </td>
-                    <td>
-                      <code>{instruction.bytes}</code>
-                    </td>
-                    <td>{instruction.mnemonic}</td>
-                    <td>
-                      <span>{instruction.operands}</span>
-                      {instruction.branchTarget ? (
-                        <button
-                          className="address-chip"
-                          type="button"
-                          onClick={() => {
-                            if (instruction.branchTarget) {
-                              void disassembleAt(instruction.branchTarget);
-                            }
-                          }}
-                        >
-                          {instruction.branchTarget}
-                        </button>
-                      ) : null}
-                      {instruction.callTarget ? (
-                        <button
-                          className="address-chip"
-                          type="button"
-                          onClick={() => {
-                            if (instruction.callTarget) {
-                              void disassembleAt(instruction.callTarget);
-                            }
-                          }}
-                        >
-                          {instruction.callTarget}
-                        </button>
-                      ) : null}
-                    </td>
-                    <td className="comment-cell" />
-                  </tr>
-                ))}
+                {instructions.map((instruction) => {
+                  const branchTarget = instruction.branchTarget;
+                  const callTarget = instruction.callTarget;
+
+                  return (
+                    <tr key={`${instruction.address}-${instruction.bytes}`}>
+                      <td>
+                        <code>{instruction.address}</code>
+                      </td>
+                      <td>
+                        <code>{instruction.bytes}</code>
+                      </td>
+                      <td>{instruction.mnemonic}</td>
+                      <td>
+                        <span>{instruction.operands}</span>
+                      </td>
+                      <td className="comment-cell">
+                        {branchTarget ? (
+                          <a
+                            className="comment-link"
+                            href={`#${branchTarget}`}
+                            onClick={(event) => {
+                              event.preventDefault();
+                              void disassembleAt(branchTarget);
+                            }}
+                          >
+                            ; branch -&gt; {branchTarget}
+                          </a>
+                        ) : null}
+                        {callTarget ? (
+                          <a
+                            className="comment-link"
+                            href={`#${callTarget}`}
+                            onClick={(event) => {
+                              event.preventDefault();
+                              void disassembleAt(callTarget);
+                            }}
+                          >
+                            ; call -&gt; {callTarget}
+                          </a>
+                        ) : null}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

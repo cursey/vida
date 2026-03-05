@@ -1,5 +1,32 @@
 # Work Log
 
+## 2026-03-05 - Branch/Call Follow Actions as Comment Hyperlinks
+
+Summary:
+- Replaced branch/call follow controls in the Operands column with hyperlink-style comment text in the `Comment` column.
+- Changed interaction semantics from button-style controls to anchor-style navigation actions.
+- Kept target navigation behavior the same (`disassembleAt` on click).
+
+Validation commands executed:
+- `just fmt`
+- `just check`
+
+Changed files index:
+- See `docs/change_files.md` for the detailed file list for this work item.
+
+## 2026-03-05 - Open EXE Button Vertical Alignment Fix
+
+Summary:
+- Adjusted `.transport-button` layout to use inline-flex centering.
+- Ensured button text is vertically centered in the control.
+
+Validation commands executed:
+- `just fmt`
+- `just check`
+
+Changed files index:
+- See `docs/change_files.md` for the detailed file list for this work item.
+
 ## 2026-03-05 - Add Comment Column with Remaining-Width Fill
 
 Summary:

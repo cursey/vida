@@ -162,6 +162,9 @@ button:disabled {
 }
 
 .transport-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border-color: #6f5f50;
   background: #4a3d31;
   color: var(--accent-text);
@@ -467,6 +470,24 @@ button:focus-visible {
 
 .disassembly-table .comment-cell {
   color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.comment-link {
+  color: #8ea8c7;
+  text-decoration: none;
+  cursor: pointer;
+  margin-right: 10px;
+}
+
+.comment-link:hover {
+  color: #b7ccef;
+  text-decoration: underline;
+}
+
+.comment-link:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 1px;
 }
 
 .column-header-cell {
@@ -509,17 +530,6 @@ code {
 
 .table-body {
   padding: 0;
-}
-
-.address-chip {
-  margin-left: 6px;
-  height: 20px;
-  padding: 0 6px;
-  font-size: 10px;
-  font-family: var(--font-mono);
-  border: var(--line-width-soft) solid #6f5f50;
-  background: #46362a;
-  color: var(--accent-text);
 }
 
 .inspector-grid {

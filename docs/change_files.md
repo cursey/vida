@@ -1,5 +1,24 @@
 # Change Files
 
+## 2026-03-05 - Branch/Call Follow Actions as Comment Hyperlinks
+
+Docs:
+- `docs/work_log.md`
+- `docs/change_files.md`
+
+Electron app:
+- `app-electron/src/renderer/App.tsx`
+- `app-electron/src/renderer/styles.css`
+
+## 2026-03-05 - Open EXE Button Vertical Alignment Fix
+
+Docs:
+- `docs/work_log.md`
+- `docs/change_files.md`
+
+Electron app:
+- `app-electron/src/renderer/styles.css`
+
 ## 2026-03-05 - Add Comment Column with Remaining-Width Fill
 
 Docs:
