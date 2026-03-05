@@ -170,6 +170,12 @@ button:disabled {
   color: var(--accent-text);
 }
 
+.transport-center button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .transport-button:hover {
   background: #5a4a3a;
 }
@@ -407,10 +413,11 @@ button:focus-visible {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  overflow: hidden;
   padding: 0;
-  --disassembly-columns: var(--col-address-width, 110px)
-    var(--col-bytes-width, 180px) var(--col-instruction-width, 160px)
-    var(--col-operands-width, 320px)
+  --disassembly-columns: var(--col-section-width, 88px)
+    var(--col-address-width, 110px) var(--col-bytes-width, 180px)
+    var(--col-instruction-width, 420px)
     minmax(var(--col-comment-min-width, 180px), 1fr);
 }
 
@@ -467,6 +474,10 @@ button:focus-visible {
   white-space: nowrap;
 }
 
+.disassembly-row .section-cell {
+  color: var(--text-muted);
+}
+
 .disassembly-row.kind-gap {
   color: #c79f78;
   background: #2c2723;
@@ -482,6 +493,12 @@ button:focus-visible {
 
 .disassembly-row:hover {
   background: #2f2f2f;
+}
+
+.disassembly-row.is-current,
+.disassembly-row.is-current:hover {
+  background: #4d3d2f;
+  box-shadow: inset 0 0 0 1px #7e5b3b;
 }
 
 .disassembly-row .comment-cell {
@@ -510,7 +527,7 @@ button:focus-visible {
   display: flex;
   align-items: center;
   height: 100%;
-  padding-right: 10px;
+  padding: 0 10px 0 8px;
 }
 
 .column-resizer {
@@ -573,11 +590,39 @@ code {
 .section-list li {
   border: var(--line-width-soft) solid var(--line-soft);
   border-radius: var(--radius-sm);
-  padding: 5px 7px;
   background: #2f2f2f;
+  padding: 0;
+  overflow: hidden;
+}
+
+.section-list button {
+  width: 100%;
+  height: auto;
+  padding: 5px 7px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
   color: #cccccc;
   font-family: var(--font-mono);
   font-size: 11px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  text-align: left;
+}
+
+.section-list button:hover {
+  background: #3a3a3a;
+}
+
+.section-list button.is-active {
+  background: #4d3d2f;
+  color: var(--accent-text);
+}
+
+.section-list button span {
+  color: var(--text-muted);
 }
 
 @keyframes fade-in-up {

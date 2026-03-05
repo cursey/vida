@@ -24,7 +24,7 @@ type DragState = {
   startRight: number;
 };
 
-type DisassemblyColumn = "address" | "bytes" | "instruction" | "operands";
+type DisassemblyColumn = "section" | "address" | "bytes" | "instruction";
 
 type ColumnDragState = {
   key: DisassemblyColumn;
@@ -43,10 +43,10 @@ const MAX_CACHED_PAGES = 32;
 
 const MAX_COLUMN_WIDTH = 1200;
 const MIN_COLUMN_WIDTHS: Record<DisassemblyColumn, number> = {
+  section: 72,
   address: 90,
   bytes: 120,
   instruction: 120,
-  operands: 140,
 };
 
 function clamp(value: number, min: number, max: number): number {
@@ -55,6 +55,14 @@ function clamp(value: number, min: number, max: number): number {
 
 function makePageKey(index: number): number {
   return Math.floor(index / PAGE_SIZE);
+}
+
+function parseHexRva(value: string): number | null {
+  const parsed = Number.parseInt(value, 16);
+  if (!Number.isFinite(parsed) || Number.isNaN(parsed)) {
+    return null;
+  }
+  return parsed;
 }
 
 export function App() {
@@ -69,6 +77,7 @@ export function App() {
     MethodResult["linear.getViewInfo"] | null
   >(null);
   const [pendingScrollRow, setPendingScrollRow] = useState<number | null>(null);
+  const [selectedRowIndex, setSelectedRowIndex] = useState<number | null>(null);
 
   const [errorText, setErrorText] = useState<string>("");
   const [isLoading, setIsLoading] = useState(false);
@@ -77,10 +86,10 @@ export function App() {
   const [cacheEpoch, setCacheEpoch] = useState(0);
   const [panelWidths, setPanelWidths] = useState({ left: 268, right: 300 });
   const [disassemblyColumnWidths, setDisassemblyColumnWidths] = useState({
+    section: 88,
     address: 110,
     bytes: 180,
-    instruction: 160,
-    operands: 320,
+    instruction: 420,
   });
 
   const layoutRef = useRef<HTMLElement | null>(null);
@@ -133,13 +142,33 @@ export function App() {
   const disassemblyColumnStyle = useMemo(
     () =>
       ({
+        "--col-section-width": `${disassemblyColumnWidths.section}px`,
         "--col-address-width": `${disassemblyColumnWidths.address}px`,
         "--col-bytes-width": `${disassemblyColumnWidths.bytes}px`,
         "--col-instruction-width": `${disassemblyColumnWidths.instruction}px`,
-        "--col-operands-width": `${disassemblyColumnWidths.operands}px`,
       }) as CSSProperties,
     [disassemblyColumnWidths],
   );
+
+  const sectionRanges = useMemo(() => {
+    return sections
+      .map((section) => {
+        const start = parseHexRva(section.startRva);
+        const end = parseHexRva(section.endRva);
+        if (start === null || end === null || end <= start) {
+          return null;
+        }
+        return {
+          name: section.name,
+          start,
+          end,
+        };
+      })
+      .filter((range): range is { name: string; start: number; end: number } =>
+        Boolean(range),
+      )
+      .sort((left, right) => left.start - right.start);
+  }, [sections]);
 
   const rowCount = linearInfo?.rowCount ?? 0;
   const rowHeight = linearInfo?.rowHeight ?? 24;
@@ -339,6 +368,7 @@ export function App() {
     }
 
     const nextIndex = clamp(pendingScrollRow, 0, rowCount - 1);
+    setSelectedRowIndex(nextIndex);
     rowVirtualizer.scrollToIndex(nextIndex, { align: "center" });
     setPendingScrollRow(null);
   }, [pendingScrollRow, rowCount, rowVirtualizer]);
@@ -462,6 +492,7 @@ export function App() {
       setFunctions(listed.functions);
       setLinearInfo(viewInfo);
       setGoToAddress(initialRva);
+      setSelectedRowIndex(null);
       resetLinearCache();
       setPendingScrollRow(rowLookup.rowIndex);
     } catch (error: unknown) {
@@ -497,6 +528,19 @@ export function App() {
   function handleGoToSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     void navigateToRva(goToAddress);
+  }
+
+  function findSectionName(address: string): string {
+    const rva = parseHexRva(address);
+    if (rva === null) {
+      return "";
+    }
+    for (const range of sectionRanges) {
+      if (rva >= range.start && rva < range.end) {
+        return range.name;
+      }
+    }
+    return "";
   }
 
   return (
@@ -587,6 +631,17 @@ export function App() {
           <div className="panel-body table-body" style={disassemblyColumnStyle}>
             <div className="disassembly-columns-header">
               <div className="column-header-cell">
+                <span>Section</span>
+                <button
+                  className="column-resizer"
+                  type="button"
+                  aria-label="Resize Section column"
+                  onPointerDown={(event) =>
+                    startColumnResizing("section", event)
+                  }
+                />
+              </div>
+              <div className="column-header-cell">
                 <span>Address</span>
                 <button
                   className="column-resizer"
@@ -618,17 +673,6 @@ export function App() {
                 />
               </div>
               <div className="column-header-cell">
-                <span>Operands</span>
-                <button
-                  className="column-resizer"
-                  type="button"
-                  aria-label="Resize Operands column"
-                  onPointerDown={(event) =>
-                    startColumnResizing("operands", event)
-                  }
-                />
-              </div>
-              <div className="column-header-cell">
                 <span>Comment</span>
               </div>
             </div>
@@ -652,6 +696,7 @@ export function App() {
                         className="disassembly-row row-loading"
                         style={{ transform: `translateY(${top}px)` }}
                       >
+                        <div className="cell section-cell" />
                         <div className="cell">
                           <code>...</code>
                         </div>
@@ -660,7 +705,6 @@ export function App() {
                         </div>
                         <div className="cell">loading</div>
                         <div className="cell" />
-                        <div className="cell" />
                       </div>
                     );
                   }
@@ -668,17 +712,30 @@ export function App() {
                   return (
                     <div
                       key={`${virtualRow.index}-${cacheEpoch}-${row.address}`}
-                      className={`disassembly-row kind-${row.kind}`}
+                      className={`disassembly-row kind-${row.kind} ${
+                        selectedRowIndex === virtualRow.index
+                          ? "is-current"
+                          : ""
+                      }`}
                       style={{ transform: `translateY(${top}px)` }}
+                      onPointerDown={() => {
+                        setSelectedRowIndex(virtualRow.index);
+                        setGoToAddress(row.address);
+                      }}
                     >
+                      <div className="cell section-cell">
+                        {findSectionName(row.address)}
+                      </div>
                       <div className="cell">
                         <code>{row.address}</code>
                       </div>
                       <div className="cell">
                         <code>{row.bytes}</code>
                       </div>
-                      <div className="cell">{row.mnemonic}</div>
-                      <div className="cell">{row.operands}</div>
+                      <div className="cell">
+                        {row.mnemonic}
+                        {row.operands ? ` ${row.operands}` : ""}
+                      </div>
                       <div className="cell comment-cell">
                         {row.comment ? <span>{`; ${row.comment}`}</span> : null}
                         {row.branchTarget ? (
@@ -741,12 +798,18 @@ export function App() {
             <ul className="section-list">
               {sections.map((section) => (
                 <li key={`${section.name}-${section.startRva}`}>
-                  <div>
+                  <button
+                    className={
+                      goToAddress === section.startRva ? "is-active" : ""
+                    }
+                    type="button"
+                    onClick={() => void navigateToRva(section.startRva)}
+                  >
                     <code>{section.name}</code>
-                  </div>
-                  <div>
-                    {section.startRva} - {section.endRva}
-                  </div>
+                    <span>
+                      {section.startRva} - {section.endRva}
+                    </span>
+                  </button>
                 </li>
               ))}
             </ul>
