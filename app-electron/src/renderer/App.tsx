@@ -723,9 +723,7 @@ export function App() {
         <section className="panel panel-disassembly">
           <header className="panel-header">
             <h2>Disassembly</h2>
-            <span className="panel-stop">
-              {linearInfo ? `${linearInfo.rowCount} rows` : "Ready"}
-            </span>
+            <span>{linearInfo ? `${linearInfo.rowCount} rows` : "Ready"}</span>
           </header>
           <div className="panel-body table-body" style={disassemblyColumnStyle}>
             <div className="disassembly-columns-header">
@@ -836,8 +834,16 @@ export function App() {
                         <code>{row.bytes}</code>
                       </div>
                       <div className="cell">
-                        {row.mnemonic}
-                        {row.operands ? ` ${row.operands}` : ""}
+                        <span
+                          className={`mnemonic mnemonic-${
+                            row.instructionCategory ?? "other"
+                          }`}
+                        >
+                          {row.mnemonic}
+                        </span>
+                        {row.operands ? (
+                          <span className="operands">{row.operands}</span>
+                        ) : null}
                       </div>
                       <div className="cell comment-cell">
                         {row.comment ? <span>{`; ${row.comment}`}</span> : null}

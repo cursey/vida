@@ -94,3 +94,30 @@ fn function_list_response_with_exception_kind_validates_against_schema() {
         .validate(&response_value)
         .unwrap_or_else(|error| panic!("response failed schema validation: {error}"));
 }
+
+#[test]
+fn disassembly_response_with_instruction_category_validates_against_schema() {
+    let schema = load_protocol_schema();
+    let validator = validator_for(&schema).expect("schema should compile");
+
+    let response_value = json!({
+        "jsonrpc": "2.0",
+        "id": 102,
+        "result": {
+            "instructions": [
+                {
+                    "address": "0x1000",
+                    "bytes": "55",
+                    "mnemonic": "push",
+                    "operands": "rbp",
+                    "instructionCategory": "stack"
+                }
+            ],
+            "stopReason": "ret"
+        }
+    });
+
+    validator
+        .validate(&response_value)
+        .unwrap_or_else(|error| panic!("response failed schema validation: {error}"));
+}

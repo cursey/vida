@@ -70,11 +70,26 @@ export type ExportInfo = {
   start: HexAddress;
 };
 
+export type InstructionCategory =
+  | "call"
+  | "return"
+  | "control_flow"
+  | "system"
+  | "stack"
+  | "string"
+  | "compare_test"
+  | "arithmetic"
+  | "logic"
+  | "bit_shift"
+  | "data_transfer"
+  | "other";
+
 export type LinearInstruction = {
   address: HexAddress;
   bytes: string;
   mnemonic: string;
   operands: string;
+  instructionCategory: InstructionCategory;
   branchTarget?: HexAddress;
   callTarget?: HexAddress;
   comment?: string;
@@ -86,6 +101,7 @@ export type LinearRow = {
   bytes: string;
   mnemonic: string;
   operands: string;
+  instructionCategory?: InstructionCategory;
   branchTarget?: HexAddress;
   callTarget?: HexAddress;
   comment?: string;

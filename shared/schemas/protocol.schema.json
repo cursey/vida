@@ -174,15 +174,33 @@
         "maxInstructions": { "type": "integer", "minimum": 1, "maximum": 4096 }
       }
     },
+    "InstructionCategory": {
+      "type": "string",
+      "enum": [
+        "call",
+        "return",
+        "control_flow",
+        "system",
+        "stack",
+        "string",
+        "compare_test",
+        "arithmetic",
+        "logic",
+        "bit_shift",
+        "data_transfer",
+        "other"
+      ]
+    },
     "InstructionRow": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["address", "bytes", "mnemonic", "operands"],
+      "required": ["address", "bytes", "mnemonic", "operands", "instructionCategory"],
       "properties": {
         "address": { "$ref": "#/$defs/HexAddress" },
         "bytes": { "type": "string" },
         "mnemonic": { "type": "string" },
         "operands": { "type": "string" },
+        "instructionCategory": { "$ref": "#/$defs/InstructionCategory" },
         "branchTarget": { "$ref": "#/$defs/HexAddress" },
         "callTarget": { "$ref": "#/$defs/HexAddress" }
       }

@@ -33,6 +33,11 @@ fn opens_module_lists_functions_and_disassembles() {
         .and_then(Value::as_str)
         .expect("moduleId should be string")
         .to_owned();
+    let entry_rva = open_result
+        .get("entryRva")
+        .and_then(Value::as_str)
+        .expect("entryRva should be string")
+        .to_owned();
 
     let list_result = success_result(state.handle_request(RpcRequest {
         jsonrpc: "2.0".to_owned(),
@@ -114,4 +119,56 @@ fn opens_module_lists_functions_and_disassembles() {
         .expect("instructions array should exist");
 
     assert!(!instructions.is_empty(), "Expected non-empty disassembly");
+    for instruction in instructions {
+        let category = instruction
+            .get("instructionCategory")
+            .and_then(Value::as_str)
+            .expect("instructionCategory should be a string");
+        assert!(
+            !category.is_empty(),
+            "instructionCategory should not be empty"
+        );
+    }
+
+    let row_lookup_result = success_result(state.handle_request(RpcRequest {
+        jsonrpc: "2.0".to_owned(),
+        id: json!(4),
+        method: "linear.findRowByRva".to_owned(),
+        params: json!({
+            "moduleId": module_id,
+            "rva": entry_rva
+        }),
+    }));
+    let row_index = row_lookup_result
+        .get("rowIndex")
+        .and_then(Value::as_u64)
+        .expect("rowIndex should be integer");
+
+    let linear_rows_result = success_result(state.handle_request(RpcRequest {
+        jsonrpc: "2.0".to_owned(),
+        id: json!(5),
+        method: "linear.getRows".to_owned(),
+        params: json!({
+            "moduleId": module_id,
+            "startRow": row_index,
+            "rowCount": 1
+        }),
+    }));
+    let row = linear_rows_result
+        .get("rows")
+        .and_then(Value::as_array)
+        .and_then(|rows| rows.first())
+        .expect("expected one linear row");
+
+    assert_eq!(
+        row.get("kind").and_then(Value::as_str),
+        Some("instruction"),
+        "entry row should decode to an instruction"
+    );
+    assert!(
+        row.get("instructionCategory")
+            .and_then(Value::as_str)
+            .is_some(),
+        "instruction rows should include instructionCategory"
+    );
 }

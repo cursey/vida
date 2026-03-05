@@ -40,11 +40,32 @@ test("protocol request and response examples validate", () => {
       ],
     },
   };
+  const disassemblyResponse = {
+    jsonrpc: "2.0",
+    id: 3,
+    result: {
+      instructions: [
+        {
+          address: "0x1000",
+          bytes: "55",
+          mnemonic: "push",
+          operands: "rbp",
+          instructionCategory: "stack",
+        },
+      ],
+      stopReason: "ret",
+    },
+  };
 
   assert.equal(validate(request), true, JSON.stringify(validate.errors));
   assert.equal(validate(response), true, JSON.stringify(validate.errors));
   assert.equal(
     validate(functionListResponse),
+    true,
+    JSON.stringify(validate.errors),
+  );
+  assert.equal(
+    validate(disassemblyResponse),
     true,
     JSON.stringify(validate.errors),
   );

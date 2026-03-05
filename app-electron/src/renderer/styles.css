@@ -28,6 +28,19 @@
   --danger-line: #754040;
   --danger-text: #ffb8b8;
 
+  --mnemonic-call: #8db7ee;
+  --mnemonic-return: #dfaf78;
+  --mnemonic-control-flow: #caa1e1;
+  --mnemonic-system: #d48f8f;
+  --mnemonic-stack: #83bdb2;
+  --mnemonic-string: #9bc7a4;
+  --mnemonic-compare-test: #d9be86;
+  --mnemonic-arithmetic: #efc178;
+  --mnemonic-logic: #8dbfd6;
+  --mnemonic-bit-shift: #b8a4d8;
+  --mnemonic-data-transfer: #b3c7f1;
+  --mnemonic-other: #d6d6d6;
+
   --radius-sm: 1px;
   --radius-md: 2px;
 
@@ -279,7 +292,6 @@ button:focus-visible {
   grid-column: 3;
 }
 
-.panel-disassembly .panel-header,
 .panel-disassembly .panel-body,
 .panel-disassembly .panel-body * {
   font-family: var(--font-mono);
@@ -487,6 +499,62 @@ button:focus-visible {
 
 .disassembly-row .section-cell {
   color: var(--text-muted);
+}
+
+.mnemonic {
+  color: var(--mnemonic-other);
+}
+
+.mnemonic-call {
+  color: var(--mnemonic-call);
+}
+
+.mnemonic-return {
+  color: var(--mnemonic-return);
+}
+
+.mnemonic-control_flow {
+  color: var(--mnemonic-control-flow);
+}
+
+.mnemonic-system {
+  color: var(--mnemonic-system);
+}
+
+.mnemonic-stack {
+  color: var(--mnemonic-stack);
+}
+
+.mnemonic-string {
+  color: var(--mnemonic-string);
+}
+
+.mnemonic-compare_test {
+  color: var(--mnemonic-compare-test);
+}
+
+.mnemonic-arithmetic {
+  color: var(--mnemonic-arithmetic);
+}
+
+.mnemonic-logic {
+  color: var(--mnemonic-logic);
+}
+
+.mnemonic-bit_shift {
+  color: var(--mnemonic-bit-shift);
+}
+
+.mnemonic-data_transfer {
+  color: var(--mnemonic-data-transfer);
+}
+
+.mnemonic-other {
+  color: var(--mnemonic-other);
+}
+
+.operands {
+  margin-left: 1ch;
 }
 
 .disassembly-row.kind-gap {

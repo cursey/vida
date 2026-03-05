@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use goblin::pe::PE;
 use goblin::pe::exception::RuntimeFunction;
 use iced_x86::{
-    Decoder, DecoderOptions, FlowControl, Formatter, GasFormatter, Instruction, Mnemonic,
+    Decoder, DecoderOptions, FlowControl, Formatter, Instruction, IntelFormatter, Mnemonic,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -251,12 +251,31 @@ struct LinearDisassemblyResult {
     stop_reason: &'static str,
 }
 
+#[derive(Debug, Serialize, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+enum InstructionCategory {
+    Call,
+    Return,
+    ControlFlow,
+    System,
+    Stack,
+    String,
+    CompareTest,
+    Arithmetic,
+    Logic,
+    BitShift,
+    DataTransfer,
+    Other,
+}
+
 #[derive(Debug, Serialize)]
 struct InstructionRow {
     address: String,
     bytes: String,
     mnemonic: String,
     operands: String,
+    #[serde(rename = "instructionCategory")]
+    instruction_category: InstructionCategory,
     #[serde(skip_serializing_if = "Option::is_none", rename = "branchTarget")]
     branch_target: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none", rename = "callTarget")]
@@ -270,6 +289,11 @@ struct LinearViewRow {
     bytes: String,
     mnemonic: String,
     operands: String,
+    #[serde(
+        skip_serializing_if = "Option::is_none",
+        rename = "instructionCategory"
+    )]
+    instruction_category: Option<InstructionCategory>,
     #[serde(skip_serializing_if = "Option::is_none", rename = "branchTarget")]
     branch_target: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none", rename = "callTarget")]
@@ -556,7 +580,7 @@ impl EngineState {
             image_base + start_rva,
             DecoderOptions::NONE,
         );
-        let mut formatter = GasFormatter::new();
+        let mut formatter = IntelFormatter::new();
 
         let mut stop_reason = "end_of_data";
         let mut invalid_streak = 0usize;
@@ -601,6 +625,7 @@ impl EngineState {
             let mut instruction_text = String::new();
             formatter.format(&instruction, &mut instruction_text);
             let (mnemonic, operands) = split_instruction_text(&instruction_text);
+            let instruction_category = categorize_instruction(&instruction, &mnemonic);
 
             let branch_target = match instruction.flow_control() {
                 FlowControl::ConditionalBranch | FlowControl::UnconditionalBranch => {
@@ -619,6 +644,7 @@ impl EngineState {
                 bytes: bytes_to_hex(encoded_bytes),
                 mnemonic,
                 operands,
+                instruction_category,
                 branch_target,
                 call_target,
             });
@@ -999,6 +1025,7 @@ fn materialize_linear_row(
                 bytes: String::new(),
                 mnemonic: "<gap>".to_owned(),
                 operands: String::new(),
+                instruction_category: None,
                 branch_target: None,
                 call_target: None,
                 comment: Some(format!(
@@ -1029,6 +1056,7 @@ fn materialize_linear_row(
                 bytes: bytes_text,
                 mnemonic: "db".to_owned(),
                 operands,
+                instruction_category: None,
                 branch_target: None,
                 call_target: None,
                 comment: None,
@@ -1047,6 +1075,7 @@ fn materialize_linear_row(
                     bytes: format!("{value:02X}"),
                     mnemonic: "db".to_owned(),
                     operands: format!("0x{value:02X}"),
+                    instruction_category: None,
                     branch_target: None,
                     call_target: None,
                     comment: Some("invalid decode fallback".to_owned()),
@@ -1078,16 +1107,18 @@ fn materialize_linear_row(
                     bytes: format!("{value:02X}"),
                     mnemonic: "db".to_owned(),
                     operands: format!("0x{value:02X}"),
+                    instruction_category: None,
                     branch_target: None,
                     call_target: None,
                     comment: Some("invalid decode fallback".to_owned()),
                 });
             }
 
-            let mut formatter = GasFormatter::new();
+            let mut formatter = IntelFormatter::new();
             let mut instruction_text = String::new();
             formatter.format(&instruction, &mut instruction_text);
             let (mnemonic, operands) = split_instruction_text(&instruction_text);
+            let instruction_category = categorize_instruction(&instruction, &mnemonic);
             let len = usize::from(exec_row.len);
             let bytes_text = bytes_to_hex(&decode_window[0..len.min(decode_window.len())]);
 
@@ -1108,6 +1139,7 @@ fn materialize_linear_row(
                 bytes: bytes_text,
                 mnemonic,
                 operands,
+                instruction_category: Some(instruction_category),
                 branch_target,
                 call_target,
                 comment: None,
@@ -1261,6 +1293,86 @@ fn split_instruction_text(text: &str) -> (String, String) {
     (trimmed.to_owned(), String::new())
 }
 
+fn categorize_instruction(instruction: &Instruction, mnemonic: &str) -> InstructionCategory {
+    match instruction.flow_control() {
+        FlowControl::Call | FlowControl::IndirectCall => return InstructionCategory::Call,
+        FlowControl::Return => return InstructionCategory::Return,
+        FlowControl::ConditionalBranch
+        | FlowControl::UnconditionalBranch
+        | FlowControl::IndirectBranch
+        | FlowControl::XbeginXabortXend => return InstructionCategory::ControlFlow,
+        _ => {}
+    }
+
+    if instruction.is_privileged()
+        || matches!(
+            instruction.flow_control(),
+            FlowControl::Interrupt | FlowControl::Exception
+        )
+    {
+        return InstructionCategory::System;
+    }
+
+    if instruction.is_stack_instruction() {
+        return InstructionCategory::Stack;
+    }
+
+    if instruction.is_string_instruction() {
+        return InstructionCategory::String;
+    }
+
+    let normalized = mnemonic.trim().to_ascii_lowercase();
+
+    if matches_mnemonic_prefix(
+        &normalized,
+        &[
+            "cmp", "test", "ucomi", "comi", "vtest", "ptest", "scas", "cmps",
+        ],
+    ) {
+        return InstructionCategory::CompareTest;
+    }
+
+    if matches_mnemonic_prefix(
+        &normalized,
+        &[
+            "add", "sub", "mul", "imul", "div", "idiv", "inc", "dec", "neg", "adc", "sbb",
+        ],
+    ) {
+        return InstructionCategory::Arithmetic;
+    }
+
+    if matches_mnemonic_prefix(&normalized, &["and", "or", "xor", "not", "andn"]) {
+        return InstructionCategory::Logic;
+    }
+
+    if matches_mnemonic_prefix(
+        &normalized,
+        &[
+            "shl", "shr", "sar", "sal", "rol", "ror", "rcl", "rcr", "shld", "shrd",
+        ],
+    ) {
+        return InstructionCategory::BitShift;
+    }
+
+    if matches_mnemonic_prefix(
+        &normalized,
+        &[
+            "mov", "cmov", "xchg", "xadd", "lea", "set", "bswap", "prefetch", "in", "out", "lods",
+            "stos", "lds", "les", "lfs", "lgs", "lss", "kmov", "vmov",
+        ],
+    ) {
+        return InstructionCategory::DataTransfer;
+    }
+
+    InstructionCategory::Other
+}
+
+fn matches_mnemonic_prefix(value: &str, prefixes: &[&str]) -> bool {
+    prefixes
+        .iter()
+        .any(|prefix| value == *prefix || value.starts_with(prefix))
+}
+
 fn to_rva_hex(target_va: u64, image_base: u64) -> Option<String> {
     if target_va < image_base {
         return None;
@@ -1354,6 +1466,13 @@ mod tests {
     use super::*;
     use goblin::pe::exception::RuntimeFunction;
 
+    fn decode_instruction(bytes: &[u8]) -> Instruction {
+        let mut decoder = Decoder::with_ip(64, bytes, 0x140001000, DecoderOptions::NONE);
+        let mut instruction = Instruction::default();
+        decoder.decode_out(&mut instruction);
+        instruction
+    }
+
     #[test]
     fn parses_hex_addresses() {
         assert_eq!(parse_hex_u64("0x10").expect("valid"), 16);
@@ -1408,5 +1527,83 @@ mod tests {
 
         let starts = collect_exception_function_starts_from_entries(&entries, |rva| rva == 0x1400);
         assert_eq!(starts, vec![0x1400]);
+    }
+
+    #[test]
+    fn categorizes_flow_control_before_stack() {
+        let call = decode_instruction(&[0xE8, 0x00, 0x00, 0x00, 0x00]);
+        assert_eq!(
+            categorize_instruction(&call, "callq"),
+            InstructionCategory::Call
+        );
+
+        let ret = decode_instruction(&[0xC3]);
+        assert_eq!(
+            categorize_instruction(&ret, "retq"),
+            InstructionCategory::Return
+        );
+
+        let jmp = decode_instruction(&[0xEB, 0x00]);
+        assert_eq!(
+            categorize_instruction(&jmp, "jmp"),
+            InstructionCategory::ControlFlow
+        );
+    }
+
+    #[test]
+    fn categorizes_system_stack_and_mnemonic_groups() {
+        let int3 = decode_instruction(&[0xCC]);
+        assert_eq!(
+            categorize_instruction(&int3, "int3"),
+            InstructionCategory::System
+        );
+
+        let push = decode_instruction(&[0x50]);
+        assert_eq!(
+            categorize_instruction(&push, "push"),
+            InstructionCategory::Stack
+        );
+
+        let movs = decode_instruction(&[0xA4]);
+        assert_eq!(
+            categorize_instruction(&movs, "movsb"),
+            InstructionCategory::String
+        );
+
+        let cmp = decode_instruction(&[0x3B, 0xC0]);
+        assert_eq!(
+            categorize_instruction(&cmp, "cmp"),
+            InstructionCategory::CompareTest
+        );
+
+        let add = decode_instruction(&[0x01, 0xD8]);
+        assert_eq!(
+            categorize_instruction(&add, "addq"),
+            InstructionCategory::Arithmetic
+        );
+
+        let and = decode_instruction(&[0x21, 0xD8]);
+        assert_eq!(
+            categorize_instruction(&and, "and"),
+            InstructionCategory::Logic
+        );
+
+        let shr = decode_instruction(&[0xD1, 0xE8]);
+        assert_eq!(
+            categorize_instruction(&shr, "shr"),
+            InstructionCategory::BitShift
+        );
+
+        let mov = decode_instruction(&[0x89, 0xD8]);
+        assert_eq!(
+            categorize_instruction(&mov, "mov"),
+            InstructionCategory::DataTransfer
+        );
+
+        let nop = decode_instruction(&[0x90]);
+        assert_eq!(
+            categorize_instruction(&nop, "nop"),
+            InstructionCategory::Other
+        );
     }
 }
