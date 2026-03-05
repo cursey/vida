@@ -40,6 +40,14 @@ Rules:
 - Add or update `justfile` recipes for common tasks (build, test, lint, format, run).
 - Keep command names stable and task-oriented (for example: `just test`, `just lint`, `just fmt`, `just dev`).
 
+## Commit Message Policy
+Use imperative, specific commit subjects that match repository history style.
+
+Required:
+- Commit subject should start with a strong verb in Title Case (for example: `Implement ...`, `Refine ...`, `Replace ...`, `Fix ...`).
+- Describe the concrete change scope, not a vague shorthand (avoid subjects like `updates`, `misc`, `wip`, or `branch links`).
+- Keep subject line concise and focused on the primary change.
+
 ## JavaScript/TypeScript Standards
 All JavaScript/TypeScript code must be formatted and linted with Biome.
 
