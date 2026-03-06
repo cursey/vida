@@ -1,5 +1,39 @@
 # Work Log
 
+## 2026-03-06 - Toggle Browser Search with Ctrl+F and Compact Search Label
+
+Summary:
+- Changed Browser search input placeholder text from `Filter functions...` to `Search`.
+- Converted Browser search UI from always-visible to toggle-on-demand behavior driven by `Ctrl+F` when the Browser panel is active.
+- Added Browser search focus management and Escape/active-panel transition handling so the search input closes cleanly and clears query/search state when hidden.
+- Updated renderer tests to validate shortcut-driven search visibility and search flow under the new toggle behavior.
+
+Validation commands executed:
+- `cd app-electron; npm run test:renderer -- src/renderer/App.function-browser.test.tsx src/renderer/App.function-browser-window.test.tsx`
+- `just fmt`
+- `just check`
+- `just test`
+
+Changed files index:
+- See `docs/change_files.md` for the detailed file list for this work item.
+
+## 2026-03-05 - Add Responsive Browser Function Search with Async Search
+
+Summary:
+- Added a bottom search input to the Browser panel to search functions by case-insensitive name match.
+- Switched Browser list search to asynchronous chunked processing with cancellation so typing remains responsive on very large function sets.
+- Kept existing Browser results visible while search is in progress and added an animated `Searching...` indicator in the status bar.
+- Updated Browser virtualization to consume search-result index sets, including viewport/rebase resets when a new search result is applied.
+- Added renderer tests for case-insensitive search behavior, searched/total count display, no-match handling, and huge-list search-result height behavior.
+
+Validation commands executed:
+- `just fmt`
+- `just check`
+- `just test`
+
+Changed files index:
+- See `docs/change_files.md` for the detailed file list for this work item.
+
 ## 2026-03-05 - Remove Inspector Panel and Simplify Main Layout
 
 Summary:

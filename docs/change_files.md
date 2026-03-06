@@ -1,5 +1,28 @@
 # Change Files
 
+## 2026-03-06 - Toggle Browser Search with Ctrl+F and Compact Search Label
+
+Docs:
+- `docs/work_log.md`
+- `docs/change_files.md`
+
+Electron app:
+- `app-electron/src/renderer/App.tsx`
+- `app-electron/src/renderer/App.function-browser.test.tsx`
+- `app-electron/src/renderer/App.function-browser-window.test.tsx`
+
+## 2026-03-05 - Add Responsive Browser Function Search with Async Search
+
+Docs:
+- `docs/work_log.md`
+- `docs/change_files.md`
+
+Electron app:
+- `app-electron/src/renderer/App.tsx`
+- `app-electron/src/renderer/styles.css`
+- `app-electron/src/renderer/App.function-browser.test.tsx`
+- `app-electron/src/renderer/App.function-browser-window.test.tsx`
+
 ## 2026-03-05 - Remove Inspector Panel and Simplify Main Layout
 
 Docs:

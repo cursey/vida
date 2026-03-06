@@ -1,5 +1,11 @@
 import { App } from "@/App";
-import { act, render, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ElectronApi, FunctionSeed } from "../shared/protocol";
@@ -19,6 +25,7 @@ function buildFunctions(count: number): FunctionSeed[] {
 }
 
 describe("App function browser virtualization", () => {
+  let functions: FunctionSeed[] = [];
   let menuOpenHandler: (() => void) | null = null;
   let menuOpenRecentHandler: ((path: string) => void) | null = null;
   let menuUnloadHandler: (() => void) | null = null;
@@ -42,7 +49,7 @@ describe("App function browser virtualization", () => {
         toJSON: () => ({}),
       }));
 
-    const functions = buildFunctions(FUNCTION_COUNT);
+    functions = buildFunctions(FUNCTION_COUNT);
     const mockApi: ElectronApi = {
       pickExecutable: vi.fn().mockResolvedValue("C:\\fixtures\\sample.exe"),
       onMenuOpenExecutable: vi.fn((callback: () => void) => {
@@ -145,6 +152,75 @@ describe("App function browser virtualization", () => {
     await waitFor(() => {
       expect(container.textContent).not.toContain("0 functions");
       expect(container.textContent).not.toContain("No module");
+    });
+  });
+
+  it("searches browser functions case-insensitively and updates the count", async () => {
+    const { container } = render(<App />);
+
+    await waitFor(() => {
+      expect(menuOpenHandler).toBeTypeOf("function");
+    });
+    expect(screen.queryByLabelText("Search functions")).toBeNull();
+
+    await act(async () => {
+      menuOpenHandler?.();
+    });
+
+    await waitFor(() => {
+      expect(container.textContent).toContain(`${FUNCTION_COUNT} functions`);
+    });
+
+    const browserPanel = container.querySelector(".panel-nav");
+    expect(browserPanel).not.toBeNull();
+    fireEvent.pointerDown(browserPanel as Element);
+    fireEvent.keyDown(window, { key: "f", ctrlKey: true });
+
+    const searchInput = await screen.findByLabelText("Search functions");
+    expect(searchInput).toBeEnabled();
+    expect(searchInput).toHaveAttribute("placeholder", "Search");
+
+    const query = "SUB_10";
+    const expectedCount = functions.filter((func) =>
+      func.name.toLowerCase().includes(query.toLowerCase()),
+    ).length;
+
+    fireEvent.change(searchInput, { target: { value: query } });
+
+    await waitFor(() => {
+      expect(container.textContent).toContain(
+        `${expectedCount}/${FUNCTION_COUNT} functions`,
+      );
+      expect(container.querySelector(".function-list")).toHaveAttribute(
+        "style",
+        `height: ${expectedCount * 26}px;`,
+      );
+    });
+
+    fireEvent.change(searchInput, { target: { value: "definitely_no_match" } });
+
+    await waitFor(() => {
+      expect(container.textContent).toContain(`0/${FUNCTION_COUNT} functions`);
+      expect(container.querySelector(".function-list")).toHaveAttribute(
+        "style",
+        "height: 0px;",
+      );
+    });
+
+    fireEvent.change(searchInput, { target: { value: "" } });
+
+    await waitFor(() => {
+      expect(container.textContent).toContain(`${FUNCTION_COUNT} functions`);
+      expect(container.querySelector(".function-list")).toHaveAttribute(
+        "style",
+        `height: ${FUNCTION_COUNT * 26}px;`,
+      );
+    });
+
+    fireEvent.keyDown(window, { key: "f", ctrlKey: true });
+    await waitFor(() => {
+      expect(screen.queryByLabelText("Search functions")).toBeNull();
+      expect(container.textContent).toContain(`${FUNCTION_COUNT} functions`);
     });
   });
 });

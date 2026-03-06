@@ -1,5 +1,11 @@
 import { App } from "@/App";
-import { act, render, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ElectronApi, FunctionSeed } from "../shared/protocol";
@@ -21,6 +27,7 @@ function buildFunctions(count: number): FunctionSeed[] {
 }
 
 describe("App function browser bounded window virtualization", () => {
+  let functions: FunctionSeed[] = [];
   let menuOpenHandler: (() => void) | null = null;
   let rectSpy: ReturnType<typeof vi.spyOn>;
 
@@ -40,7 +47,7 @@ describe("App function browser bounded window virtualization", () => {
         toJSON: () => ({}),
       }));
 
-    const functions = buildFunctions(HUGE_FUNCTION_COUNT);
+    functions = buildFunctions(HUGE_FUNCTION_COUNT);
     const mockApi: ElectronApi = {
       pickExecutable: vi.fn().mockResolvedValue("C:\\fixtures\\sample.exe"),
       addRecentExecutable: vi.fn().mockResolvedValue(undefined),
@@ -127,6 +134,61 @@ describe("App function browser bounded window virtualization", () => {
     expect(functionList).toHaveAttribute(
       "style",
       `height: ${FUNCTION_WINDOW_SIZE * FUNCTION_ROW_HEIGHT}px;`,
+    );
+  });
+
+  it("keeps browser search bounded and updates search result window height", async () => {
+    const { container } = render(<App />);
+
+    await waitFor(() => {
+      expect(menuOpenHandler).toBeTypeOf("function");
+    });
+
+    await act(async () => {
+      menuOpenHandler?.();
+    });
+
+    await waitFor(() => {
+      expect(container.textContent).toContain(
+        `${HUGE_FUNCTION_COUNT} functions`,
+      );
+    });
+
+    const query = "SUB_1234";
+    const expectedCount = functions.filter((func) =>
+      func.name.toLowerCase().includes(query.toLowerCase()),
+    ).length;
+    const expectedCanvasHeight =
+      Math.min(expectedCount, FUNCTION_WINDOW_SIZE) * FUNCTION_ROW_HEIGHT;
+
+    const browserPanel = container.querySelector(".panel-nav");
+    expect(browserPanel).not.toBeNull();
+    fireEvent.pointerDown(browserPanel as Element);
+    fireEvent.keyDown(window, { key: "f", ctrlKey: true });
+
+    fireEvent.change(await screen.findByLabelText("Search functions"), {
+      target: { value: query },
+    });
+
+    await waitFor(() => {
+      expect(container.textContent).toContain("Searching");
+    });
+
+    await waitFor(
+      () => {
+        expect(container.textContent).toContain(
+          `${expectedCount}/${HUGE_FUNCTION_COUNT} functions`,
+        );
+        expect(container.textContent).not.toContain("Searching");
+      },
+      { timeout: 15000 },
+    );
+
+    const functionList = container.querySelector(".function-list");
+    expect(functionList).not.toBeNull();
+    expect(functionList).toHaveAttribute(
+      "style",
+      `height: ${expectedCanvasHeight}px;`,
     );
   });
 });

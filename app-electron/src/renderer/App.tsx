@@ -82,6 +82,7 @@ const FUNCTION_OVERSCAN_ROWS = 12;
 const MAX_FUNCTION_WINDOW_ROWS = 100_000;
 const FUNCTION_REBASE_MARGIN_ROWS = 20_000;
 const FUNCTION_REBASE_IDLE_MS = 140;
+const FUNCTION_SEARCH_CHUNK_SIZE = 2_000;
 const MAX_DISASSEMBLY_WINDOW_ROWS = 100_000;
 const DISASSEMBLY_REBASE_MARGIN_ROWS = 20_000;
 const DISASSEMBLY_REBASE_IDLE_MS = 140;
@@ -308,6 +309,14 @@ export function App() {
   const [activePanel, setActivePanel] = useState<ActivePanel>("disassembly");
   const [isGoToModalOpen, setIsGoToModalOpen] = useState(false);
   const [goToInputValue, setGoToInputValue] = useState("");
+  const [isBrowserSearchVisible, setIsBrowserSearchVisible] = useState(false);
+  const [functionSearchQuery, setFunctionSearchQuery] = useState("");
+  const [searchedFunctionIndexes, setSearchedFunctionIndexes] = useState<
+    number[] | null
+  >(null);
+  const [appliedFunctionSearchQuery, setAppliedFunctionSearchQuery] =
+    useState("");
+  const [isSearchingFunctions, setIsSearchingFunctions] = useState(false);
 
   const [errorText, setErrorText] = useState<string>("");
   const [isLoading, setIsLoading] = useState(false);
@@ -331,6 +340,7 @@ export function App() {
   const functionScrollRef = useRef<HTMLDivElement | null>(null);
   const disassemblyScrollRef = useRef<HTMLDivElement | null>(null);
   const goToInputRef = useRef<HTMLInputElement | null>(null);
+  const browserSearchInputRef = useRef<HTMLInputElement | null>(null);
   const pageCacheRef = useRef<Map<number, LinearRow[]>>(new Map());
   const inflightPagesRef = useRef<Set<number>>(new Set());
   const functionRebaseInProgressRef = useRef(false);
@@ -342,6 +352,7 @@ export function App() {
   const activeModuleIdRef = useRef("");
   const selectionHistoryRef = useRef<string[]>([]);
   const selectionHistoryIndexRef = useRef(-1);
+  const functionSearchJobIdRef = useRef(0);
 
   useEffect(() => {
     activeModuleIdRef.current = moduleId;
@@ -428,11 +439,17 @@ export function App() {
   }, []);
 
   const unloadCurrentModule = useCallback(() => {
+    functionSearchJobIdRef.current += 1;
     setErrorText("");
     setIsLoading(false);
     setLoadingPath("");
     setIsGoToModalOpen(false);
     setGoToInputValue("");
+    setIsBrowserSearchVisible(false);
+    setFunctionSearchQuery("");
+    setSearchedFunctionIndexes(null);
+    setAppliedFunctionSearchQuery("");
+    setIsSearchingFunctions(false);
     setModulePath("");
     setModuleId("");
     setEntryRva("");
@@ -513,7 +530,20 @@ export function App() {
       .sort((left, right) => left.start - right.start);
   }, [sections]);
 
-  const functionCount = functions.length;
+  const normalizedFunctionSearchQuery = useMemo(
+    () => functionSearchQuery.trim().toLowerCase(),
+    [functionSearchQuery],
+  );
+  const normalizedFunctionNames = useMemo(
+    () => functions.map((func) => func.name.toLowerCase()),
+    [functions],
+  );
+  const displayedFunctionIndexes = searchedFunctionIndexes;
+  const totalFunctionCount = functions.length;
+  const functionCount =
+    displayedFunctionIndexes === null
+      ? totalFunctionCount
+      : displayedFunctionIndexes.length;
   const functionWindowSize = Math.min(functionCount, MAX_FUNCTION_WINDOW_ROWS);
   const maxFunctionWindowStart = Math.max(
     0,
@@ -581,6 +611,91 @@ export function App() {
       clamp(prev, 0, maxFunctionWindowStart),
     );
   }, [maxFunctionWindowStart]);
+
+  const resetFunctionBrowserViewport = useCallback(() => {
+    resetDeferredEdgeRebaseState({
+      inProgressRef: functionRebaseInProgressRef,
+      pendingDirectionRef: functionPendingRebaseDirectionRef,
+      idleTimerRef: functionRebaseIdleTimerRef,
+    });
+    setFunctionWindowStartIndex(0);
+    if (functionScrollRef.current) {
+      functionScrollRef.current.scrollTop = 0;
+    }
+  }, []);
+
+  useEffect(() => {
+    functionSearchJobIdRef.current += 1;
+    const jobId = functionSearchJobIdRef.current;
+    const query = normalizedFunctionSearchQuery;
+
+    if (!moduleId || totalFunctionCount === 0) {
+      setIsSearchingFunctions(false);
+      setSearchedFunctionIndexes(null);
+      setAppliedFunctionSearchQuery("");
+      return;
+    }
+
+    if (query.length === 0) {
+      setIsSearchingFunctions(false);
+      setSearchedFunctionIndexes(null);
+      setAppliedFunctionSearchQuery("");
+      resetFunctionBrowserViewport();
+      return;
+    }
+
+    setIsSearchingFunctions(true);
+    void (async () => {
+      const matchedIndexes: number[] = [];
+
+      for (
+        let chunkStart = 0;
+        chunkStart < normalizedFunctionNames.length;
+        chunkStart += FUNCTION_SEARCH_CHUNK_SIZE
+      ) {
+        if (functionSearchJobIdRef.current !== jobId) {
+          return;
+        }
+
+        const chunkEnd = Math.min(
+          chunkStart + FUNCTION_SEARCH_CHUNK_SIZE,
+          normalizedFunctionNames.length,
+        );
+        for (let index = chunkStart; index < chunkEnd; index += 1) {
+          if (normalizedFunctionNames[index]?.includes(query)) {
+            matchedIndexes.push(index);
+          }
+        }
+
+        if (chunkEnd < normalizedFunctionNames.length) {
+          await new Promise<void>((resolve) => {
+            window.setTimeout(resolve, 0);
+          });
+        }
+      }
+
+      if (functionSearchJobIdRef.current !== jobId) {
+        return;
+      }
+
+      setSearchedFunctionIndexes(matchedIndexes);
+      setAppliedFunctionSearchQuery(query);
+      setIsSearchingFunctions(false);
+      resetFunctionBrowserViewport();
+    })();
+  }, [
+    moduleId,
+    normalizedFunctionNames,
+    normalizedFunctionSearchQuery,
+    resetFunctionBrowserViewport,
+    totalFunctionCount,
+  ]);
+
+  useEffect(() => {
+    return () => {
+      functionSearchJobIdRef.current += 1;
+    };
+  }, []);
 
   useEffect(() => {
     const scrollElementCandidate = functionScrollRef.current;
@@ -961,13 +1076,14 @@ export function App() {
       setModuleId(opened.moduleId);
       setEntryRva(opened.entryRva);
       setSections(info.sections);
+      functionSearchJobIdRef.current += 1;
+      setIsBrowserSearchVisible(false);
+      setFunctionSearchQuery("");
+      setSearchedFunctionIndexes(null);
+      setAppliedFunctionSearchQuery("");
+      setIsSearchingFunctions(false);
       setFunctions(listed.functions);
-      resetDeferredEdgeRebaseState({
-        inProgressRef: functionRebaseInProgressRef,
-        pendingDirectionRef: functionPendingRebaseDirectionRef,
-        idleTimerRef: functionRebaseIdleTimerRef,
-      });
-      setFunctionWindowStartIndex(0);
+      resetFunctionBrowserViewport();
       setLinearInfo(viewInfo);
       setGoToAddress(initialRva);
       setSelectedRowIndex(null);
@@ -1091,10 +1207,59 @@ export function App() {
   }, [isGoToModalOpen]);
 
   useEffect(() => {
+    if (!isBrowserSearchVisible) {
+      return;
+    }
+    browserSearchInputRef.current?.focus();
+    browserSearchInputRef.current?.select();
+  }, [isBrowserSearchVisible]);
+
+  useEffect(() => {
+    if (activePanel === "browser" || !isBrowserSearchVisible) {
+      return;
+    }
+    setIsBrowserSearchVisible(false);
+    setFunctionSearchQuery("");
+  }, [activePanel, isBrowserSearchVisible]);
+
+  useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape" && isGoToModalOpen) {
         event.preventDefault();
         setIsGoToModalOpen(false);
+        return;
+      }
+
+      if (
+        event.key === "Escape" &&
+        isBrowserSearchVisible &&
+        activePanel === "browser"
+      ) {
+        event.preventDefault();
+        setIsBrowserSearchVisible(false);
+        setFunctionSearchQuery("");
+        return;
+      }
+
+      if (
+        event.key.toLowerCase() === "f" &&
+        event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey &&
+        !event.repeat
+      ) {
+        if (activePanel !== "browser" || !moduleId || isGoToModalOpen) {
+          return;
+        }
+
+        event.preventDefault();
+        setIsBrowserSearchVisible((previous) => {
+          const next = !previous;
+          if (!next) {
+            setFunctionSearchQuery("");
+          }
+          return next;
+        });
         return;
       }
 
@@ -1122,7 +1287,13 @@ export function App() {
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [activePanel, moduleId, isGoToModalOpen, openGoToModal]);
+  }, [
+    activePanel,
+    isBrowserSearchVisible,
+    moduleId,
+    isGoToModalOpen,
+    openGoToModal,
+  ]);
 
   async function handleGoToSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -1193,7 +1364,13 @@ export function App() {
         >
           <header className="panel-header">
             <h2>Browser</h2>
-            <span>{moduleId ? `${functions.length} functions` : ""}</span>
+            <span>
+              {moduleId
+                ? appliedFunctionSearchQuery
+                  ? `${functionCount}/${totalFunctionCount} functions`
+                  : `${totalFunctionCount} functions`
+                : ""}
+            </span>
           </header>
           <div className="panel-body">
             <div className="function-scroll-region" ref={functionScrollRef}>
@@ -1204,14 +1381,17 @@ export function App() {
                 {functionVirtualItems.map((virtualRow) => {
                   const logicalFunctionIndex =
                     boundedFunctionWindowStart + virtualRow.index;
-                  const func = functions[logicalFunctionIndex];
+                  const sourceFunctionIndex =
+                    displayedFunctionIndexes?.[logicalFunctionIndex] ??
+                    logicalFunctionIndex;
+                  const func = functions[sourceFunctionIndex];
                   if (!func) {
                     return null;
                   }
                   return (
                     <li
                       className="function-row"
-                      key={`${func.kind}-${func.start}-${logicalFunctionIndex}`}
+                      key={`${func.kind}-${func.start}-${sourceFunctionIndex}`}
                       style={{ transform: `translateY(${virtualRow.start}px)` }}
                     >
                       <Button
@@ -1239,6 +1419,24 @@ export function App() {
                 })}
               </ul>
             </div>
+            {isBrowserSearchVisible ? (
+              <div className="browser-search">
+                <Input
+                  ref={browserSearchInputRef}
+                  aria-label="Search functions"
+                  autoComplete="off"
+                  className="browser-search-input"
+                  disabled={!moduleId}
+                  onChange={(event) =>
+                    setFunctionSearchQuery(event.target.value)
+                  }
+                  placeholder="Search"
+                  spellCheck={false}
+                  type="text"
+                  value={functionSearchQuery}
+                />
+              </div>
+            ) : null}
           </div>
         </section>
 
@@ -1429,6 +1627,16 @@ export function App() {
         <Badge className={`engine-state ${engineStateClass}`} variant="outline">
           Engine {engineStatus}
         </Badge>
+        {isSearchingFunctions ? (
+          <span aria-live="polite" className="status-searching">
+            Searching
+            <span aria-hidden="true" className="status-searching-dots">
+              <span>.</span>
+              <span>.</span>
+              <span>.</span>
+            </span>
+          </span>
+        ) : null}
         <div className="status-spacer" />
         <ModeToggle />
       </footer>
