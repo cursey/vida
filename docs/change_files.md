@@ -1,5 +1,34 @@
 # Change Files
 
+## 2026-03-05 - Migrate Renderer UI Foundation to Shadcn Consistency Model
+
+Docs:
+- `docs/visual_guidelines.md`
+- `docs/work_log.md`
+- `docs/change_files.md`
+
+Electron app:
+- `app-electron/package.json`
+- `app-electron/package-lock.json`
+- `app-electron/components.json`
+- `app-electron/postcss.config.cjs`
+- `app-electron/tailwind.config.cjs`
+- `app-electron/vite.config.ts`
+- `app-electron/vitest.config.ts`
+- `app-electron/tsconfig.renderer.json`
+- `app-electron/src/renderer/App.tsx`
+- `app-electron/src/renderer/styles.css`
+- `app-electron/src/renderer/components/ui/badge.tsx`
+- `app-electron/src/renderer/components/ui/button.tsx`
+- `app-electron/src/renderer/components/ui/dialog.tsx`
+- `app-electron/src/renderer/components/ui/input.tsx`
+- `app-electron/src/renderer/components/ui/scroll-area.tsx`
+- `app-electron/src/renderer/components/ui/separator.tsx`
+- `app-electron/src/renderer/lib/utils.ts`
+- `app-electron/src/renderer/lib/utils.test.ts`
+- `app-electron/src/renderer/test/setup.ts`
+- `app-electron/test/ui-consistency.test.js`
+
 ## 2026-03-05 - Add Function Discovery from PE Exception Directory
 
 Docs:

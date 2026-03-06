@@ -1,5 +1,23 @@
 # Work Log
 
+## 2026-03-05 - Migrate Renderer UI Foundation to Shadcn Consistency Model
+
+Summary:
+- Added Tailwind + shadcn-compatible renderer foundations (tokens, aliasing, component registry metadata, and utility helpers).
+- Introduced shared renderer UI primitives (`Button`, `Input`, `Badge`, `Dialog`, `ScrollArea`, `Separator`) and migrated `App.tsx` controls/modals/status surfaces to use them.
+- Reworked renderer stylesheet to a dark shadcn-token baseline and removed obsolete transport-era CSS surfaces.
+- Added consistency and renderer utility tests (`ui-consistency` raw-control guardrail and Vitest coverage for shared class merge utility).
+- Updated visual guidance to codify shadcn-based consistency rules and strict shared-primitive usage.
+
+Validation commands executed:
+- `just fmt`
+- `just check`
+- `just test`
+- `just build`
+
+Changed files index:
+- See `docs/change_files.md` for the detailed file list for this work item.
+
 ## 2026-03-05 - Add Function Discovery from PE Exception Directory
 
 Summary:

@@ -1,3 +1,16 @@
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Separator } from "@/components/ui/separator";
+import { cn } from "@/lib/utils";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   type CSSProperties,
@@ -737,7 +750,7 @@ export function App() {
 
   return (
     <div
-      className={`shell ${isResizing || isColumnResizing ? "is-resizing" : ""}`}
+      className={cn("shell", (isResizing || isColumnResizing) && "is-resizing")}
     >
       {errorText ? <div className="error-banner">{errorText}</div> : null}
 
@@ -755,21 +768,27 @@ export function App() {
             <span>{functions.length} functions</span>
           </header>
           <div className="panel-body">
-            <ul className="function-list">
-              {functions.map((func) => (
-                <li key={`${func.kind}-${func.start}`}>
-                  <button
-                    className={func.start === goToAddress ? "is-active" : ""}
-                    type="button"
-                    onClick={() => void navigateToRva(func.start)}
-                  >
-                    <span className="function-meta">{func.kind}</span>
-                    <span className="function-name">{func.name}</span>
-                    <code>{func.start}</code>
-                  </button>
-                </li>
-              ))}
-            </ul>
+            <ScrollArea className="h-full">
+              <ul className="function-list">
+                {functions.map((func) => (
+                  <li key={`${func.kind}-${func.start}`}>
+                    <Button
+                      className={cn(
+                        "function-link",
+                        func.start === goToAddress && "is-active",
+                      )}
+                      variant="ghost"
+                      type="button"
+                      onClick={() => void navigateToRva(func.start)}
+                    >
+                      <span className="function-meta">{func.kind}</span>
+                      <span className="function-name">{func.name}</span>
+                      <code>{func.start}</code>
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            </ScrollArea>
           </div>
         </section>
 
@@ -798,9 +817,10 @@ export function App() {
             <div className="disassembly-columns-header">
               <div className="column-header-cell">
                 <span>Section</span>
-                <button
+                <Button
                   className="column-resizer"
-                  type="button"
+                  size="icon"
+                  variant="ghost"
                   aria-label="Resize Section column"
                   onPointerDown={(event) =>
                     startColumnResizing("section", event)
@@ -809,9 +829,10 @@ export function App() {
               </div>
               <div className="column-header-cell">
                 <span>Address</span>
-                <button
+                <Button
                   className="column-resizer"
-                  type="button"
+                  size="icon"
+                  variant="ghost"
                   aria-label="Resize Address column"
                   onPointerDown={(event) =>
                     startColumnResizing("address", event)
@@ -820,18 +841,20 @@ export function App() {
               </div>
               <div className="column-header-cell">
                 <span>Bytes</span>
-                <button
+                <Button
                   className="column-resizer"
-                  type="button"
+                  size="icon"
+                  variant="ghost"
                   aria-label="Resize Bytes column"
                   onPointerDown={(event) => startColumnResizing("bytes", event)}
                 />
               </div>
               <div className="column-header-cell">
                 <span>Instruction</span>
-                <button
+                <Button
                   className="column-resizer"
-                  type="button"
+                  size="icon"
+                  variant="ghost"
                   aria-label="Resize Instruction column"
                   onPointerDown={(event) =>
                     startColumnResizing("instruction", event)
@@ -979,69 +1002,73 @@ export function App() {
               <span>Entry RVA</span>
               <code>{entryRva || "-"}</code>
             </div>
+            <Separator />
             <h3>Sections</h3>
-            <ul className="section-list">
-              {sections.map((section) => (
-                <li key={`${section.name}-${section.startRva}`}>
-                  <button
-                    className={
-                      goToAddress === section.startRva ? "is-active" : ""
-                    }
-                    type="button"
-                    onClick={() => void navigateToRva(section.startRva)}
-                  >
-                    <code>{section.name}</code>
-                    <span>
-                      {section.startRva} - {section.endRva}
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
+            <ScrollArea className="h-full">
+              <ul className="section-list">
+                {sections.map((section) => (
+                  <li key={`${section.name}-${section.startRva}`}>
+                    <Button
+                      className={cn(
+                        "section-link",
+                        goToAddress === section.startRva && "is-active",
+                      )}
+                      variant="ghost"
+                      type="button"
+                      onClick={() => void navigateToRva(section.startRva)}
+                    >
+                      <code>{section.name}</code>
+                      <span>
+                        {section.startRva} - {section.endRva}
+                      </span>
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            </ScrollArea>
           </div>
         </section>
       </main>
 
       <footer className="status-bar">
-        <span className={`engine-state ${engineStateClass}`}>
+        <Badge className={`engine-state ${engineStateClass}`} variant="outline">
           Engine {engineStatus}
-        </span>
+        </Badge>
       </footer>
 
-      {isGoToModalOpen ? (
-        <div
-          className="go-to-modal-backdrop"
-          onPointerDown={() => setIsGoToModalOpen(false)}
-        >
+      <Dialog onOpenChange={setIsGoToModalOpen} open={isGoToModalOpen}>
+        <DialogContent className="go-to-modal">
+          <DialogHeader>
+            <DialogTitle className="go-to-title">Go To Address</DialogTitle>
+          </DialogHeader>
           <form
-            className="go-to-modal"
-            onPointerDown={(event) => event.stopPropagation()}
+            className="go-to-form"
             onSubmit={(event) => {
               void handleGoToSubmit(event);
             }}
           >
-            <h3>Go To Address</h3>
-            <input
+            <Input
               ref={goToInputRef}
               value={goToInputValue}
               onChange={(event) => setGoToInputValue(event.target.value)}
               placeholder="0x140001000"
             />
-            <div className="go-to-modal-actions">
-              <button
-                type="button"
+            <DialogFooter className="go-to-modal-actions">
+              <Button
                 onClick={() => setIsGoToModalOpen(false)}
+                type="button"
+                variant="outline"
                 disabled={isLoading}
               >
                 Cancel
-              </button>
-              <button type="submit" disabled={!moduleId || isLoading}>
+              </Button>
+              <Button type="submit" disabled={!moduleId || isLoading}>
                 Jump
-              </button>
-            </div>
+              </Button>
+            </DialogFooter>
           </form>
-        </div>
-      ) : null}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
