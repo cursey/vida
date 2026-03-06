@@ -10,8 +10,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Separator } from "@/components/ui/separator";
 import { WindowChrome } from "@/components/window-chrome";
 import { cn } from "@/lib/utils";
 import { useVirtualizer } from "@tanstack/react-virtual";
@@ -36,17 +34,13 @@ import type {
   WindowControlAction,
 } from "../shared/protocol";
 
-type ResizeSide = "left" | "right";
-
 type DragState = {
-  side: ResizeSide;
   startX: number;
   startLeft: number;
-  startRight: number;
 };
 
 type DisassemblyColumn = "section" | "address" | "bytes" | "instruction";
-type ActivePanel = "browser" | "disassembly" | "inspector";
+type ActivePanel = "browser" | "disassembly";
 
 type ColumnDragState = {
   key: DisassemblyColumn;
@@ -321,7 +315,7 @@ export function App() {
   const [isResizing, setIsResizing] = useState(false);
   const [isColumnResizing, setIsColumnResizing] = useState(false);
   const [cacheEpoch, setCacheEpoch] = useState(0);
-  const [panelWidths, setPanelWidths] = useState({ left: 268, right: 300 });
+  const [leftPanelWidth, setLeftPanelWidth] = useState(268);
   const [functionWindowStartIndex, setFunctionWindowStartIndex] = useState(0);
   const [disassemblyWindowStartRow, setDisassemblyWindowStartRow] = useState(0);
   const [disassemblyColumnWidths, setDisassemblyColumnWidths] = useState({
@@ -483,10 +477,9 @@ export function App() {
   const layoutStyle = useMemo(
     () =>
       ({
-        "--left-panel-width": `${panelWidths.left}px`,
-        "--right-panel-width": `${panelWidths.right}px`,
+        "--left-panel-width": `${leftPanelWidth}px`,
       }) as CSSProperties,
-    [panelWidths.left, panelWidths.right],
+    [leftPanelWidth],
   );
 
   const disassemblyColumnStyle = useMemo(
@@ -632,28 +625,12 @@ export function App() {
         MIN_PANEL_WIDTH,
         Math.min(
           MAX_PANEL_WIDTH,
-          layoutWidth -
-            panelWidths.right -
-            MIN_CENTER_WIDTH -
-            SPLITTER_WIDTH * 2,
+          layoutWidth - MIN_CENTER_WIDTH - SPLITTER_WIDTH,
         ),
       );
-      const clampedLeft = clamp(panelWidths.left, MIN_PANEL_WIDTH, maxLeft);
-
-      const maxRight = Math.max(
-        MIN_PANEL_WIDTH,
-        Math.min(
-          MAX_PANEL_WIDTH,
-          layoutWidth - clampedLeft - MIN_CENTER_WIDTH - SPLITTER_WIDTH * 2,
-        ),
-      );
-      const clampedRight = clamp(panelWidths.right, MIN_PANEL_WIDTH, maxRight);
-
-      if (
-        clampedLeft !== panelWidths.left ||
-        clampedRight !== panelWidths.right
-      ) {
-        setPanelWidths({ left: clampedLeft, right: clampedRight });
+      const clampedLeft = clamp(leftPanelWidth, MIN_PANEL_WIDTH, maxLeft);
+      if (clampedLeft !== leftPanelWidth) {
+        setLeftPanelWidth(clampedLeft);
       }
     }
 
@@ -663,7 +640,7 @@ export function App() {
     return () => {
       window.removeEventListener("resize", clampPanelWidths);
     };
-  }, [panelWidths.left, panelWidths.right]);
+  }, [leftPanelWidth]);
 
   useEffect(() => {
     if (!isResizing) {
@@ -680,38 +657,14 @@ export function App() {
 
       const dx = event.clientX - drag.startX;
       const layoutWidth = layout.clientWidth;
-
-      if (drag.side === "left") {
-        const maxLeft = Math.max(
-          MIN_PANEL_WIDTH,
-          Math.min(
-            MAX_PANEL_WIDTH,
-            layoutWidth -
-              drag.startRight -
-              MIN_CENTER_WIDTH -
-              SPLITTER_WIDTH * 2,
-          ),
-        );
-
-        setPanelWidths((prev) => ({
-          ...prev,
-          left: clamp(drag.startLeft + dx, MIN_PANEL_WIDTH, maxLeft),
-        }));
-        return;
-      }
-
-      const maxRight = Math.max(
+      const maxLeft = Math.max(
         MIN_PANEL_WIDTH,
         Math.min(
           MAX_PANEL_WIDTH,
-          layoutWidth - drag.startLeft - MIN_CENTER_WIDTH - SPLITTER_WIDTH * 2,
+          layoutWidth - MIN_CENTER_WIDTH - SPLITTER_WIDTH,
         ),
       );
-
-      setPanelWidths((prev) => ({
-        ...prev,
-        right: clamp(drag.startRight - dx, MIN_PANEL_WIDTH, maxRight),
-      }));
+      setLeftPanelWidth(clamp(drag.startLeft + dx, MIN_PANEL_WIDTH, maxLeft));
     }
 
     function stopResizing() {
@@ -958,20 +911,15 @@ export function App() {
     }
   }
 
-  function startResizing(
-    side: ResizeSide,
-    event: PointerEvent<HTMLDivElement>,
-  ) {
+  function startResizing(event: PointerEvent<HTMLDivElement>) {
     if (window.innerWidth <= 1250) {
       return;
     }
 
     event.preventDefault();
     dragStateRef.current = {
-      side,
       startX: event.clientX,
-      startLeft: panelWidths.left,
-      startRight: panelWidths.right,
+      startLeft: leftPanelWidth,
     };
     setIsResizing(true);
   }
@@ -1300,7 +1248,7 @@ export function App() {
           aria-label="Resize browser panel"
           aria-orientation="vertical"
           tabIndex={0}
-          onPointerDown={(event) => startResizing("left", event)}
+          onPointerDown={startResizing}
         />
 
         <section
@@ -1473,63 +1421,6 @@ export function App() {
                 })}
               </div>
             </div>
-          </div>
-        </section>
-
-        <div
-          className="splitter splitter-right"
-          role="separator"
-          aria-label="Resize inspector panel"
-          aria-orientation="vertical"
-          tabIndex={0}
-          onPointerDown={(event) => startResizing("right", event)}
-        />
-
-        <section
-          className={`panel panel-inspector ${
-            activePanel === "inspector" ? "is-panel-active" : ""
-          }`}
-          onPointerDown={() => setActivePanel("inspector")}
-          onWheel={() => setActivePanel("inspector")}
-          onFocusCapture={() => setActivePanel("inspector")}
-        >
-          <header className="panel-header">
-            <h2>Inspector</h2>
-            <span>{moduleId}</span>
-          </header>
-          <div className="panel-body inspector-grid">
-            <div className="detail-row">
-              <span>Module ID</span>
-              <code>{moduleId || "-"}</code>
-            </div>
-            <div className="detail-row">
-              <span>Entry RVA</span>
-              <code>{entryRva || "-"}</code>
-            </div>
-            <Separator />
-            <h3>Sections</h3>
-            <ScrollArea className="h-full">
-              <ul className="section-list">
-                {sections.map((section) => (
-                  <li key={`${section.name}-${section.startRva}`}>
-                    <Button
-                      className={cn(
-                        "section-link",
-                        goToAddress === section.startRva && "is-active",
-                      )}
-                      variant="ghost"
-                      type="button"
-                      onClick={() => void navigateToRva(section.startRva)}
-                    >
-                      <code>{section.name}</code>
-                      <span>
-                        {section.startRva} - {section.endRva}
-                      </span>
-                    </Button>
-                  </li>
-                ))}
-              </ul>
-            </ScrollArea>
           </div>
         </section>
       </main>

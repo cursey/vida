@@ -1,5 +1,15 @@
 # Change Files
 
+## 2026-03-05 - Remove Inspector Panel and Simplify Main Layout
+
+Docs:
+- `docs/work_log.md`
+- `docs/change_files.md`
+
+Electron app:
+- `app-electron/src/renderer/App.tsx`
+- `app-electron/src/renderer/styles.css`
+
 ## 2026-03-05 - Refine Title Badge Chrome and Loading Modal Presentation
 
 Docs:

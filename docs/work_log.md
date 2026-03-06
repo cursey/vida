@@ -1,5 +1,21 @@
 # Work Log
 
+## 2026-03-05 - Remove Inspector Panel and Simplify Main Layout
+
+Summary:
+- Removed the Inspector panel from the renderer main layout, including its right splitter and related interaction surface.
+- Simplified panel layout and resize behavior to a two-panel model (`Browser` + `Disassembly`) with only left-panel width control.
+- Removed inspector-specific renderer imports and markup while preserving section data usage for disassembly row section-name labeling.
+- Cleaned unused inspector panel style blocks from renderer CSS.
+
+Validation commands executed:
+- `just fmt`
+- `just check`
+- `just test`
+
+Changed files index:
+- See `docs/change_files.md` for the detailed file list for this work item.
+
 ## 2026-03-05 - Refine Title Badge Chrome and Loading Modal Presentation
 
 Summary:
