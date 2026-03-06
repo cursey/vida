@@ -1,5 +1,18 @@
 # Work Log
 
+## 2026-03-06 - Add Repository MIT License Metadata
+
+Summary:
+- Added a root `LICENSE` file with the standard MIT license text for the repository.
+- Declared `MIT` package metadata in the Electron app `package.json` and Rust engine `Cargo.toml` so ecosystem tooling reports the same license consistently.
+
+Validation commands executed:
+- `cargo metadata --manifest-path engine/Cargo.toml --no-deps`
+- `npm pkg get license` (in `app-electron`)
+
+Changed files index:
+- See `docs/change_files.md` for the detailed file list for this work item.
+
 ## 2026-03-06 - Rebuild Engine Analysis Around Function-Scoped Disassembly
 
 Summary:

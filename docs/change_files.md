@@ -1,5 +1,20 @@
 # Change Files
 
+## 2026-03-06 - Add Repository MIT License Metadata
+
+Root:
+- `LICENSE`
+
+Docs:
+- `docs/work_log.md`
+- `docs/change_files.md`
+
+Electron app:
+- `app-electron/package.json`
+
+Engine:
+- `engine/Cargo.toml`
+
 ## 2026-03-06 - Background Module Analysis and Progress Reporting
 
 Docs:

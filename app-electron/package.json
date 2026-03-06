@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "Electron UI for electron-disassembler",
+  "license": "MIT",
   "main": "dist/main/main.js",
   "scripts": {
     "gen:protocol": "node scripts/generate-protocol-types.mjs",
