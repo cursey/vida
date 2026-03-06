@@ -1,5 +1,17 @@
 # Work Log
 
+## 2026-03-06 - Simplify PDB Demangled Names to Function Names
+
+Summary:
+- Changed PDB symbol-name normalization to collapse demangled names down to the callable name instead of preserving return types, parameter lists, and Rust hash suffixes.
+- Added unit coverage for signature stripping and an integration assertion that PDB-derived function seeds do not expose parameter lists in `function.list`.
+
+Validation commands executed:
+- `cargo test --manifest-path engine/Cargo.toml`
+
+Changed files index:
+- See `docs/change_files.md` for the detailed file list for this work item.
+
 ## 2026-03-06 - Add Repository MIT License Metadata
 
 Summary:

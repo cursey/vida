@@ -378,6 +378,14 @@ fn discovers_pdb_functions_and_requires_strict_guid_age_match() {
         }),
         "Expected demangled/raw symbol names from PDB seed output"
     );
+    assert!(
+        pdb_seeds.iter().all(|seed| {
+            seed.get("name")
+                .and_then(Value::as_str)
+                .is_some_and(|name| !name.contains('('))
+        }),
+        "PDB seed names should be reduced to function names without parameter lists"
+    );
 
     let temp_dir = unique_temp_dir("engine-pdb-mismatch");
     fs::create_dir_all(&temp_dir).expect("failed to create temp directory for mismatch test");

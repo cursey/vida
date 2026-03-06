@@ -213,15 +213,62 @@ fn normalize_symbol_name(raw_name: String) -> String {
     }
 
     if let Ok(demangled) = rustc_demangle::try_demangle(trimmed) {
-        return demangled.to_string();
+        return simplify_function_name(&format!("{demangled:#}"));
     }
 
     if let Ok(demangled) = msvc_demangler::demangle(trimmed, msvc_demangler::DemangleFlags::llvm())
     {
-        return demangled;
+        return simplify_function_name(&demangled);
     }
 
-    trimmed.to_owned()
+    simplify_function_name(trimmed)
+}
+
+fn simplify_function_name(name: &str) -> String {
+    let trimmed = name.trim();
+    if trimmed.is_empty() {
+        return String::new();
+    }
+
+    let without_hash = strip_rust_hash_suffix(trimmed);
+    let signature_prefix = without_hash
+        .split_once('(')
+        .map(|(prefix, _)| prefix.trim_end())
+        .unwrap_or(without_hash)
+        .trim();
+    if signature_prefix.is_empty() {
+        return String::new();
+    }
+
+    let tokens = signature_prefix.split_whitespace().collect::<Vec<_>>();
+    if tokens.is_empty() {
+        return signature_prefix.to_owned();
+    }
+
+    if let Some(index) = tokens
+        .iter()
+        .rposition(|token| *token == "operator" || token.ends_with("::operator"))
+    {
+        return tokens[index..].join(" ");
+    }
+
+    if let Some(index) = tokens.iter().rposition(|token| token.contains("::")) {
+        return tokens[index..].join(" ");
+    }
+
+    tokens[tokens.len() - 1].to_owned()
+}
+
+fn strip_rust_hash_suffix(name: &str) -> &str {
+    let Some((prefix, suffix)) = name.rsplit_once("::h") else {
+        return name;
+    };
+
+    if suffix.len() == 16 && suffix.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        prefix
+    } else {
+        name
+    }
 }
 
 fn is_executable_rva(pe: &PE<'_>, rva: u64) -> bool {
@@ -242,7 +289,10 @@ fn is_executable_rva(pe: &PE<'_>, rva: u64) -> bool {
 mod tests {
     use std::path::Path;
 
-    use super::{build_pdb_candidate_paths, normalize_symbol_name, parse_codeview_filename};
+    use super::{
+        build_pdb_candidate_paths, normalize_symbol_name, parse_codeview_filename,
+        simplify_function_name,
+    };
 
     #[test]
     fn parses_codeview_filename_up_to_nul() {
@@ -267,10 +317,28 @@ mod tests {
     #[test]
     fn prefers_demangled_names_when_possible() {
         let rust = normalize_symbol_name("_ZN4test4main17h1234567890abcdefE".to_owned());
-        assert_eq!(rust, "test::main::h1234567890abcdef");
+        assert_eq!(rust, "test::main");
 
         let msvc = normalize_symbol_name("??_0klass@@QEAAHH@Z".to_owned());
         assert_ne!(msvc, "??_0klass@@QEAAHH@Z");
         assert!(msvc.contains("klass"));
+        assert!(!msvc.contains('('));
+    }
+
+    #[test]
+    fn strips_function_signatures_to_display_names() {
+        assert_eq!(
+            simplify_function_name("public: void __cdecl ns::widget::draw(int)"),
+            "ns::widget::draw"
+        );
+        assert_eq!(
+            simplify_function_name("public: static void * __cdecl ns::widget::operator new(unsigned __int64)"),
+            "ns::widget::operator new"
+        );
+        assert_eq!(simplify_function_name("unsigned int main(int, char const * *)"), "main");
+        assert_eq!(
+            simplify_function_name("crate::module::run::h0123456789abcdef"),
+            "crate::module::run"
+        );
     }
 }

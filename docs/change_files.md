@@ -1,5 +1,15 @@
 # Change Files
 
+## 2026-03-06 - Simplify PDB Demangled Names to Function Names
+
+Docs:
+- `docs/work_log.md`
+- `docs/change_files.md`
+
+Engine:
+- `engine/src/pdb_symbols.rs`
+- `engine/tests/engine_integration.rs`
+
 ## 2026-03-06 - Add Repository MIT License Metadata
 
 Root:
