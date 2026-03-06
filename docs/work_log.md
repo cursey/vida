@@ -1,5 +1,26 @@
 # Work Log
 
+## 2026-03-06 - Rebuild Engine Analysis Around Function-Scoped Disassembly
+
+Summary:
+- Replaced section-wide executable decoding with a unified module analysis cache that discovers function seeds from PDB, exports, TLS callbacks, entry point, and exception directory, then analyzes each seeded function with CFG-aware disassembly.
+- Reworked linear view generation to materialize only claimed function instructions as `instruction` rows while rendering every other mapped byte as grouped `db` data rows, including bytes inside executable sections that are not owned by any analyzed function.
+- Added TLS provenance to shared schema/app types and browser provenance rendering so discovered TLS callbacks surface consistently in the UI and schema tests.
+- Kept Graph View and `function.disassembleLinear` backed by the same function analysis data so function ownership, block focus, and linear rows all read from one source of truth.
+
+Validation commands executed:
+- `cargo check --manifest-path engine/Cargo.toml`
+- `cargo test --manifest-path engine/Cargo.toml`
+- `just app-gen-protocol`
+- `cd app-electron; npm run check`
+- `cd app-electron; npm run test`
+- `just fmt`
+- `just check`
+- `just test`
+
+Changed files index:
+- See `docs/change_files.md` for the detailed file list for this work item.
+
 ## 2026-03-06 - Surface Graph Generation Status in Status Bar
 
 Summary:

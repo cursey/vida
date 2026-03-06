@@ -142,7 +142,7 @@
       "properties": {
         "start": { "$ref": "#/$defs/HexAddress" },
         "name": { "type": "string" },
-        "kind": { "type": "string", "enum": ["entry", "export", "exception", "pdb"] }
+        "kind": { "type": "string", "enum": ["entry", "export", "tls", "exception", "pdb"] }
       }
     },
     "FunctionListParams": {

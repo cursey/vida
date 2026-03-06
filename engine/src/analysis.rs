@@ -1,0 +1,317 @@
+use std::collections::{BTreeMap, HashMap};
+use std::path::Path;
+
+use goblin::pe::PE;
+
+use crate::cfg::{BasicBlockEdgeKind, FunctionGraphAnalysis, analyze_function_cfg};
+use crate::disasm::{default_function_name, to_hex};
+use crate::error::EngineError;
+use crate::linear::{AnalyzedInstructionRow, LinearView, build_linear_view};
+use crate::pdb_symbols::discover_pdb_function_seeds;
+use crate::pe_utils::{
+    collect_exception_function_starts, collect_tls_callback_starts, is_executable_rva, parse_pe64,
+};
+use crate::protocol::{FunctionGraphBlock, FunctionGraphEdge, FunctionGraphInstruction};
+
+#[derive(Debug, Clone)]
+pub(crate) struct FunctionSeedEntry {
+    pub(crate) start_rva: u64,
+    pub(crate) name: String,
+    pub(crate) kind: &'static str,
+}
+
+#[derive(Debug)]
+pub(crate) struct ModuleAnalysis {
+    pub(crate) functions: Vec<FunctionSeedEntry>,
+    pub(crate) linear_view: LinearView,
+    pub(crate) graphs_by_start: HashMap<u64, CachedFunctionGraph>,
+    pub(crate) instruction_owner_by_rva: HashMap<u64, u64>,
+    pub(crate) claimed_instructions_by_function_start: HashMap<u64, Vec<AnalyzedInstructionRow>>,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct CachedFunctionGraph {
+    pub(crate) function_start_rva: u64,
+    pub(crate) function_name: String,
+    pub(crate) blocks: Vec<FunctionGraphBlock>,
+    pub(crate) edges: Vec<FunctionGraphEdge>,
+    pub(crate) instruction_block_id_by_rva: HashMap<u64, String>,
+}
+
+#[derive(Debug, Clone)]
+struct FunctionSeedCandidate {
+    seed: FunctionSeedEntry,
+    priority: u8,
+}
+
+pub(crate) fn build_module_analysis(
+    module_path: &Path,
+    bytes: &[u8],
+) -> Result<ModuleAnalysis, EngineError> {
+    let pe = parse_pe64(bytes)?;
+    let image_base = pe.image_base as u64;
+    let functions = discover_function_seeds(module_path, &pe, image_base);
+    let mut analysis_order = functions.clone();
+    analysis_order.sort_by_key(|seed| (seed_priority(seed.kind), seed.start_rva));
+
+    let mut graphs_by_start = HashMap::<u64, CachedFunctionGraph>::new();
+    let mut instruction_owner_by_rva = HashMap::<u64, u64>::new();
+    let mut claimed_instructions = BTreeMap::<u64, AnalyzedInstructionRow>::new();
+    let mut claimed_instructions_by_function_start =
+        HashMap::<u64, Vec<AnalyzedInstructionRow>>::new();
+
+    for seed in &analysis_order {
+        let analysis = match analyze_function_cfg(bytes, &pe, seed.start_rva) {
+            Ok(analysis) => analysis,
+            Err(EngineError::InvalidAddress) => continue,
+            Err(error) => return Err(error),
+        };
+
+        let (cached_graph, function_rows) =
+            build_cached_function_graph(analysis, image_base, seed.name.clone());
+        for row in function_rows {
+            let covered_rvas = (0..u64::from(row.len))
+                .map(|offset| row.start_rva + offset)
+                .collect::<Vec<u64>>();
+            if covered_rvas
+                .iter()
+                .any(|rva| instruction_owner_by_rva.contains_key(rva))
+            {
+                continue;
+            }
+
+            for covered_rva in covered_rvas {
+                instruction_owner_by_rva.insert(covered_rva, seed.start_rva);
+            }
+            claimed_instructions
+                .entry(row.start_rva)
+                .or_insert_with(|| row.clone());
+            claimed_instructions_by_function_start
+                .entry(seed.start_rva)
+                .or_default()
+                .push(row);
+        }
+        graphs_by_start.insert(seed.start_rva, cached_graph);
+    }
+
+    for rows in claimed_instructions_by_function_start.values_mut() {
+        rows.sort_by_key(|row| row.start_rva);
+    }
+
+    let linear_view = build_linear_view(&pe, &claimed_instructions)?;
+
+    Ok(ModuleAnalysis {
+        functions,
+        linear_view,
+        graphs_by_start,
+        instruction_owner_by_rva,
+        claimed_instructions_by_function_start,
+    })
+}
+
+fn discover_function_seeds(
+    module_path: &Path,
+    pe: &PE<'_>,
+    image_base: u64,
+) -> Vec<FunctionSeedEntry> {
+    let mut ordered = BTreeMap::<u64, FunctionSeedCandidate>::new();
+    let entry_rva = pe.entry as u64;
+    if is_executable_rva(pe, entry_rva) {
+        register_seed(
+            &mut ordered,
+            FunctionSeedCandidate {
+                seed: FunctionSeedEntry {
+                    start_rva: entry_rva,
+                    name: default_function_name(image_base + entry_rva),
+                    kind: "entry",
+                },
+                priority: seed_priority("entry"),
+            },
+        );
+    }
+
+    for export in &pe.exports {
+        let rva = export.rva as u64;
+        if !is_executable_rva(pe, rva) {
+            continue;
+        }
+
+        register_seed(
+            &mut ordered,
+            FunctionSeedCandidate {
+                seed: FunctionSeedEntry {
+                    start_rva: rva,
+                    name: export
+                        .name
+                        .filter(|name| !name.is_empty())
+                        .map(str::to_owned)
+                        .unwrap_or_else(|| default_function_name(image_base + rva)),
+                    kind: "export",
+                },
+                priority: seed_priority("export"),
+            },
+        );
+    }
+
+    for rva in collect_tls_callback_starts(pe) {
+        register_seed(
+            &mut ordered,
+            FunctionSeedCandidate {
+                seed: FunctionSeedEntry {
+                    start_rva: rva,
+                    name: default_function_name(image_base + rva),
+                    kind: "tls",
+                },
+                priority: seed_priority("tls"),
+            },
+        );
+    }
+
+    for rva in collect_exception_function_starts(pe) {
+        register_seed(
+            &mut ordered,
+            FunctionSeedCandidate {
+                seed: FunctionSeedEntry {
+                    start_rva: rva,
+                    name: default_function_name(image_base + rva),
+                    kind: "exception",
+                },
+                priority: seed_priority("exception"),
+            },
+        );
+    }
+
+    for pdb_function in discover_pdb_function_seeds(module_path, pe) {
+        if !is_executable_rva(pe, pdb_function.start_rva) {
+            continue;
+        }
+
+        register_seed(
+            &mut ordered,
+            FunctionSeedCandidate {
+                seed: FunctionSeedEntry {
+                    start_rva: pdb_function.start_rva,
+                    name: pdb_function.name,
+                    kind: "pdb",
+                },
+                priority: seed_priority("pdb"),
+            },
+        );
+    }
+
+    ordered
+        .into_values()
+        .map(|candidate| candidate.seed)
+        .collect()
+}
+
+fn register_seed(
+    ordered: &mut BTreeMap<u64, FunctionSeedCandidate>,
+    candidate: FunctionSeedCandidate,
+) {
+    match ordered.get(&candidate.seed.start_rva) {
+        Some(existing) if existing.priority <= candidate.priority => {}
+        _ => {
+            ordered.insert(candidate.seed.start_rva, candidate);
+        }
+    }
+}
+
+fn seed_priority(kind: &str) -> u8 {
+    match kind {
+        "pdb" => 0,
+        "export" => 1,
+        "tls" => 2,
+        "entry" => 3,
+        "exception" => 4,
+        _ => u8::MAX,
+    }
+}
+
+fn build_cached_function_graph(
+    analysis: FunctionGraphAnalysis,
+    image_base: u64,
+    function_name: String,
+) -> (CachedFunctionGraph, Vec<AnalyzedInstructionRow>) {
+    let block_id_by_start_rva = analysis
+        .blocks
+        .iter()
+        .map(|block| (block.start_rva, format!("b_{:X}", block.start_rva)))
+        .collect::<HashMap<u64, String>>();
+
+    let mut instruction_block_id_by_rva = HashMap::<u64, String>::new();
+    let mut linear_rows = Vec::<AnalyzedInstructionRow>::new();
+    let blocks = analysis
+        .blocks
+        .iter()
+        .map(|block| {
+            let block_id = block_id_by_start_rva
+                .get(&block.start_rva)
+                .cloned()
+                .unwrap_or_else(|| format!("b_{:X}", block.start_rva));
+
+            let instructions = block
+                .instructions
+                .iter()
+                .map(|instruction| {
+                    for offset in 0..u64::from(instruction.len) {
+                        instruction_block_id_by_rva
+                            .insert(instruction.start_rva + offset, block_id.clone());
+                    }
+                    linear_rows.push(AnalyzedInstructionRow {
+                        start_rva: instruction.start_rva,
+                        len: instruction.len,
+                        bytes: instruction.bytes.clone(),
+                        mnemonic: instruction.mnemonic.clone(),
+                        operands: instruction.operands.clone(),
+                        instruction_category: instruction.instruction_category,
+                        branch_target_rva: instruction.branch_target_rva,
+                        call_target_rva: instruction.call_target_rva,
+                    });
+                    FunctionGraphInstruction {
+                        mnemonic: instruction.mnemonic.clone(),
+                        operands: instruction.operands.clone(),
+                        instruction_category: instruction.instruction_category,
+                    }
+                })
+                .collect();
+
+            FunctionGraphBlock {
+                id: block_id,
+                start_va: to_hex(image_base + block.start_rva),
+                instructions,
+            }
+        })
+        .collect::<Vec<FunctionGraphBlock>>();
+
+    linear_rows.sort_by_key(|row| row.start_rva);
+
+    let edges = analysis
+        .edges
+        .iter()
+        .filter_map(|edge| {
+            let from_block_id = block_id_by_start_rva.get(&edge.from_rva)?;
+            let to_block_id = block_id_by_start_rva.get(&edge.to_rva)?;
+            Some(FunctionGraphEdge {
+                from_block_id: from_block_id.clone(),
+                to_block_id: to_block_id.clone(),
+                kind: match edge.kind {
+                    BasicBlockEdgeKind::Conditional => "conditional",
+                    BasicBlockEdgeKind::Unconditional => "unconditional",
+                    BasicBlockEdgeKind::Fallthrough => "fallthrough",
+                },
+            })
+        })
+        .collect::<Vec<FunctionGraphEdge>>();
+
+    (
+        CachedFunctionGraph {
+            function_start_rva: analysis.start_rva,
+            function_name,
+            blocks,
+            edges,
+            instruction_block_id_by_rva,
+        },
+        linear_rows,
+    )
+}

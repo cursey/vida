@@ -4,7 +4,8 @@ use serde_json::{Value, json};
 
 use crate::disasm::{categorize_instruction, parse_hex_u64};
 use crate::pe_utils::{
-    collect_exception_function_starts_from_entries, is_valid_exception_function_range,
+    collect_exception_function_starts_from_entries, collect_tls_callback_starts_from_vas,
+    is_valid_exception_function_range,
 };
 use crate::protocol::InstructionCategory;
 use crate::{EngineState, RpcRequest, RpcResponse};
@@ -70,6 +71,15 @@ fn collects_exception_starts_with_exec_filtering() {
 
     let starts = collect_exception_function_starts_from_entries(&entries, |rva| rva == 0x1400);
     assert_eq!(starts, vec![0x1400]);
+}
+
+#[test]
+fn collects_tls_callbacks_with_image_base_and_exec_filtering() {
+    let callbacks = vec![0x140001000, 0x140001080, 0x140001000, 0x13FFF0000];
+    let starts = collect_tls_callback_starts_from_vas(&callbacks, 0x140000000, |rva| {
+        matches!(rva, 0x1000 | 0x1080)
+    });
+    assert_eq!(starts, vec![0x1000, 0x1080]);
 }
 
 #[test]

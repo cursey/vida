@@ -547,6 +547,12 @@
   color: oklch(var(--chart-2));
 }
 
+.function-meta-tls {
+  border-color: oklch(var(--chart-1) / 0.45);
+  background: oklch(var(--chart-1) / 0.14);
+  color: oklch(var(--chart-1));
+}
+
 .function-meta-import {
   border-color: oklch(var(--chart-1) / 0.45);
   background: oklch(var(--chart-1) / 0.14);

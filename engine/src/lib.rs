@@ -1,3 +1,4 @@
+mod analysis;
 mod cfg;
 mod disasm;
 mod error;

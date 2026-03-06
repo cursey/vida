@@ -1,5 +1,32 @@
 # Change Files
 
+## 2026-03-06 - Rebuild Engine Analysis Around Function-Scoped Disassembly
+
+Docs:
+- `docs/work_log.md`
+- `docs/change_files.md`
+
+Shared:
+- `shared/schemas/protocol.schema.json`
+
+Electron app:
+- `app-electron/src/shared/protocol.ts`
+- `app-electron/src/renderer/features/browser/function-provenance.ts`
+- `app-electron/src/renderer/styles.css`
+- `app-electron/src/renderer/App.function-provenance.test.ts`
+- `app-electron/test/protocol-schema.test.js`
+
+Engine:
+- `engine/src/lib.rs`
+- `engine/src/analysis.rs`
+- `engine/src/cfg.rs`
+- `engine/src/linear.rs`
+- `engine/src/pe_utils.rs`
+- `engine/src/state.rs`
+- `engine/src/tests.rs`
+- `engine/tests/contract_schema_tests.rs`
+- `engine/tests/engine_integration.rs`
+
 ## 2026-03-06 - Surface Graph Generation Status in Status Bar
 
 Docs:

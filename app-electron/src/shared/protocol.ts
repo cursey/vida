@@ -51,7 +51,7 @@ export type StopReason =
 export type FunctionSeed = {
   start: HexAddress;
   name: string;
-  kind: "entry" | "export" | "exception" | "pdb";
+  kind: "entry" | "export" | "tls" | "exception" | "pdb";
 };
 
 export type SectionInfo = {

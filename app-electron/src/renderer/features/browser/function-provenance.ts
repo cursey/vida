@@ -8,6 +8,8 @@ export function toFunctionProvenanceCode(kind: string): string {
       return "imp";
     case "export":
       return "exp";
+    case "tls":
+      return "tls";
     case "entry":
       return "ent";
     default:

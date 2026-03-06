@@ -7,10 +7,7 @@ const IMAGE_SCN_MEM_EXECUTE: u32 = 0x20000000;
 
 #[derive(Debug, Clone)]
 pub(crate) struct SectionSlice {
-    pub(crate) start_rva: u64,
     pub(crate) end_rva: u64,
-    pub(crate) raw_start: usize,
-    pub(crate) raw_end: usize,
 }
 
 pub(crate) fn parse_pe64(bytes: &[u8]) -> Result<PE<'_>, EngineError> {
@@ -28,16 +25,7 @@ pub(crate) fn find_section_for_rva(pe: &PE<'_>, rva: u64) -> Option<SectionSlice
         let end_rva = start_rva.saturating_add(section_len);
 
         if rva >= start_rva && rva < end_rva {
-            let raw_start = section.pointer_to_raw_data as usize;
-            let raw_size = section.size_of_raw_data as usize;
-            let raw_end = raw_start.saturating_add(raw_size);
-
-            return Some(SectionSlice {
-                start_rva,
-                end_rva,
-                raw_start,
-                raw_end,
-            });
+            return Some(SectionSlice { end_rva });
         }
     }
 
@@ -55,6 +43,35 @@ pub(crate) fn collect_exception_function_starts(pe: &PE<'_>) -> Vec<u64> {
         .collect::<Vec<RuntimeFunction>>();
 
     collect_exception_function_starts_from_entries(&entries, |rva| is_executable_rva(pe, rva))
+}
+
+pub(crate) fn collect_tls_callback_starts(pe: &PE<'_>) -> Vec<u64> {
+    let Some(tls_data) = pe.tls_data.as_ref() else {
+        return Vec::new();
+    };
+
+    collect_tls_callback_starts_from_vas(&tls_data.callbacks, pe.image_base as u64, |rva| {
+        is_executable_rva(pe, rva)
+    })
+}
+
+pub(crate) fn collect_tls_callback_starts_from_vas<F>(
+    callback_vas: &[u64],
+    image_base: u64,
+    mut is_executable_start: F,
+) -> Vec<u64>
+where
+    F: FnMut(u64) -> bool,
+{
+    let mut callbacks = callback_vas
+        .iter()
+        .copied()
+        .filter_map(|callback_va| callback_va.checked_sub(image_base))
+        .filter(|callback_rva| is_executable_start(*callback_rva))
+        .collect::<Vec<u64>>();
+    callbacks.sort_unstable();
+    callbacks.dedup();
+    callbacks
 }
 
 pub(crate) fn collect_exception_function_starts_from_entries<F>(
@@ -86,7 +103,7 @@ pub(crate) fn is_valid_exception_function_range(start: u64, end: u64) -> bool {
     start != 0 && end > start
 }
 
-fn is_executable_rva(pe: &PE<'_>, rva: u64) -> bool {
+pub(crate) fn is_executable_rva(pe: &PE<'_>, rva: u64) -> bool {
     for section in &pe.sections {
         let start = section.virtual_address as u64;
         let len = u64::from(section.virtual_size.max(section.size_of_raw_data));

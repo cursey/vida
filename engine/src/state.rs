@@ -1,36 +1,28 @@
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 
-use iced_x86::{
-    Decoder, DecoderOptions, FlowControl, Formatter, Instruction, IntelFormatter, Mnemonic,
-};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
-use crate::cfg::{BasicBlockEdgeKind, FunctionGraphAnalysis, analyze_function_cfg};
-use crate::disasm::{
-    bytes_to_hex, categorize_instruction, default_function_name, parse_hex_u64,
-    split_instruction_text, to_hex,
-};
+use crate::analysis::{ModuleAnalysis, build_module_analysis};
+use crate::disasm::{parse_hex_u64, to_hex};
 use crate::error::EngineError;
 use crate::linear::{
-    DATA_GROUP_SIZE, LINEAR_ROW_HEIGHT, LinearView, MAX_LINEAR_PAGE_ROWS, build_linear_view,
-    find_row_by_rva, materialize_linear_row,
+    DATA_GROUP_SIZE, LINEAR_ROW_HEIGHT, MAX_LINEAR_PAGE_ROWS, find_row_by_rva,
+    materialize_linear_row,
 };
-use crate::pdb_symbols::discover_pdb_function_seeds;
-use crate::pe_utils::{collect_exception_function_starts, find_section_for_rva, parse_pe64};
+use crate::pe_utils::parse_pe64;
 use crate::protocol::{
-    EnginePingParams, EnginePingResult, ExportInfo, FunctionGraphBlock, FunctionGraphByVaParams,
-    FunctionGraphByVaResult, FunctionGraphEdge, FunctionGraphInstruction, FunctionListParams,
-    FunctionListResult, FunctionSeed, ImportInfo, InstructionRow, LinearDisassemblyParams,
-    LinearDisassemblyResult, LinearFindRowByVaParams, LinearFindRowByVaResult, LinearRowsParams,
-    LinearRowsResult, LinearViewInfoParams, LinearViewInfoResult, ModuleInfoParams,
-    ModuleInfoResult, ModuleOpenParams, ModuleOpenResult, SectionInfo,
+    EnginePingParams, EnginePingResult, ExportInfo, FunctionGraphByVaParams,
+    FunctionGraphByVaResult, FunctionListParams, FunctionListResult, FunctionSeed, ImportInfo,
+    InstructionRow, LinearDisassemblyParams, LinearDisassemblyResult, LinearFindRowByVaParams,
+    LinearFindRowByVaResult, LinearRowsParams, LinearRowsResult, LinearViewInfoParams,
+    LinearViewInfoResult, ModuleInfoParams, ModuleInfoResult, ModuleOpenParams, ModuleOpenResult,
+    SectionInfo,
 };
 use crate::rpc::{RpcRequest, RpcResponse, is_valid_request_id, rpc_error};
 
-const INVALID_STREAK_LIMIT: usize = 3;
 const DEFAULT_MAX_INSTRUCTIONS: usize = 512;
 const MAX_MAX_INSTRUCTIONS: usize = 4096;
 
@@ -38,27 +30,7 @@ const MAX_MAX_INSTRUCTIONS: usize = 4096;
 struct ModuleState {
     path: PathBuf,
     bytes: Vec<u8>,
-    linear_view: Option<LinearView>,
-    function_seeds: Option<Vec<FunctionSeedEntry>>,
-    function_graph_cache: HashMap<u64, CachedFunctionGraph>,
-    instruction_owner_cache: HashMap<u64, u64>,
-}
-
-#[derive(Debug, Clone)]
-struct FunctionSeedEntry {
-    start_rva: u64,
-    name: String,
-    kind: &'static str,
-}
-
-#[derive(Debug, Clone)]
-struct CachedFunctionGraph {
-    function_start_rva: u64,
-    function_name: String,
-    blocks: Vec<FunctionGraphBlock>,
-    edges: Vec<FunctionGraphEdge>,
-    instruction_starts: HashSet<u64>,
-    instruction_block_id_by_rva: HashMap<u64, String>,
+    analysis: Option<ModuleAnalysis>,
 }
 
 #[derive(Default)]
@@ -151,10 +123,7 @@ impl EngineState {
             ModuleState {
                 path,
                 bytes,
-                linear_view: None,
-                function_seeds: None,
-                function_graph_cache: HashMap::new(),
-                instruction_owner_cache: HashMap::new(),
+                analysis: None,
             },
         );
 
@@ -228,16 +197,16 @@ impl EngineState {
             .modules
             .get_mut(&params.module_id)
             .ok_or(EngineError::ModuleNotFound)?;
+        ensure_module_analysis(module)?;
+        let analysis = module
+            .analysis
+            .as_ref()
+            .ok_or_else(|| EngineError::Internal("Analysis cache missing".to_owned()))?;
         let image_base = parse_pe64(&module.bytes)?.image_base as u64;
 
-        ensure_function_seeds(module, image_base)?;
-        let seeds = module
-            .function_seeds
-            .as_ref()
-            .ok_or_else(|| EngineError::Internal("Function seed cache missing".to_owned()))?;
-
         Ok(FunctionListResult {
-            functions: seeds
+            functions: analysis
+                .functions
                 .iter()
                 .map(|seed| FunctionSeed {
                     start: to_hex(image_base + seed.start_rva),
@@ -257,77 +226,39 @@ impl EngineState {
             .modules
             .get_mut(&params.module_id)
             .ok_or(EngineError::ModuleNotFound)?;
+        ensure_module_analysis(module)?;
+        let analysis = module
+            .analysis
+            .as_ref()
+            .ok_or_else(|| EngineError::Internal("Analysis cache missing".to_owned()))?;
         let image_base = parse_pe64(&module.bytes)?.image_base as u64;
         let target_va = parse_hex_u64(&params.va)?;
         if target_va < image_base {
             return Err(EngineError::InvalidAddress);
         }
         let target_rva = target_va - image_base;
+        let owner_start_rva = analysis
+            .instruction_owner_by_rva
+            .get(&target_rva)
+            .copied()
+            .ok_or(EngineError::InvalidAddress)?;
+        let graph = analysis
+            .graphs_by_start
+            .get(&owner_start_rva)
+            .ok_or(EngineError::InvalidAddress)?;
+        let focus_block_id = graph
+            .instruction_block_id_by_rva
+            .get(&target_rva)
+            .cloned()
+            .ok_or(EngineError::InvalidAddress)?;
 
-        ensure_function_seeds(module, image_base)?;
-        let pe = parse_pe64(&module.bytes)?;
-
-        if let Some(owner_start_rva) = module.instruction_owner_cache.get(&target_rva).copied() {
-            if let Some(graph) = module.function_graph_cache.get(&owner_start_rva) {
-                let focus_block_id = graph
-                    .instruction_block_id_by_rva
-                    .get(&target_rva)
-                    .cloned()
-                    .ok_or(EngineError::InvalidAddress)?;
-                return Ok(FunctionGraphByVaResult {
-                    function_start_va: to_hex(image_base + graph.function_start_rva),
-                    function_name: graph.function_name.clone(),
-                    focus_block_id,
-                    blocks: graph.blocks.clone(),
-                    edges: graph.edges.clone(),
-                });
-            }
-        }
-
-        let seeds = module
-            .function_seeds
-            .as_ref()
-            .ok_or_else(|| EngineError::Internal("Function seed cache missing".to_owned()))?
-            .clone();
-
-        for seed in seeds {
-            if !module.function_graph_cache.contains_key(&seed.start_rva) {
-                match analyze_function_cfg(&module.bytes, &pe, seed.start_rva) {
-                    Ok(analysis) => {
-                        let cached =
-                            build_cached_function_graph(analysis, image_base, seed.name.clone());
-                        for instruction_rva in &cached.instruction_starts {
-                            module
-                                .instruction_owner_cache
-                                .entry(*instruction_rva)
-                                .or_insert(seed.start_rva);
-                        }
-                        module.function_graph_cache.insert(seed.start_rva, cached);
-                    }
-                    Err(EngineError::InvalidAddress) => continue,
-                    Err(error) => return Err(error),
-                }
-            }
-
-            if module.instruction_owner_cache.get(&target_rva) == Some(&seed.start_rva)
-                && let Some(graph) = module.function_graph_cache.get(&seed.start_rva)
-            {
-                let focus_block_id = graph
-                    .instruction_block_id_by_rva
-                    .get(&target_rva)
-                    .cloned()
-                    .ok_or(EngineError::InvalidAddress)?;
-                return Ok(FunctionGraphByVaResult {
-                    function_start_va: to_hex(image_base + graph.function_start_rva),
-                    function_name: graph.function_name.clone(),
-                    focus_block_id,
-                    blocks: graph.blocks.clone(),
-                    edges: graph.edges.clone(),
-                });
-            }
-        }
-
-        Err(EngineError::InvalidAddress)
+        Ok(FunctionGraphByVaResult {
+            function_start_va: to_hex(image_base + graph.function_start_rva),
+            function_name: graph.function_name.clone(),
+            focus_block_id,
+            blocks: graph.blocks.clone(),
+            edges: graph.edges.clone(),
+        })
     }
 
     fn method_disassemble_linear(
@@ -337,117 +268,65 @@ impl EngineState {
         let params = params?;
         let module = self
             .modules
-            .get(&params.module_id)
+            .get_mut(&params.module_id)
             .ok_or(EngineError::ModuleNotFound)?;
-        let pe = parse_pe64(&module.bytes)?;
-        let image_base = pe.image_base as u64;
-
+        ensure_module_analysis(module)?;
+        let analysis = module
+            .analysis
+            .as_ref()
+            .ok_or_else(|| EngineError::Internal("Analysis cache missing".to_owned()))?;
+        let image_base = parse_pe64(&module.bytes)?.image_base as u64;
         let start_va = parse_hex_u64(&params.start)?;
         if start_va < image_base {
             return Err(EngineError::InvalidAddress);
         }
         let start_rva = start_va - image_base;
-        let section = find_section_for_rva(&pe, start_rva).ok_or(EngineError::InvalidAddress)?;
+        let owner_start_rva = analysis
+            .instruction_owner_by_rva
+            .get(&start_rva)
+            .copied()
+            .ok_or(EngineError::InvalidAddress)?;
+        let function_rows = analysis
+            .claimed_instructions_by_function_start
+            .get(&owner_start_rva)
+            .ok_or(EngineError::InvalidAddress)?;
+        let start_index = find_instruction_index(function_rows, start_rva)?;
 
         let max_instructions = params
             .max_instructions
             .unwrap_or(DEFAULT_MAX_INSTRUCTIONS)
             .min(MAX_MAX_INSTRUCTIONS);
 
-        let decode_window = module
-            .bytes
-            .get(section.raw_start..section.raw_end)
-            .ok_or(EngineError::InvalidAddress)?;
-
-        let start_offset_within_section = (start_rva - section.start_rva) as usize;
-        let decode_slice = decode_window
-            .get(start_offset_within_section..)
-            .ok_or(EngineError::InvalidAddress)?;
-
-        let mut decoder = Decoder::with_ip(
-            64,
-            decode_slice,
-            image_base + start_rva,
-            DecoderOptions::NONE,
-        );
-        let mut formatter = IntelFormatter::new();
-
-        let mut stop_reason = "end_of_data";
-        let mut invalid_streak = 0usize;
         let mut instructions = Vec::new();
-
-        while instructions.len() < max_instructions {
-            if !decoder.can_decode() {
-                stop_reason = "end_of_data";
-                break;
-            }
-
-            let current_va = decoder.ip();
-            let current_rva = current_va.saturating_sub(image_base);
-
-            if current_rva < section.start_rva || current_rva >= section.end_rva {
-                stop_reason = "left_section";
-                break;
-            }
-
-            let position_before = decoder.position();
-            let mut instruction = Instruction::default();
-            decoder.decode_out(&mut instruction);
-
-            if instruction.mnemonic() == Mnemonic::INVALID || instruction.len() == 0 {
-                invalid_streak += 1;
-                if invalid_streak >= INVALID_STREAK_LIMIT {
-                    stop_reason = "invalid_instruction_streak";
-                    break;
-                }
-                continue;
-            }
-
-            invalid_streak = 0;
-
-            let instruction_len = instruction.len() as usize;
-            let start = position_before;
-            let end = position_before.saturating_add(instruction_len);
-            let encoded_bytes = decode_slice.get(start..end).ok_or_else(|| {
-                EngineError::Internal("Instruction bytes are out of decode range".to_owned())
-            })?;
-
-            let mut instruction_text = String::new();
-            formatter.format(&instruction, &mut instruction_text);
-            let (mnemonic, operands) = split_instruction_text(&instruction_text);
-            let instruction_category = categorize_instruction(&instruction, &mnemonic);
-
-            let branch_target = match instruction.flow_control() {
-                FlowControl::ConditionalBranch | FlowControl::UnconditionalBranch => {
-                    Some(to_hex(instruction.near_branch_target()))
-                }
-                _ => None,
-            };
-
-            let call_target = match instruction.flow_control() {
-                FlowControl::Call => Some(to_hex(instruction.near_branch_target())),
-                _ => None,
-            };
-
+        for row in function_rows
+            .iter()
+            .skip(start_index)
+            .take(max_instructions)
+        {
             instructions.push(InstructionRow {
-                address: to_hex(current_va),
-                bytes: bytes_to_hex(encoded_bytes),
-                mnemonic,
-                operands,
-                instruction_category,
-                branch_target,
-                call_target,
+                address: to_hex(image_base + row.start_rva),
+                bytes: row.bytes.clone(),
+                mnemonic: row.mnemonic.clone(),
+                operands: row.operands.clone(),
+                instruction_category: row.instruction_category,
+                branch_target: row
+                    .branch_target_rva
+                    .map(|target| to_hex(image_base + target)),
+                call_target: row
+                    .call_target_rva
+                    .map(|target| to_hex(image_base + target)),
             });
-
-            if instruction.flow_control() == FlowControl::Return {
-                stop_reason = "ret";
-                break;
-            }
         }
 
-        if instructions.len() >= max_instructions {
-            stop_reason = "max_instructions";
-        }
+        let stop_reason = if instructions.len() >= max_instructions {
+            "max_instructions"
+        } else if function_rows.last().is_some_and(|row| {
+            row.instruction_category == crate::protocol::InstructionCategory::Return
+        }) {
+            "ret"
+        } else {
+            "end_of_data"
+        };
 
         Ok(LinearDisassemblyResult {
             instructions,
@@ -464,19 +343,17 @@ impl EngineState {
             .modules
             .get_mut(&params.module_id)
             .ok_or(EngineError::ModuleNotFound)?;
-
-        ensure_linear_view(module)?;
-        let view = module
-            .linear_view
+        ensure_module_analysis(module)?;
+        let analysis = module
+            .analysis
             .as_ref()
-            .ok_or_else(|| EngineError::Internal("Linear view missing".to_owned()))?;
-        let pe = parse_pe64(&module.bytes)?;
-        let image_base = pe.image_base as u64;
+            .ok_or_else(|| EngineError::Internal("Analysis cache missing".to_owned()))?;
+        let image_base = parse_pe64(&module.bytes)?.image_base as u64;
 
         Ok(LinearViewInfoResult {
-            row_count: view.row_count,
-            min_va: to_hex(image_base + view.min_rva),
-            max_va: to_hex(image_base + view.max_rva),
+            row_count: analysis.linear_view.row_count,
+            min_va: to_hex(image_base + analysis.linear_view.min_rva),
+            max_va: to_hex(image_base + analysis.linear_view.max_rva),
             row_height: LINEAR_ROW_HEIGHT,
             data_group_size: DATA_GROUP_SIZE,
         })
@@ -491,23 +368,22 @@ impl EngineState {
             .modules
             .get_mut(&params.module_id)
             .ok_or(EngineError::ModuleNotFound)?;
-
-        ensure_linear_view(module)?;
-        let view = module
-            .linear_view
+        ensure_module_analysis(module)?;
+        let analysis = module
+            .analysis
             .as_ref()
-            .ok_or_else(|| EngineError::Internal("Linear view missing".to_owned()))?;
+            .ok_or_else(|| EngineError::Internal("Analysis cache missing".to_owned()))?;
         let pe = parse_pe64(&module.bytes)?;
         let image_base = pe.image_base as u64;
 
         let requested = params.row_count.min(MAX_LINEAR_PAGE_ROWS as u64) as usize;
-        let start_row = params.start_row.min(view.row_count);
-        let end_row = (start_row + requested as u64).min(view.row_count);
+        let start_row = params.start_row.min(analysis.linear_view.row_count);
+        let end_row = (start_row + requested as u64).min(analysis.linear_view.row_count);
 
         let mut rows = Vec::with_capacity(requested);
         for row_index in start_row..end_row {
             rows.push(materialize_linear_row(
-                view,
+                &analysis.linear_view,
                 &module.bytes,
                 &pe,
                 image_base,
@@ -527,158 +403,44 @@ impl EngineState {
             .modules
             .get_mut(&params.module_id)
             .ok_or(EngineError::ModuleNotFound)?;
-
-        ensure_linear_view(module)?;
-        let view = module
-            .linear_view
+        ensure_module_analysis(module)?;
+        let analysis = module
+            .analysis
             .as_ref()
-            .ok_or_else(|| EngineError::Internal("Linear view missing".to_owned()))?;
-
-        let pe = parse_pe64(&module.bytes)?;
-        let image_base = pe.image_base as u64;
+            .ok_or_else(|| EngineError::Internal("Analysis cache missing".to_owned()))?;
+        let image_base = parse_pe64(&module.bytes)?.image_base as u64;
         let target_va = parse_hex_u64(&params.va)?;
         if target_va < image_base {
             return Err(EngineError::InvalidAddress);
         }
         let target_rva = target_va - image_base;
-        let row_index = find_row_by_rva(view, target_rva)?;
+        let row_index = find_row_by_rva(&analysis.linear_view, target_rva)?;
         Ok(LinearFindRowByVaResult { row_index })
     }
 }
 
-fn ensure_linear_view(module: &mut ModuleState) -> Result<(), EngineError> {
-    if module.linear_view.is_some() {
+fn ensure_module_analysis(module: &mut ModuleState) -> Result<(), EngineError> {
+    if module.analysis.is_some() {
         return Ok(());
     }
 
-    let pe = parse_pe64(&module.bytes)?;
-    let linear_view = build_linear_view(&module.bytes, &pe)?;
-    module.linear_view = Some(linear_view);
+    module.analysis = Some(build_module_analysis(&module.path, &module.bytes)?);
     Ok(())
 }
 
-fn ensure_function_seeds(module: &mut ModuleState, image_base: u64) -> Result<(), EngineError> {
-    if module.function_seeds.is_some() {
-        return Ok(());
+fn find_instruction_index(
+    rows: &[crate::linear::AnalyzedInstructionRow],
+    start_rva: u64,
+) -> Result<usize, EngineError> {
+    let index = rows.partition_point(|row| row.start_rva <= start_rva);
+    if index == 0 {
+        return Err(EngineError::InvalidAddress);
     }
-
-    let seeds = {
-        let pe = parse_pe64(&module.bytes)?;
-        let mut ordered = BTreeMap::<u64, FunctionSeedEntry>::new();
-        let entry_rva = pe.entry as u64;
-        ordered.insert(
-            entry_rva,
-            FunctionSeedEntry {
-                start_rva: entry_rva,
-                name: default_function_name(image_base + entry_rva),
-                kind: "entry",
-            },
-        );
-
-        for export in &pe.exports {
-            let rva = export.rva as u64;
-            ordered.entry(rva).or_insert_with(|| FunctionSeedEntry {
-                start_rva: rva,
-                name: default_function_name(image_base + rva),
-                kind: "export",
-            });
-        }
-
-        for rva in collect_exception_function_starts(&pe) {
-            ordered.entry(rva).or_insert_with(|| FunctionSeedEntry {
-                start_rva: rva,
-                name: default_function_name(image_base + rva),
-                kind: "exception",
-            });
-        }
-
-        for pdb_function in discover_pdb_function_seeds(&module.path, &pe) {
-            let rva = pdb_function.start_rva;
-            ordered.insert(
-                rva,
-                FunctionSeedEntry {
-                    start_rva: rva,
-                    name: pdb_function.name,
-                    kind: "pdb",
-                },
-            );
-        }
-
-        ordered.into_values().collect::<Vec<FunctionSeedEntry>>()
-    };
-
-    module.function_seeds = Some(seeds);
-    Ok(())
-}
-
-fn build_cached_function_graph(
-    analysis: FunctionGraphAnalysis,
-    image_base: u64,
-    function_name: String,
-) -> CachedFunctionGraph {
-    let block_id_by_start_rva = analysis
-        .blocks
-        .iter()
-        .map(|block| (block.start_rva, format!("b_{:X}", block.start_rva)))
-        .collect::<HashMap<u64, String>>();
-
-    let mut instruction_block_id_by_rva = HashMap::<u64, String>::new();
-    let blocks = analysis
-        .blocks
-        .iter()
-        .map(|block| {
-            let block_id = block_id_by_start_rva
-                .get(&block.start_rva)
-                .cloned()
-                .unwrap_or_else(|| format!("b_{:X}", block.start_rva));
-
-            let instructions = block
-                .instructions
-                .iter()
-                .map(|instruction| {
-                    instruction_block_id_by_rva.insert(instruction.start_rva, block_id.clone());
-                    FunctionGraphInstruction {
-                        mnemonic: instruction.mnemonic.clone(),
-                        operands: instruction.operands.clone(),
-                        instruction_category: instruction.instruction_category,
-                    }
-                })
-                .collect();
-
-            FunctionGraphBlock {
-                id: block_id,
-                start_va: to_hex(image_base + block.start_rva),
-                instructions,
-            }
-        })
-        .collect::<Vec<FunctionGraphBlock>>();
-
-    let edges = analysis
-        .edges
-        .iter()
-        .filter_map(|edge| {
-            let from_block_id = block_id_by_start_rva.get(&edge.from_rva)?;
-            let to_block_id = block_id_by_start_rva.get(&edge.to_rva)?;
-            Some(FunctionGraphEdge {
-                from_block_id: from_block_id.clone(),
-                to_block_id: to_block_id.clone(),
-                kind: match edge.kind {
-                    BasicBlockEdgeKind::Conditional => "conditional",
-                    BasicBlockEdgeKind::Unconditional => "unconditional",
-                    BasicBlockEdgeKind::Fallthrough => "fallthrough",
-                },
-            })
-        })
-        .collect::<Vec<FunctionGraphEdge>>();
-
-    CachedFunctionGraph {
-        function_start_rva: analysis.start_rva,
-        function_name,
-        blocks,
-        edges,
-        instruction_starts: analysis.instruction_starts,
-        instruction_block_id_by_rva,
+    let row = &rows[index - 1];
+    if start_rva >= row.start_rva && start_rva < row.start_rva + u64::from(row.len) {
+        return Ok(index - 1);
     }
+    Err(EngineError::InvalidAddress)
 }
 
 fn parse_params<T>(params: Value) -> Result<T, EngineError>

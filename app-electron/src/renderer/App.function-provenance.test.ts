@@ -7,6 +7,7 @@ describe("function provenance shortcodes", () => {
     expect(toFunctionProvenanceCode("exception")).toBe("exc");
     expect(toFunctionProvenanceCode("import")).toBe("imp");
     expect(toFunctionProvenanceCode("export")).toBe("exp");
+    expect(toFunctionProvenanceCode("tls")).toBe("tls");
     expect(toFunctionProvenanceCode("entry")).toBe("ent");
   });
 

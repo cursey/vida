@@ -102,7 +102,7 @@ fn opens_module_lists_functions_and_disassembles() {
             .and_then(Value::as_str)
             .expect("function kind should be string");
         assert!(
-            matches!(kind, "entry" | "export" | "exception" | "pdb"),
+            matches!(kind, "entry" | "export" | "tls" | "exception" | "pdb"),
             "Unexpected function seed kind: {kind}"
         );
 
@@ -112,6 +112,11 @@ fn opens_module_lists_functions_and_disassembles() {
             .expect("function name should be string");
         if kind == "pdb" {
             assert!(!name.is_empty(), "PDB function names should not be empty");
+        } else if kind == "export" && !name.starts_with("sub_") {
+            assert!(
+                !name.is_empty(),
+                "Named export seeds should preserve a non-empty export name"
+            );
         } else {
             let start = seed
                 .get("start")
@@ -129,22 +134,13 @@ fn opens_module_lists_functions_and_disassembles() {
         }
     }
 
-    let start = list_result
-        .get("functions")
-        .and_then(Value::as_array)
-        .expect("functions array should exist")[0]
-        .get("start")
-        .and_then(Value::as_str)
-        .expect("function start should be string")
-        .to_owned();
-
     let disassembly_result = success_result(state.handle_request(RpcRequest {
         jsonrpc: "2.0".to_owned(),
         id: json!(3),
         method: "function.disassembleLinear".to_owned(),
         params: json!({
             "moduleId": module_id,
-            "start": start,
+            "start": entry_va,
             "maxInstructions": 64
         }),
     }));
