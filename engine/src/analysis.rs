@@ -38,21 +38,75 @@ pub(crate) struct CachedFunctionGraph {
     pub(crate) instruction_block_id_by_rva: HashMap<u64, String>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum AnalysisProgressPhase {
+    DiscoveringFunctions,
+    AnalyzingFunctions,
+    FinalizingLinearView,
+}
+
+impl AnalysisProgressPhase {
+    pub(crate) fn message(
+        self,
+        discovered_function_count: usize,
+        analyzed_function_count: Option<usize>,
+        total_function_count: Option<usize>,
+    ) -> String {
+        match self {
+            Self::DiscoveringFunctions => {
+                format!("Discovering functions ({discovered_function_count})...")
+            }
+            Self::AnalyzingFunctions => format!(
+                "Analyzing functions {} / {}...",
+                analyzed_function_count.unwrap_or(0),
+                total_function_count.unwrap_or(discovered_function_count)
+            ),
+            Self::FinalizingLinearView => "Finalizing analysis...".to_owned(),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct AnalysisProgressUpdate {
+    pub(crate) phase: AnalysisProgressPhase,
+    pub(crate) discovered_functions: Vec<FunctionSeedEntry>,
+    pub(crate) total_function_count: Option<usize>,
+    pub(crate) analyzed_function_count: Option<usize>,
+}
+
 #[derive(Debug, Clone)]
 struct FunctionSeedCandidate {
     seed: FunctionSeedEntry,
     priority: u8,
 }
 
-pub(crate) fn build_module_analysis(
+pub(crate) fn build_module_analysis_with_progress<F, C>(
     module_path: &Path,
     bytes: &[u8],
-) -> Result<ModuleAnalysis, EngineError> {
+    mut on_progress: F,
+    mut is_canceled: C,
+) -> Result<ModuleAnalysis, EngineError>
+where
+    F: FnMut(AnalysisProgressUpdate),
+    C: FnMut() -> bool,
+{
     let pe = parse_pe64(bytes)?;
     let image_base = pe.image_base as u64;
-    let functions = discover_function_seeds(module_path, &pe, image_base);
+    let functions =
+        discover_function_seeds_with_progress(module_path, &pe, image_base, &mut on_progress)?;
+
+    if is_canceled() {
+        return Err(EngineError::Canceled);
+    }
+
     let mut analysis_order = functions.clone();
     analysis_order.sort_by_key(|seed| (seed_priority(seed.kind), seed.start_rva));
+    on_progress(AnalysisProgressUpdate {
+        phase: AnalysisProgressPhase::AnalyzingFunctions,
+        discovered_functions: functions.clone(),
+        total_function_count: Some(functions.len()),
+        analyzed_function_count: Some(0),
+    });
 
     let mut graphs_by_start = HashMap::<u64, CachedFunctionGraph>::new();
     let mut instruction_owner_by_rva = HashMap::<u64, u64>::new();
@@ -60,10 +114,22 @@ pub(crate) fn build_module_analysis(
     let mut claimed_instructions_by_function_start =
         HashMap::<u64, Vec<AnalyzedInstructionRow>>::new();
 
-    for seed in &analysis_order {
+    for (index, seed) in analysis_order.iter().enumerate() {
+        if is_canceled() {
+            return Err(EngineError::Canceled);
+        }
+
         let analysis = match analyze_function_cfg(bytes, &pe, seed.start_rva) {
             Ok(analysis) => analysis,
-            Err(EngineError::InvalidAddress) => continue,
+            Err(EngineError::InvalidAddress) => {
+                on_progress(AnalysisProgressUpdate {
+                    phase: AnalysisProgressPhase::AnalyzingFunctions,
+                    discovered_functions: functions.clone(),
+                    total_function_count: Some(functions.len()),
+                    analyzed_function_count: Some(index + 1),
+                });
+                continue;
+            }
             Err(error) => return Err(error),
         };
 
@@ -92,12 +158,28 @@ pub(crate) fn build_module_analysis(
                 .push(row);
         }
         graphs_by_start.insert(seed.start_rva, cached_graph);
+        on_progress(AnalysisProgressUpdate {
+            phase: AnalysisProgressPhase::AnalyzingFunctions,
+            discovered_functions: functions.clone(),
+            total_function_count: Some(functions.len()),
+            analyzed_function_count: Some(index + 1),
+        });
+    }
+
+    if is_canceled() {
+        return Err(EngineError::Canceled);
     }
 
     for rows in claimed_instructions_by_function_start.values_mut() {
         rows.sort_by_key(|row| row.start_rva);
     }
 
+    on_progress(AnalysisProgressUpdate {
+        phase: AnalysisProgressPhase::FinalizingLinearView,
+        discovered_functions: functions.clone(),
+        total_function_count: Some(functions.len()),
+        analyzed_function_count: Some(functions.len()),
+    });
     let linear_view = build_linear_view(&pe, &claimed_instructions)?;
 
     Ok(ModuleAnalysis {
@@ -109,11 +191,15 @@ pub(crate) fn build_module_analysis(
     })
 }
 
-fn discover_function_seeds(
+fn discover_function_seeds_with_progress<F>(
     module_path: &Path,
     pe: &PE<'_>,
     image_base: u64,
-) -> Vec<FunctionSeedEntry> {
+    on_progress: &mut F,
+) -> Result<Vec<FunctionSeedEntry>, EngineError>
+where
+    F: FnMut(AnalysisProgressUpdate),
+{
     let mut ordered = BTreeMap::<u64, FunctionSeedCandidate>::new();
     let entry_rva = pe.entry as u64;
     if is_executable_rva(pe, entry_rva) {
@@ -129,6 +215,7 @@ fn discover_function_seeds(
             },
         );
     }
+    emit_discovery_progress(&ordered, on_progress);
 
     for export in &pe.exports {
         let rva = export.rva as u64;
@@ -152,6 +239,7 @@ fn discover_function_seeds(
             },
         );
     }
+    emit_discovery_progress(&ordered, on_progress);
 
     for rva in collect_tls_callback_starts(pe) {
         register_seed(
@@ -166,6 +254,7 @@ fn discover_function_seeds(
             },
         );
     }
+    emit_discovery_progress(&ordered, on_progress);
 
     for rva in collect_exception_function_starts(pe) {
         register_seed(
@@ -180,6 +269,7 @@ fn discover_function_seeds(
             },
         );
     }
+    emit_discovery_progress(&ordered, on_progress);
 
     for pdb_function in discover_pdb_function_seeds(module_path, pe) {
         if !is_executable_rva(pe, pdb_function.start_rva) {
@@ -198,11 +288,24 @@ fn discover_function_seeds(
             },
         );
     }
+    emit_discovery_progress(&ordered, on_progress);
 
-    ordered
+    Ok(ordered
         .into_values()
         .map(|candidate| candidate.seed)
-        .collect()
+        .collect())
+}
+
+fn emit_discovery_progress<F>(ordered: &BTreeMap<u64, FunctionSeedCandidate>, on_progress: &mut F)
+where
+    F: FnMut(AnalysisProgressUpdate),
+{
+    on_progress(AnalysisProgressUpdate {
+        phase: AnalysisProgressPhase::DiscoveringFunctions,
+        discovered_functions: ordered.values().cloned().map(|value| value.seed).collect(),
+        total_function_count: None,
+        analyzed_function_count: None,
+    });
 }
 
 fn register_seed(

@@ -6,14 +6,34 @@ type AppStatusBarProps = {
   engineStateClass: string;
   isSearchingFunctions: boolean;
   isBuildingGraph: boolean;
+  analysisMessage: string;
   transientMessage: string;
 };
+
+function StatusWithAnimatedDots({ text }: { text: string }) {
+  const normalizedText = text
+    .trim()
+    .replace(/(?:\.{3}|…)$/, "")
+    .trimEnd();
+
+  return (
+    <span aria-live="polite" className="status-searching">
+      {normalizedText}
+      <span aria-hidden="true" className="status-searching-dots">
+        <span>.</span>
+        <span>.</span>
+        <span>.</span>
+      </span>
+    </span>
+  );
+}
 
 export function AppStatusBar({
   engineStatus,
   engineStateClass,
   isSearchingFunctions,
   isBuildingGraph,
+  analysisMessage,
   transientMessage,
 }: AppStatusBarProps) {
   return (
@@ -22,24 +42,13 @@ export function AppStatusBar({
         Engine {engineStatus}
       </Badge>
       {isBuildingGraph ? (
-        <span aria-live="polite" className="status-searching">
-          Building graph
-          <span aria-hidden="true" className="status-searching-dots">
-            <span>.</span>
-            <span>.</span>
-            <span>.</span>
-          </span>
-        </span>
+        <StatusWithAnimatedDots text="Building graph" />
       ) : null}
       {isSearchingFunctions ? (
-        <span aria-live="polite" className="status-searching">
-          Searching
-          <span aria-hidden="true" className="status-searching-dots">
-            <span>.</span>
-            <span>.</span>
-            <span>.</span>
-          </span>
-        </span>
+        <StatusWithAnimatedDots text="Searching" />
+      ) : null}
+      {analysisMessage ? (
+        <StatusWithAnimatedDots text={analysisMessage} />
       ) : null}
       {transientMessage ? (
         <span aria-live="polite" className="status-message">

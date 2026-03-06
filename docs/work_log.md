@@ -609,6 +609,23 @@ Validation commands executed:
 Changed files index:
 - See `docs/change_files.md` for the detailed file list for this work item.
 
+## 2026-03-06 - Background Module Analysis and Progress Reporting
+
+Summary:
+- Changed module loading so `module.open` returns after lightweight PE registration while function discovery and analysis continue in the background.
+- Added engine analysis status and unload RPCs, including progress states for discovery, per-function analysis, finalization, failure, and cancelation.
+- Updated the Electron client timeout policy so long-running module work no longer times out during large executable loads.
+- Updated the renderer to poll analysis status, surface progress in the Browser and status bar, keep the shell responsive, and defer Disassembly until analysis is ready.
+- Added schema, renderer, and engine test coverage for staged module loading, status polling, and unload behavior.
+
+Validation commands executed:
+- `just fmt`
+- `just check`
+- `just test`
+
+Changed files index:
+- See `docs/change_files.md` for the detailed file list for this work item.
+
 ## 2026-03-05 - Independent Panel Scroll Fix
 
 Summary:

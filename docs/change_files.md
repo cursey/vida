@@ -1,5 +1,42 @@
 # Change Files
 
+## 2026-03-06 - Background Module Analysis and Progress Reporting
+
+Docs:
+- `docs/work_log.md`
+- `docs/change_files.md`
+
+Shared:
+- `shared/schemas/protocol.schema.json`
+
+Electron app:
+- `app-electron/src/main/engineClient.ts`
+- `app-electron/src/main/main.ts`
+- `app-electron/src/preload.ts`
+- `app-electron/src/shared/protocol.gen.ts`
+- `app-electron/src/shared/protocol.ts`
+- `app-electron/src/renderer/App.tsx`
+- `app-electron/src/renderer/App.disassembly-window.test.tsx`
+- `app-electron/src/renderer/App.function-browser-window.test.tsx`
+- `app-electron/src/renderer/App.function-browser.test.tsx`
+- `app-electron/src/renderer/App.graph-view.test.tsx`
+- `app-electron/src/renderer/App.loading-modal.test.tsx`
+- `app-electron/src/renderer/App.window-chrome.test.tsx`
+- `app-electron/src/renderer/features/app/app-dialogs.tsx`
+- `app-electron/src/renderer/features/app/status-bar.tsx`
+- `app-electron/src/renderer/features/browser/browser-panel.tsx`
+- `app-electron/src/renderer/features/disassembly/disassembly-panel.tsx`
+- `app-electron/src/renderer/styles.css`
+- `app-electron/test/protocol-schema.test.js`
+
+Engine:
+- `engine/src/analysis.rs`
+- `engine/src/error.rs`
+- `engine/src/protocol.rs`
+- `engine/src/state.rs`
+- `engine/tests/contract_schema_tests.rs`
+- `engine/tests/engine_integration.rs`
+
 ## 2026-03-06 - Rebuild Engine Analysis Around Function-Scoped Disassembly
 
 Docs:

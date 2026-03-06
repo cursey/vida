@@ -29,12 +29,14 @@ fn request_examples_validate_against_schema() {
     let requests = vec![
         json!({ "jsonrpc": "2.0", "id": 1, "method": "engine.ping", "params": {} }),
         json!({ "jsonrpc": "2.0", "id": 2, "method": "module.open", "params": { "path": "C:\\tmp\\a.exe" } }),
-        json!({ "jsonrpc": "2.0", "id": 3, "method": "module.info", "params": { "moduleId": "m1" } }),
-        json!({ "jsonrpc": "2.0", "id": 4, "method": "function.list", "params": { "moduleId": "m1" } }),
-        json!({ "jsonrpc": "2.0", "id": 5, "method": "function.getGraphByVa", "params": { "moduleId": "m1", "va": "0x140001000" } }),
+        json!({ "jsonrpc": "2.0", "id": 3, "method": "module.unload", "params": { "moduleId": "m1" } }),
+        json!({ "jsonrpc": "2.0", "id": 4, "method": "module.getAnalysisStatus", "params": { "moduleId": "m1" } }),
+        json!({ "jsonrpc": "2.0", "id": 5, "method": "module.info", "params": { "moduleId": "m1" } }),
+        json!({ "jsonrpc": "2.0", "id": 6, "method": "function.list", "params": { "moduleId": "m1" } }),
+        json!({ "jsonrpc": "2.0", "id": 7, "method": "function.getGraphByVa", "params": { "moduleId": "m1", "va": "0x140001000" } }),
         json!({
             "jsonrpc": "2.0",
-            "id": 6,
+            "id": 8,
             "method": "function.disassembleLinear",
             "params": { "moduleId": "m1", "start": "0x1000", "maxInstructions": 64 }
         }),
@@ -68,6 +70,44 @@ fn ping_response_validates_against_schema() {
             json!({ "jsonrpc": "2.0", "id": id, "error": error })
         }
     };
+
+    validator
+        .validate(&response_value)
+        .unwrap_or_else(|error| panic!("response failed schema validation: {error}"));
+}
+
+#[test]
+fn analysis_status_response_validates_against_schema() {
+    let schema = load_protocol_schema();
+    let validator = validator_for(&schema).expect("schema should compile");
+
+    let response_value = json!({
+        "jsonrpc": "2.0",
+        "id": 100,
+        "result": {
+            "state": "analyzing_functions",
+            "message": "Analyzing functions 12 / 48...",
+            "discoveredFunctionCount": 48,
+            "totalFunctionCount": 48,
+            "analyzedFunctionCount": 12
+        }
+    });
+
+    validator
+        .validate(&response_value)
+        .unwrap_or_else(|error| panic!("response failed schema validation: {error}"));
+}
+
+#[test]
+fn unload_response_validates_against_schema() {
+    let schema = load_protocol_schema();
+    let validator = validator_for(&schema).expect("schema should compile");
+
+    let response_value = json!({
+        "jsonrpc": "2.0",
+        "id": 104,
+        "result": {}
+    });
 
     validator
         .validate(&response_value)

@@ -75,6 +75,14 @@ describe("App function browser bounded window virtualization", () => {
         imageBase: "0x140000000",
         entryVa: functions[0]?.start ?? "0x1000",
       }),
+      unloadModule: vi.fn().mockResolvedValue({}),
+      getModuleAnalysisStatus: vi.fn().mockResolvedValue({
+        state: "ready",
+        message: "Analysis ready.",
+        discoveredFunctionCount: HUGE_FUNCTION_COUNT,
+        totalFunctionCount: HUGE_FUNCTION_COUNT,
+        analyzedFunctionCount: HUGE_FUNCTION_COUNT,
+      }),
       getModuleInfo: vi.fn().mockResolvedValue({
         sections: [],
         imports: [],

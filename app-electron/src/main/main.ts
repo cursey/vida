@@ -532,6 +532,17 @@ ipcMain.handle("engine:openModule", async (_event, pathValue: string) => {
   return engineClient.request("module.open", { path: pathValue });
 });
 
+ipcMain.handle("engine:unloadModule", async (_event, moduleId: string) => {
+  return engineClient.request("module.unload", { moduleId });
+});
+
+ipcMain.handle(
+  "engine:getModuleAnalysisStatus",
+  async (_event, moduleId: string) => {
+    return engineClient.request("module.getAnalysisStatus", { moduleId });
+  },
+);
+
 ipcMain.handle("engine:getModuleInfo", async (_event, moduleId: string) => {
   return engineClient.request("module.info", { moduleId });
 });

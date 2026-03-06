@@ -32,7 +32,7 @@ type RpcFailure = {
 type PendingRequest = {
   resolve: (value: unknown) => void;
   reject: (error: Error) => void;
-  timeout: NodeJS.Timeout;
+  timeout: NodeJS.Timeout | null;
 };
 
 export class EngineClient {
@@ -98,7 +98,6 @@ export class EngineClient {
   async request<M extends EngineMethod>(
     method: M,
     params: MethodParams[M],
-    timeoutMs = 10_000,
   ): Promise<MethodResult[M]> {
     this.start();
 
@@ -106,6 +105,7 @@ export class EngineClient {
       throw new Error("Engine process is unavailable");
     }
 
+    const timeoutMs = this.getTimeoutMs(method);
     const id = this.nextId++;
     const payload = {
       jsonrpc: "2.0",
@@ -115,10 +115,15 @@ export class EngineClient {
     };
 
     const promise = new Promise<MethodResult[M]>((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        this.pending.delete(id);
-        reject(new Error(`Engine request timed out for method '${method}'`));
-      }, timeoutMs);
+      const timeout =
+        timeoutMs === null
+          ? null
+          : setTimeout(() => {
+              this.pending.delete(id);
+              reject(
+                new Error(`Engine request timed out for method '${method}'`),
+              );
+            }, timeoutMs);
 
       this.pending.set(id, {
         resolve: (value) => resolve(value as MethodResult[M]),
@@ -165,6 +170,18 @@ export class EngineClient {
     };
   }
 
+  private getTimeoutMs(method: EngineMethod): number | null {
+    switch (method) {
+      case "module.open":
+      case "module.unload":
+        return null;
+      case "module.getAnalysisStatus":
+        return 5_000;
+      default:
+        return 10_000;
+    }
+  }
+
   private handleResponseLine(line: string): void {
     if (!line.trim()) {
       return;
@@ -184,7 +201,9 @@ export class EngineClient {
     }
 
     this.pending.delete(parsed.id);
-    clearTimeout(pending.timeout);
+    if (pending.timeout) {
+      clearTimeout(pending.timeout);
+    }
 
     if ("error" in parsed) {
       const message = parsed.error.data?.code
@@ -199,7 +218,9 @@ export class EngineClient {
 
   private rejectAllPending(error: Error): void {
     for (const [, pending] of this.pending) {
-      clearTimeout(pending.timeout);
+      if (pending.timeout) {
+        clearTimeout(pending.timeout);
+      }
       pending.reject(error);
     }
     this.pending.clear();

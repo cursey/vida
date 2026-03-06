@@ -20,9 +20,33 @@ test("protocol request and response examples validate", () => {
     method: "engine.ping",
     params: {},
   };
-  const graphRequest = {
+  const openRequest = {
     jsonrpc: "2.0",
     id: 2,
+    method: "module.open",
+    params: {
+      path: "C:\\tmp\\sample.exe",
+    },
+  };
+  const unloadRequest = {
+    jsonrpc: "2.0",
+    id: 3,
+    method: "module.unload",
+    params: {
+      moduleId: "m1",
+    },
+  };
+  const analysisStatusRequest = {
+    jsonrpc: "2.0",
+    id: 4,
+    method: "module.getAnalysisStatus",
+    params: {
+      moduleId: "m1",
+    },
+  };
+  const graphRequest = {
+    jsonrpc: "2.0",
+    id: 5,
     method: "function.getGraphByVa",
     params: {
       moduleId: "m1",
@@ -40,7 +64,7 @@ test("protocol request and response examples validate", () => {
 
   const functionListResponse = {
     jsonrpc: "2.0",
-    id: 2,
+    id: 6,
     result: {
       functions: [
         { start: "0x1000", name: "entry", kind: "entry" },
@@ -53,7 +77,7 @@ test("protocol request and response examples validate", () => {
   };
   const disassemblyResponse = {
     jsonrpc: "2.0",
-    id: 3,
+    id: 7,
     result: {
       instructions: [
         {
@@ -69,7 +93,7 @@ test("protocol request and response examples validate", () => {
   };
   const graphResponse = {
     jsonrpc: "2.0",
-    id: 4,
+    id: 8,
     result: {
       functionStartVa: "0x140001000",
       functionName: "sub_140001000",
@@ -90,8 +114,31 @@ test("protocol request and response examples validate", () => {
       edges: [],
     },
   };
+  const analysisStatusResponse = {
+    jsonrpc: "2.0",
+    id: 9,
+    result: {
+      state: "analyzing_functions",
+      message: "Analyzing functions 12 / 48...",
+      discoveredFunctionCount: 48,
+      totalFunctionCount: 48,
+      analyzedFunctionCount: 12,
+    },
+  };
+  const unloadResponse = {
+    jsonrpc: "2.0",
+    id: 10,
+    result: {},
+  };
 
   assert.equal(validate(request), true, JSON.stringify(validate.errors));
+  assert.equal(validate(openRequest), true, JSON.stringify(validate.errors));
+  assert.equal(validate(unloadRequest), true, JSON.stringify(validate.errors));
+  assert.equal(
+    validate(analysisStatusRequest),
+    true,
+    JSON.stringify(validate.errors),
+  );
   assert.equal(validate(graphRequest), true, JSON.stringify(validate.errors));
   assert.equal(validate(response), true, JSON.stringify(validate.errors));
   assert.equal(
@@ -105,4 +152,10 @@ test("protocol request and response examples validate", () => {
     JSON.stringify(validate.errors),
   );
   assert.equal(validate(graphResponse), true, JSON.stringify(validate.errors));
+  assert.equal(
+    validate(analysisStatusResponse),
+    true,
+    JSON.stringify(validate.errors),
+  );
+  assert.equal(validate(unloadResponse), true, JSON.stringify(validate.errors));
 });

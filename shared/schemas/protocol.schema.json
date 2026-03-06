@@ -77,6 +77,50 @@
         "entryVa": { "$ref": "#/$defs/HexAddress" }
       }
     },
+    "ModuleUnloadParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["moduleId"],
+      "properties": {
+        "moduleId": { "$ref": "#/$defs/ModuleId" }
+      }
+    },
+    "ModuleUnloadResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {}
+    },
+    "ModuleAnalysisStatusParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["moduleId"],
+      "properties": {
+        "moduleId": { "$ref": "#/$defs/ModuleId" }
+      }
+    },
+    "ModuleAnalysisStatusResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state", "message", "discoveredFunctionCount"],
+      "properties": {
+        "state": {
+          "type": "string",
+          "enum": [
+            "queued",
+            "discovering_functions",
+            "analyzing_functions",
+            "finalizing_linear_view",
+            "ready",
+            "failed",
+            "canceled"
+          ]
+        },
+        "message": { "type": "string" },
+        "discoveredFunctionCount": { "type": "integer", "minimum": 0 },
+        "totalFunctionCount": { "type": "integer", "minimum": 0 },
+        "analyzedFunctionCount": { "type": "integer", "minimum": 0 }
+      }
+    },
     "SectionInfo": {
       "type": "object",
       "additionalProperties": false,
@@ -311,6 +355,28 @@
         "params": { "$ref": "#/$defs/ModuleOpenParams" }
       }
     },
+    "ModuleUnloadRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["jsonrpc", "id", "method", "params"],
+      "properties": {
+        "jsonrpc": { "$ref": "#/$defs/JsonRpcVersion" },
+        "id": { "$ref": "#/$defs/RequestId" },
+        "method": { "type": "string", "const": "module.unload" },
+        "params": { "$ref": "#/$defs/ModuleUnloadParams" }
+      }
+    },
+    "ModuleAnalysisStatusRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["jsonrpc", "id", "method", "params"],
+      "properties": {
+        "jsonrpc": { "$ref": "#/$defs/JsonRpcVersion" },
+        "id": { "$ref": "#/$defs/RequestId" },
+        "method": { "type": "string", "const": "module.getAnalysisStatus" },
+        "params": { "$ref": "#/$defs/ModuleAnalysisStatusParams" }
+      }
+    },
     "ModuleInfoRequest": {
       "type": "object",
       "additionalProperties": false,
@@ -359,6 +425,8 @@
       "oneOf": [
         { "$ref": "#/$defs/EnginePingRequest" },
         { "$ref": "#/$defs/ModuleOpenRequest" },
+        { "$ref": "#/$defs/ModuleUnloadRequest" },
+        { "$ref": "#/$defs/ModuleAnalysisStatusRequest" },
         { "$ref": "#/$defs/ModuleInfoRequest" },
         { "$ref": "#/$defs/FunctionListRequest" },
         { "$ref": "#/$defs/FunctionGraphByVaRequest" },

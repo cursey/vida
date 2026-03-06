@@ -49,6 +49,14 @@ describe("App loading modal", () => {
               });
           }),
       ),
+      unloadModule: vi.fn().mockResolvedValue({}),
+      getModuleAnalysisStatus: vi.fn().mockResolvedValue({
+        state: "ready",
+        message: "Analysis ready.",
+        discoveredFunctionCount: 1,
+        totalFunctionCount: 1,
+        analyzedFunctionCount: 1,
+      }),
       getModuleInfo: vi.fn().mockResolvedValue({
         sections: [],
         imports: [],
@@ -97,10 +105,10 @@ describe("App loading modal", () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByText("Loading File")).toBeInTheDocument();
+      expect(screen.getByText("Opening File")).toBeInTheDocument();
       expect(
         screen.getByText(
-          "The selected file is being loaded and analyzed. Please wait.",
+          "Reading the selected file and preparing the workspace. Analysis will continue in the background.",
         ),
       ).toBeInTheDocument();
       expect(screen.getByText("C:\\fixtures\\sample.exe")).toBeInTheDocument();
@@ -112,7 +120,7 @@ describe("App loading modal", () => {
     });
 
     await waitFor(() => {
-      expect(screen.queryByText("Loading File")).not.toBeInTheDocument();
+      expect(screen.queryByText("Opening File")).not.toBeInTheDocument();
     });
   });
 });

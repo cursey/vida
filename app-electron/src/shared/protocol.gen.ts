@@ -7,6 +7,8 @@ export type ElectronDisassemblerProtocol = Request | Response;
 export type Request =
   | EnginePingRequest
   | ModuleOpenRequest
+  | ModuleUnloadRequest
+  | ModuleAnalysisStatusRequest
   | ModuleInfoRequest
   | FunctionListRequest
   | FunctionGraphByVaRequest
@@ -32,6 +34,24 @@ export interface ModuleOpenRequest {
 }
 export interface ModuleOpenParams {
   path: string;
+}
+export interface ModuleUnloadRequest {
+  jsonrpc: JsonRpcVersion;
+  id: RequestId;
+  method: "module.unload";
+  params: ModuleUnloadParams;
+}
+export interface ModuleUnloadParams {
+  moduleId: ModuleId;
+}
+export interface ModuleAnalysisStatusRequest {
+  jsonrpc: JsonRpcVersion;
+  id: RequestId;
+  method: "module.getAnalysisStatus";
+  params: ModuleAnalysisStatusParams;
+}
+export interface ModuleAnalysisStatusParams {
+  moduleId: ModuleId;
 }
 export interface ModuleInfoRequest {
   jsonrpc: JsonRpcVersion;

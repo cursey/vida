@@ -445,6 +445,20 @@
   padding: 0;
 }
 
+.panel-placeholder-panel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.panel-placeholder {
+  padding: 14px 16px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  text-align: center;
+}
+
 .section-list {
   margin: 0;
   padding: 0;

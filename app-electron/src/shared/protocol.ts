@@ -12,6 +12,8 @@ export type HexAddress = string;
 export type EngineMethod =
   | "engine.ping"
   | "module.open"
+  | "module.unload"
+  | "module.getAnalysisStatus"
   | "module.info"
   | "function.list"
   | "function.getGraphByVa"
@@ -23,6 +25,12 @@ export type EngineMethod =
 export type MethodParams = {
   "engine.ping": EnginePingParams;
   "module.open": ModuleOpenParams;
+  "module.unload": {
+    moduleId: string;
+  };
+  "module.getAnalysisStatus": {
+    moduleId: string;
+  };
   "module.info": ModuleInfoParams;
   "function.list": FunctionListParams;
   "function.getGraphByVa": FunctionGraphByVaParams;
@@ -60,6 +68,21 @@ export type SectionInfo = {
   endVa: HexAddress;
   rawOffset: number;
   rawSize: number;
+};
+
+export type ModuleAnalysisStatus = {
+  state:
+    | "queued"
+    | "discovering_functions"
+    | "analyzing_functions"
+    | "finalizing_linear_view"
+    | "ready"
+    | "failed"
+    | "canceled";
+  message: string;
+  discoveredFunctionCount: number;
+  totalFunctionCount?: number;
+  analyzedFunctionCount?: number;
 };
 
 export type ImportInfo = {
@@ -138,6 +161,8 @@ export type MethodResult = {
     imageBase: HexAddress;
     entryVa: HexAddress;
   };
+  "module.unload": Record<string, never>;
+  "module.getAnalysisStatus": ModuleAnalysisStatus;
   "module.info": {
     sections: SectionInfo[];
     imports: ImportInfo[];
@@ -227,6 +252,10 @@ export type ElectronApi = {
   invokeTitleBarMenuAction: (commandId: string) => Promise<void>;
   pingEngine: () => Promise<MethodResult["engine.ping"]>;
   openModule: (path: string) => Promise<MethodResult["module.open"]>;
+  unloadModule: (moduleId: string) => Promise<MethodResult["module.unload"]>;
+  getModuleAnalysisStatus: (
+    moduleId: string,
+  ) => Promise<MethodResult["module.getAnalysisStatus"]>;
   getModuleInfo: (moduleId: string) => Promise<MethodResult["module.info"]>;
   listFunctions: (moduleId: string) => Promise<MethodResult["function.list"]>;
   getFunctionGraphByVa: (

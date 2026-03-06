@@ -1,11 +1,19 @@
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
+use std::sync::{
+    Arc, Mutex,
+    atomic::{AtomicBool, Ordering},
+};
+use std::thread;
 
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
-use crate::analysis::{ModuleAnalysis, build_module_analysis};
+use crate::analysis::{
+    AnalysisProgressPhase, AnalysisProgressUpdate, FunctionSeedEntry, ModuleAnalysis,
+    build_module_analysis_with_progress,
+};
 use crate::disasm::{parse_hex_u64, to_hex};
 use crate::error::EngineError;
 use crate::linear::{
@@ -18,7 +26,8 @@ use crate::protocol::{
     FunctionGraphByVaResult, FunctionListParams, FunctionListResult, FunctionSeed, ImportInfo,
     InstructionRow, LinearDisassemblyParams, LinearDisassemblyResult, LinearFindRowByVaParams,
     LinearFindRowByVaResult, LinearRowsParams, LinearRowsResult, LinearViewInfoParams,
-    LinearViewInfoResult, ModuleInfoParams, ModuleInfoResult, ModuleOpenParams, ModuleOpenResult,
+    LinearViewInfoResult, ModuleAnalysisStatusParams, ModuleAnalysisStatusResult, ModuleInfoParams,
+    ModuleInfoResult, ModuleOpenParams, ModuleOpenResult, ModuleUnloadParams, ModuleUnloadResult,
     SectionInfo,
 };
 use crate::rpc::{RpcRequest, RpcResponse, is_valid_request_id, rpc_error};
@@ -28,9 +37,109 @@ const MAX_MAX_INSTRUCTIONS: usize = 4096;
 
 #[derive(Debug)]
 struct ModuleState {
-    path: PathBuf,
-    bytes: Vec<u8>,
+    bytes: Arc<Vec<u8>>,
+    analysis_task: BackgroundAnalysisHandle,
+}
+
+#[derive(Debug, Clone)]
+struct BackgroundAnalysisHandle {
+    shared: Arc<Mutex<BackgroundAnalysisState>>,
+    cancel: Arc<AtomicBool>,
+}
+
+#[derive(Debug)]
+struct BackgroundAnalysisState {
+    lifecycle_state: AnalysisLifecycleState,
+    message: String,
+    discovered_functions: Vec<FunctionSeedEntry>,
+    total_function_count: Option<usize>,
+    analyzed_function_count: Option<usize>,
     analysis: Option<ModuleAnalysis>,
+    failure_message: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum AnalysisLifecycleState {
+    Queued,
+    DiscoveringFunctions,
+    AnalyzingFunctions,
+    FinalizingLinearView,
+    Ready,
+    Failed,
+    Canceled,
+}
+
+impl AnalysisLifecycleState {
+    fn state_name(self) -> &'static str {
+        match self {
+            Self::Queued => "queued",
+            Self::DiscoveringFunctions => "discovering_functions",
+            Self::AnalyzingFunctions => "analyzing_functions",
+            Self::FinalizingLinearView => "finalizing_linear_view",
+            Self::Ready => "ready",
+            Self::Failed => "failed",
+            Self::Canceled => "canceled",
+        }
+    }
+}
+
+impl BackgroundAnalysisState {
+    fn queued() -> Self {
+        Self {
+            lifecycle_state: AnalysisLifecycleState::Queued,
+            message: "Queued analysis...".to_owned(),
+            discovered_functions: Vec::new(),
+            total_function_count: None,
+            analyzed_function_count: None,
+            analysis: None,
+            failure_message: None,
+        }
+    }
+
+    fn update_progress(&mut self, progress: AnalysisProgressUpdate) {
+        self.lifecycle_state = match progress.phase {
+            AnalysisProgressPhase::DiscoveringFunctions => {
+                AnalysisLifecycleState::DiscoveringFunctions
+            }
+            AnalysisProgressPhase::AnalyzingFunctions => AnalysisLifecycleState::AnalyzingFunctions,
+            AnalysisProgressPhase::FinalizingLinearView => {
+                AnalysisLifecycleState::FinalizingLinearView
+            }
+        };
+        self.message = progress.phase.message(
+            progress.discovered_functions.len(),
+            progress.analyzed_function_count,
+            progress.total_function_count,
+        );
+        self.discovered_functions = progress.discovered_functions;
+        self.total_function_count = progress.total_function_count;
+        self.analyzed_function_count = progress.analyzed_function_count;
+        self.failure_message = None;
+    }
+
+    fn mark_ready(&mut self, analysis: ModuleAnalysis) {
+        self.lifecycle_state = AnalysisLifecycleState::Ready;
+        self.message = "Analysis ready.".to_owned();
+        self.total_function_count = Some(analysis.functions.len());
+        self.analyzed_function_count = Some(analysis.functions.len());
+        self.discovered_functions = analysis.functions.clone();
+        self.analysis = Some(analysis);
+        self.failure_message = None;
+    }
+
+    fn mark_failed(&mut self, message: String) {
+        self.lifecycle_state = AnalysisLifecycleState::Failed;
+        self.message = format!("Analysis failed: {message}");
+        self.failure_message = Some(message);
+        self.analysis = None;
+    }
+
+    fn mark_canceled(&mut self) {
+        self.lifecycle_state = AnalysisLifecycleState::Canceled;
+        self.message = "Analysis canceled.".to_owned();
+        self.analysis = None;
+        self.failure_message = None;
+    }
 }
 
 #[derive(Default)]
@@ -55,6 +164,14 @@ impl EngineState {
                 .and_then(to_json_value),
             "module.open" => self
                 .method_module_open(parse_params::<ModuleOpenParams>(request.params))
+                .and_then(to_json_value),
+            "module.unload" => self
+                .method_module_unload(parse_params::<ModuleUnloadParams>(request.params))
+                .and_then(to_json_value),
+            "module.getAnalysisStatus" => self
+                .method_module_get_analysis_status(parse_params::<ModuleAnalysisStatusParams>(
+                    request.params,
+                ))
                 .and_then(to_json_value),
             "module.info" => self
                 .method_module_info(parse_params::<ModuleInfoParams>(request.params))
@@ -109,21 +226,21 @@ impl EngineState {
     ) -> Result<ModuleOpenResult, EngineError> {
         let params = params?;
         let path = PathBuf::from(params.path);
-        let bytes = fs::read(&path).map_err(|error| EngineError::Io(error.to_string()))?;
-        let pe = parse_pe64(&bytes)?;
+        let bytes = Arc::new(fs::read(&path).map_err(|error| EngineError::Io(error.to_string()))?);
+        let pe = parse_pe64(bytes.as_slice())?;
         let image_base = pe.image_base as u64;
         let entry_rva = pe.entry as u64;
         let entry_va = image_base + entry_rva;
 
         self.next_module_id += 1;
         let module_id = format!("m{}", self.next_module_id);
+        let analysis_task = spawn_background_analysis(path.clone(), Arc::clone(&bytes));
 
         self.modules.insert(
             module_id.clone(),
             ModuleState {
-                path,
                 bytes,
-                analysis: None,
+                analysis_task,
             },
         );
 
@@ -132,6 +249,38 @@ impl EngineState {
             arch: "x64",
             image_base: to_hex(image_base),
             entry_va: to_hex(entry_va),
+        })
+    }
+
+    fn method_module_unload(
+        &mut self,
+        params: Result<ModuleUnloadParams, EngineError>,
+    ) -> Result<ModuleUnloadResult, EngineError> {
+        let params = params?;
+        let module = self
+            .modules
+            .remove(&params.module_id)
+            .ok_or(EngineError::ModuleNotFound)?;
+        module.analysis_task.cancel.store(true, Ordering::Relaxed);
+        Ok(ModuleUnloadResult {})
+    }
+
+    fn method_module_get_analysis_status(
+        &mut self,
+        params: Result<ModuleAnalysisStatusParams, EngineError>,
+    ) -> Result<ModuleAnalysisStatusResult, EngineError> {
+        let params = params?;
+        let module = self
+            .modules
+            .get(&params.module_id)
+            .ok_or(EngineError::ModuleNotFound)?;
+        let snapshot = module.analysis_task.lock_state()?;
+        Ok(ModuleAnalysisStatusResult {
+            state: snapshot.lifecycle_state.state_name(),
+            message: snapshot.message.clone(),
+            discovered_function_count: snapshot.discovered_functions.len(),
+            total_function_count: snapshot.total_function_count,
+            analyzed_function_count: snapshot.analyzed_function_count,
         })
     }
 
@@ -144,7 +293,7 @@ impl EngineState {
             .modules
             .get(&params.module_id)
             .ok_or(EngineError::ModuleNotFound)?;
-        let pe = parse_pe64(&module.bytes)?;
+        let pe = parse_pe64(module.bytes.as_slice())?;
         let image_base = pe.image_base as u64;
 
         let mut sections = Vec::new();
@@ -195,18 +344,14 @@ impl EngineState {
         let params = params?;
         let module = self
             .modules
-            .get_mut(&params.module_id)
+            .get(&params.module_id)
             .ok_or(EngineError::ModuleNotFound)?;
-        ensure_module_analysis(module)?;
-        let analysis = module
-            .analysis
-            .as_ref()
-            .ok_or_else(|| EngineError::Internal("Analysis cache missing".to_owned()))?;
-        let image_base = parse_pe64(&module.bytes)?.image_base as u64;
+        let snapshot = module.analysis_task.lock_state()?;
+        let image_base = parse_pe64(module.bytes.as_slice())?.image_base as u64;
 
         Ok(FunctionListResult {
-            functions: analysis
-                .functions
+            functions: snapshot
+                .discovered_functions
                 .iter()
                 .map(|seed| FunctionSeed {
                     start: to_hex(image_base + seed.start_rva),
@@ -224,14 +369,11 @@ impl EngineState {
         let params = params?;
         let module = self
             .modules
-            .get_mut(&params.module_id)
+            .get(&params.module_id)
             .ok_or(EngineError::ModuleNotFound)?;
-        ensure_module_analysis(module)?;
-        let analysis = module
-            .analysis
-            .as_ref()
-            .ok_or_else(|| EngineError::Internal("Analysis cache missing".to_owned()))?;
-        let image_base = parse_pe64(&module.bytes)?.image_base as u64;
+        let snapshot = module.analysis_task.lock_state()?;
+        let analysis = ready_analysis(&snapshot)?;
+        let image_base = parse_pe64(module.bytes.as_slice())?.image_base as u64;
         let target_va = parse_hex_u64(&params.va)?;
         if target_va < image_base {
             return Err(EngineError::InvalidAddress);
@@ -268,14 +410,11 @@ impl EngineState {
         let params = params?;
         let module = self
             .modules
-            .get_mut(&params.module_id)
+            .get(&params.module_id)
             .ok_or(EngineError::ModuleNotFound)?;
-        ensure_module_analysis(module)?;
-        let analysis = module
-            .analysis
-            .as_ref()
-            .ok_or_else(|| EngineError::Internal("Analysis cache missing".to_owned()))?;
-        let image_base = parse_pe64(&module.bytes)?.image_base as u64;
+        let snapshot = module.analysis_task.lock_state()?;
+        let analysis = ready_analysis(&snapshot)?;
+        let image_base = parse_pe64(module.bytes.as_slice())?.image_base as u64;
         let start_va = parse_hex_u64(&params.start)?;
         if start_va < image_base {
             return Err(EngineError::InvalidAddress);
@@ -341,14 +480,11 @@ impl EngineState {
         let params = params?;
         let module = self
             .modules
-            .get_mut(&params.module_id)
+            .get(&params.module_id)
             .ok_or(EngineError::ModuleNotFound)?;
-        ensure_module_analysis(module)?;
-        let analysis = module
-            .analysis
-            .as_ref()
-            .ok_or_else(|| EngineError::Internal("Analysis cache missing".to_owned()))?;
-        let image_base = parse_pe64(&module.bytes)?.image_base as u64;
+        let snapshot = module.analysis_task.lock_state()?;
+        let analysis = ready_analysis(&snapshot)?;
+        let image_base = parse_pe64(module.bytes.as_slice())?.image_base as u64;
 
         Ok(LinearViewInfoResult {
             row_count: analysis.linear_view.row_count,
@@ -366,14 +502,11 @@ impl EngineState {
         let params = params?;
         let module = self
             .modules
-            .get_mut(&params.module_id)
+            .get(&params.module_id)
             .ok_or(EngineError::ModuleNotFound)?;
-        ensure_module_analysis(module)?;
-        let analysis = module
-            .analysis
-            .as_ref()
-            .ok_or_else(|| EngineError::Internal("Analysis cache missing".to_owned()))?;
-        let pe = parse_pe64(&module.bytes)?;
+        let snapshot = module.analysis_task.lock_state()?;
+        let analysis = ready_analysis(&snapshot)?;
+        let pe = parse_pe64(module.bytes.as_slice())?;
         let image_base = pe.image_base as u64;
 
         let requested = params.row_count.min(MAX_LINEAR_PAGE_ROWS as u64) as usize;
@@ -384,7 +517,7 @@ impl EngineState {
         for row_index in start_row..end_row {
             rows.push(materialize_linear_row(
                 &analysis.linear_view,
-                &module.bytes,
+                module.bytes.as_slice(),
                 &pe,
                 image_base,
                 row_index,
@@ -401,14 +534,11 @@ impl EngineState {
         let params = params?;
         let module = self
             .modules
-            .get_mut(&params.module_id)
+            .get(&params.module_id)
             .ok_or(EngineError::ModuleNotFound)?;
-        ensure_module_analysis(module)?;
-        let analysis = module
-            .analysis
-            .as_ref()
-            .ok_or_else(|| EngineError::Internal("Analysis cache missing".to_owned()))?;
-        let image_base = parse_pe64(&module.bytes)?.image_base as u64;
+        let snapshot = module.analysis_task.lock_state()?;
+        let analysis = ready_analysis(&snapshot)?;
+        let image_base = parse_pe64(module.bytes.as_slice())?.image_base as u64;
         let target_va = parse_hex_u64(&params.va)?;
         if target_va < image_base {
             return Err(EngineError::InvalidAddress);
@@ -419,13 +549,62 @@ impl EngineState {
     }
 }
 
-fn ensure_module_analysis(module: &mut ModuleState) -> Result<(), EngineError> {
-    if module.analysis.is_some() {
-        return Ok(());
+impl BackgroundAnalysisHandle {
+    fn lock_state(
+        &self,
+    ) -> Result<std::sync::MutexGuard<'_, BackgroundAnalysisState>, EngineError> {
+        self.shared
+            .lock()
+            .map_err(|_| EngineError::Internal("Background analysis state poisoned".to_owned()))
     }
+}
 
-    module.analysis = Some(build_module_analysis(&module.path, &module.bytes)?);
-    Ok(())
+fn spawn_background_analysis(path: PathBuf, bytes: Arc<Vec<u8>>) -> BackgroundAnalysisHandle {
+    let shared = Arc::new(Mutex::new(BackgroundAnalysisState::queued()));
+    let cancel = Arc::new(AtomicBool::new(false));
+
+    let worker_shared = Arc::clone(&shared);
+    let worker_cancel = Arc::clone(&cancel);
+    thread::spawn(move || {
+        let update_progress = |progress: AnalysisProgressUpdate| {
+            if let Ok(mut state) = worker_shared.lock() {
+                state.update_progress(progress);
+            }
+        };
+
+        let result =
+            build_module_analysis_with_progress(&path, bytes.as_slice(), update_progress, || {
+                worker_cancel.load(Ordering::Relaxed)
+            });
+
+        if let Ok(mut state) = worker_shared.lock() {
+            match result {
+                Ok(_analysis) if worker_cancel.load(Ordering::Relaxed) => state.mark_canceled(),
+                Ok(analysis) => state.mark_ready(analysis),
+                Err(EngineError::Canceled) => state.mark_canceled(),
+                Err(error) => state.mark_failed(error.to_string()),
+            }
+        }
+    });
+
+    BackgroundAnalysisHandle { shared, cancel }
+}
+
+fn ready_analysis(snapshot: &BackgroundAnalysisState) -> Result<&ModuleAnalysis, EngineError> {
+    match snapshot.lifecycle_state {
+        AnalysisLifecycleState::Ready => snapshot
+            .analysis
+            .as_ref()
+            .ok_or_else(|| EngineError::Internal("Analysis ready state missing cache".to_owned())),
+        AnalysisLifecycleState::Failed => Err(EngineError::AnalysisFailed(
+            snapshot
+                .failure_message
+                .clone()
+                .unwrap_or_else(|| "unknown analysis error".to_owned()),
+        )),
+        AnalysisLifecycleState::Canceled => Err(EngineError::Canceled),
+        _ => Err(EngineError::AnalysisNotReady),
+    }
 }
 
 fn find_instruction_index(

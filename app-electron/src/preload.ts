@@ -85,6 +85,12 @@ const electronApi: ElectronApi = {
     ipcRenderer.invoke("engine:ping"),
   openModule: (path: string): Promise<MethodResult["module.open"]> =>
     ipcRenderer.invoke("engine:openModule", path),
+  unloadModule: (moduleId: string): Promise<MethodResult["module.unload"]> =>
+    ipcRenderer.invoke("engine:unloadModule", moduleId),
+  getModuleAnalysisStatus: (
+    moduleId: string,
+  ): Promise<MethodResult["module.getAnalysisStatus"]> =>
+    ipcRenderer.invoke("engine:getModuleAnalysisStatus", moduleId),
   getModuleInfo: (moduleId: string): Promise<MethodResult["module.info"]> =>
     ipcRenderer.invoke("engine:getModuleInfo", moduleId),
   listFunctions: (moduleId: string): Promise<MethodResult["function.list"]> =>

@@ -27,11 +27,12 @@ export function LoadingDialog({ isLoading, loadingPath }: LoadingDialogProps) {
       >
         <DialogHeader className="loading-header">
           <div aria-hidden="true" className="loading-spinner" />
-          <DialogTitle className="loading-title">Loading File</DialogTitle>
+          <DialogTitle className="loading-title">Opening File</DialogTitle>
         </DialogHeader>
         <DialogHeader className="loading-copy">
           <DialogDescription className="loading-description">
-            The selected file is being loaded and analyzed. Please wait.
+            Reading the selected file and preparing the workspace. Analysis will
+            continue in the background.
           </DialogDescription>
         </DialogHeader>
         <code className="loading-path">{loadingPath}</code>

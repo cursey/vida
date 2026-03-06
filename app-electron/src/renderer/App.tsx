@@ -95,6 +95,9 @@ export function App() {
   const [titleBarMenuModel, setTitleBarMenuModel] = useState<TitleBarMenuModel>(
     { menus: [] },
   );
+  const [analysisStatus, setAnalysisStatus] = useState<
+    MethodResult["module.getAnalysisStatus"] | null
+  >(null);
   const [linearInfo, setLinearInfo] = useState<
     MethodResult["linear.getViewInfo"] | null
   >(null);
@@ -150,6 +153,9 @@ export function App() {
   const disassemblyPendingRebaseDirectionRef = useRef<-1 | 0 | 1>(0);
   const disassemblyRebaseIdleTimerRef = useRef<number | null>(null);
   const activeModuleIdRef = useRef("");
+  const asyncGenerationRef = useRef(0);
+  const analysisPollTimerRef = useRef<number | null>(null);
+  const preferredNavigationVaRef = useRef("");
   const selectionHistoryRef = useRef<string[]>([]);
   const selectionHistoryIndexRef = useRef(-1);
   const functionSearchJobIdRef = useRef(0);
@@ -161,6 +167,10 @@ export function App() {
 
   useEffect(() => {
     return () => {
+      if (analysisPollTimerRef.current !== null) {
+        window.clearTimeout(analysisPollTimerRef.current);
+        analysisPollTimerRef.current = null;
+      }
       if (statusMessageTimerRef.current !== null) {
         window.clearTimeout(statusMessageTimerRef.current);
         statusMessageTimerRef.current = null;
@@ -248,13 +258,48 @@ export function App() {
     };
   }, []);
 
-  const unloadCurrentModule = useCallback(() => {
+  const stopAnalysisPolling = useCallback(() => {
+    if (analysisPollTimerRef.current !== null) {
+      window.clearTimeout(analysisPollTimerRef.current);
+      analysisPollTimerRef.current = null;
+    }
+  }, []);
+
+  const resetLinearCache = useCallback(() => {
+    pageCacheRef.current.clear();
+    inflightPagesRef.current.clear();
+    resetDeferredEdgeRebaseState({
+      inProgressRef: disassemblyRebaseInProgressRef,
+      pendingDirectionRef: disassemblyPendingRebaseDirectionRef,
+      idleTimerRef: disassemblyRebaseIdleTimerRef,
+    });
+    setCacheEpoch((value) => value + 1);
+  }, []);
+
+  const resetSelectionHistory = useCallback(
+    (initialVa: string | null = null) => {
+      selectionHistoryRef.current = [];
+      selectionHistoryIndexRef.current = -1;
+
+      if (!initialVa) {
+        return;
+      }
+
+      selectionHistoryRef.current.push(initialVa);
+      selectionHistoryIndexRef.current = 0;
+    },
+    [],
+  );
+
+  const clearModuleState = useCallback(() => {
     functionSearchJobIdRef.current += 1;
+    stopAnalysisPolling();
     if (statusMessageTimerRef.current !== null) {
       window.clearTimeout(statusMessageTimerRef.current);
       statusMessageTimerRef.current = null;
     }
-    setErrorText("");
+    preferredNavigationVaRef.current = "";
+    activeModuleIdRef.current = "";
     setTransientStatusMessage("");
     setIsLoading(false);
     setLoadingPath("");
@@ -271,6 +316,7 @@ export function App() {
     setEntryVa("");
     setSections([]);
     setFunctions([]);
+    setAnalysisStatus(null);
     resetDeferredEdgeRebaseState({
       inProgressRef: functionRebaseInProgressRef,
       pendingDirectionRef: functionPendingRebaseDirectionRef,
@@ -286,11 +332,32 @@ export function App() {
     setGraphData(null);
     resetSelectionHistory();
     resetLinearCache();
-  }, []);
+  }, [resetLinearCache, resetSelectionHistory, stopAnalysisPolling]);
+
+  const unloadCurrentModule = useCallback(async () => {
+    const generation = ++asyncGenerationRef.current;
+    const currentModuleId = activeModuleIdRef.current;
+    setErrorText("");
+    clearModuleState();
+    if (!currentModuleId) {
+      return;
+    }
+
+    try {
+      await window.electronAPI.unloadModule(currentModuleId);
+    } catch (error: unknown) {
+      if (generation !== asyncGenerationRef.current) {
+        return;
+      }
+      setErrorText(
+        error instanceof Error ? error.message : "Failed to unload module",
+      );
+    }
+  }, [clearModuleState]);
 
   useEffect(() => {
     const unsubscribe = window.electronAPI.onMenuUnloadModule(() => {
-      unloadCurrentModule();
+      void unloadCurrentModule();
     });
     return () => {
       unsubscribe();
@@ -370,10 +437,16 @@ export function App() {
   );
   const displayedFunctionIndexes = searchedFunctionIndexes;
   const totalFunctionCount = functions.length;
+  const discoveredFunctionCount =
+    analysisStatus?.discoveredFunctionCount ?? totalFunctionCount;
   const functionCount =
     displayedFunctionIndexes === null
       ? totalFunctionCount
       : displayedFunctionIndexes.length;
+  const moduleAnalysisMessage =
+    moduleId && analysisStatus && analysisStatus.state !== "ready"
+      ? analysisStatus.message
+      : "";
   const functionWindowSize = Math.min(functionCount, MAX_FUNCTION_WINDOW_ROWS);
   const maxFunctionWindowStart = Math.max(
     0,
@@ -756,17 +829,6 @@ export function App() {
     maxDisassemblyWindowStart,
   ]);
 
-  function resetLinearCache() {
-    pageCacheRef.current.clear();
-    inflightPagesRef.current.clear();
-    resetDeferredEdgeRebaseState({
-      inProgressRef: disassemblyRebaseInProgressRef,
-      pendingDirectionRef: disassemblyPendingRebaseDirectionRef,
-      idleTimerRef: disassemblyRebaseIdleTimerRef,
-    });
-    setCacheEpoch((value) => value + 1);
-  }
-
   const readRow = useCallback((index: number): LinearRow | undefined => {
     const page = makePageKey(index, PAGE_SIZE);
     const pageRows = pageCacheRef.current.get(page);
@@ -845,18 +907,6 @@ export function App() {
     selectedRowIndex,
     showTransientStatusMessage,
   ]);
-
-  function resetSelectionHistory(initialVa: string | null = null) {
-    selectionHistoryRef.current = [];
-    selectionHistoryIndexRef.current = -1;
-
-    if (!initialVa) {
-      return;
-    }
-
-    selectionHistoryRef.current.push(initialVa);
-    selectionHistoryIndexRef.current = 0;
-  }
 
   const pushSelectionHistory = useCallback((va: string) => {
     if (!va) {
@@ -952,55 +1002,191 @@ export function App() {
     setIsColumnResizing(true);
   }
 
-  async function openModuleFromPath(chosenPath: string) {
-    setErrorText("");
-    if (statusMessageTimerRef.current !== null) {
-      window.clearTimeout(statusMessageTimerRef.current);
-      statusMessageTimerRef.current = null;
-    }
-    setTransientStatusMessage("");
-    setIsLoading(true);
-    setLoadingPath(chosenPath);
-    setIsBuildingGraph(false);
+  const applyReadyModuleAnalysis = useCallback(
+    async (
+      currentModuleId: string,
+      fallbackVa: string,
+      generation: number,
+    ): Promise<boolean> => {
+      const listed = await window.electronAPI.listFunctions(currentModuleId);
+      if (
+        generation !== asyncGenerationRef.current ||
+        currentModuleId !== activeModuleIdRef.current
+      ) {
+        return false;
+      }
 
-    try {
-      const opened = await window.electronAPI.openModule(chosenPath);
-      const info = await window.electronAPI.getModuleInfo(opened.moduleId);
-      const listed = await window.electronAPI.listFunctions(opened.moduleId);
-      const initialVa = listed.functions[0]?.start ?? opened.entryVa;
+      const targetVa =
+        preferredNavigationVaRef.current ||
+        listed.functions[0]?.start ||
+        fallbackVa;
+      const viewInfo =
+        await window.electronAPI.getLinearViewInfo(currentModuleId);
+      if (
+        generation !== asyncGenerationRef.current ||
+        currentModuleId !== activeModuleIdRef.current
+      ) {
+        return false;
+      }
 
-      const viewInfo = await window.electronAPI.getLinearViewInfo(
-        opened.moduleId,
-      );
       const rowLookup = await window.electronAPI.findLinearRowByVa({
-        moduleId: opened.moduleId,
-        va: initialVa,
+        moduleId: currentModuleId,
+        va: targetVa,
       });
+      if (
+        generation !== asyncGenerationRef.current ||
+        currentModuleId !== activeModuleIdRef.current
+      ) {
+        return false;
+      }
 
-      setModulePath(chosenPath);
-      setModuleId(opened.moduleId);
-      setEntryVa(opened.entryVa);
-      setSections(info.sections);
-      functionSearchJobIdRef.current += 1;
-      setIsBrowserSearchVisible(false);
-      setFunctionSearchQuery("");
-      setSearchedFunctionIndexes(null);
-      setAppliedFunctionSearchQuery("");
-      setIsSearchingFunctions(false);
       setFunctions(listed.functions);
       resetFunctionBrowserViewport();
       setLinearInfo(viewInfo);
-      setGoToAddress(initialVa);
+      setGoToAddress(targetVa);
       setSelectedRowIndex(null);
       setDisassemblyWindowStartRow(0);
       setCenterView("disassembly");
       setGraphData(null);
-      resetSelectionHistory(initialVa);
+      resetSelectionHistory(targetVa);
       resetLinearCache();
       setPendingScrollRow(rowLookup.rowIndex);
+      stopAnalysisPolling();
+      return true;
+    },
+    [
+      resetFunctionBrowserViewport,
+      resetLinearCache,
+      resetSelectionHistory,
+      stopAnalysisPolling,
+    ],
+  );
+
+  const startAnalysisPolling = useCallback(
+    (currentModuleId: string, fallbackVa: string, generation: number) => {
+      stopAnalysisPolling();
+      let lastListedFunctionCount = -1;
+
+      const poll = async () => {
+        try {
+          const status =
+            await window.electronAPI.getModuleAnalysisStatus(currentModuleId);
+          if (
+            generation !== asyncGenerationRef.current ||
+            currentModuleId !== activeModuleIdRef.current
+          ) {
+            return;
+          }
+
+          setAnalysisStatus(status);
+
+          if (status.discoveredFunctionCount !== lastListedFunctionCount) {
+            const listed =
+              await window.electronAPI.listFunctions(currentModuleId);
+            if (
+              generation !== asyncGenerationRef.current ||
+              currentModuleId !== activeModuleIdRef.current
+            ) {
+              return;
+            }
+            lastListedFunctionCount = listed.functions.length;
+            setFunctions(listed.functions);
+            resetFunctionBrowserViewport();
+          }
+
+          if (status.state === "ready") {
+            await applyReadyModuleAnalysis(
+              currentModuleId,
+              fallbackVa,
+              generation,
+            );
+            return;
+          }
+
+          if (status.state === "failed") {
+            stopAnalysisPolling();
+            setErrorText(status.message);
+            return;
+          }
+
+          if (status.state === "canceled") {
+            stopAnalysisPolling();
+            return;
+          }
+
+          analysisPollTimerRef.current = window.setTimeout(() => {
+            void poll();
+          }, 200);
+        } catch (error: unknown) {
+          if (
+            generation !== asyncGenerationRef.current ||
+            currentModuleId !== activeModuleIdRef.current
+          ) {
+            return;
+          }
+
+          stopAnalysisPolling();
+          setErrorText(
+            error instanceof Error
+              ? error.message
+              : "Failed to poll module analysis status",
+          );
+        }
+      };
+
+      void poll();
+    },
+    [
+      applyReadyModuleAnalysis,
+      resetFunctionBrowserViewport,
+      stopAnalysisPolling,
+    ],
+  );
+
+  async function openModuleFromPath(chosenPath: string) {
+    const generation = ++asyncGenerationRef.current;
+    const previousModuleId = activeModuleIdRef.current;
+    setErrorText("");
+    clearModuleState();
+    setIsLoading(true);
+    setLoadingPath(chosenPath);
+
+    try {
+      if (previousModuleId) {
+        await window.electronAPI.unloadModule(previousModuleId);
+        if (generation !== asyncGenerationRef.current) {
+          return;
+        }
+      }
+
+      const opened = await window.electronAPI.openModule(chosenPath);
+      if (generation !== asyncGenerationRef.current) {
+        await window.electronAPI.unloadModule(opened.moduleId).catch(() => {});
+        return;
+      }
+
+      const info = await window.electronAPI.getModuleInfo(opened.moduleId);
+      if (generation !== asyncGenerationRef.current) {
+        await window.electronAPI.unloadModule(opened.moduleId).catch(() => {});
+        return;
+      }
+
+      preferredNavigationVaRef.current = opened.entryVa;
+      activeModuleIdRef.current = opened.moduleId;
+      setModulePath(chosenPath);
+      setModuleId(opened.moduleId);
+      setEntryVa(opened.entryVa);
+      setSections(info.sections);
+      setGoToAddress(opened.entryVa);
+      setAnalysisStatus({
+        state: "queued",
+        message: "Queued analysis...",
+        discoveredFunctionCount: 0,
+      });
       void window.electronAPI.addRecentExecutable(chosenPath).catch((error) => {
         console.warn("Failed to add executable to recent list:", error);
       });
+      startAnalysisPolling(opened.moduleId, opened.entryVa, generation);
     } catch (error: unknown) {
       setErrorText(
         error instanceof Error ? error.message : "Failed to open executable",
@@ -1030,6 +1216,13 @@ export function App() {
       }
 
       setErrorText("");
+      preferredNavigationVaRef.current = va;
+
+      if (!linearInfo) {
+        setGoToAddress(va);
+        showTransientStatusMessage("Disassembly is still being prepared.");
+        return false;
+      }
 
       try {
         const found = await window.electronAPI.findLinearRowByVa({
@@ -1050,7 +1243,7 @@ export function App() {
         return false;
       }
     },
-    [moduleId, pushSelectionHistory],
+    [linearInfo, moduleId, pushSelectionHistory, showTransientStatusMessage],
   );
 
   const navigateSelectionHistory = useCallback(
@@ -1287,7 +1480,7 @@ export function App() {
           moduleId={moduleId}
           appliedFunctionSearchQuery={appliedFunctionSearchQuery}
           functionCount={functionCount}
-          totalFunctionCount={totalFunctionCount}
+          totalFunctionCount={discoveredFunctionCount}
           functionScrollRef={functionScrollRef}
           functionListTotalSize={functionRowVirtualizer.getTotalSize()}
           functionVirtualItems={functionVirtualItems}
@@ -1316,6 +1509,7 @@ export function App() {
           <DisassemblyPanel
             isActive={activePanel === "disassembly"}
             moduleId={moduleId}
+            isReady={Boolean(linearInfo)}
             rowCount={linearInfo?.rowCount ?? 0}
             disassemblyColumnStyle={disassemblyColumnStyle}
             onActivate={() => setActivePanel("disassembly")}
@@ -1350,6 +1544,7 @@ export function App() {
         engineStateClass={engineStateClass}
         isSearchingFunctions={isSearchingFunctions}
         isBuildingGraph={isBuildingGraph}
+        analysisMessage={moduleAnalysisMessage}
         transientMessage={transientStatusMessage}
       />
 

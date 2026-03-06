@@ -16,6 +16,12 @@ pub enum EngineError {
     UnsupportedArch,
     #[error("Module not found")]
     ModuleNotFound,
+    #[error("Module analysis is not ready")]
+    AnalysisNotReady,
+    #[error("Module analysis failed: {0}")]
+    AnalysisFailed(String),
+    #[error("Operation canceled")]
+    Canceled,
     #[error("Invalid address")]
     InvalidAddress,
     #[error("Engine internal error: {0}")]
@@ -41,6 +47,9 @@ impl EngineError {
             Self::UnsupportedFormat => "UNSUPPORTED_FORMAT",
             Self::UnsupportedArch => "UNSUPPORTED_ARCH",
             Self::ModuleNotFound => "MODULE_NOT_FOUND",
+            Self::AnalysisNotReady => "ANALYSIS_NOT_READY",
+            Self::AnalysisFailed(_) => "ANALYSIS_FAILED",
+            Self::Canceled => "CANCELED",
             Self::InvalidAddress => "INVALID_ADDRESS",
             Self::Internal(_) => "ENGINE_INTERNAL",
         }

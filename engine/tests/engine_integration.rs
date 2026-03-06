@@ -1,5 +1,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::thread;
+use std::time::Duration;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use engine::{EngineState, RpcRequest, RpcResponse, fixture_path};
@@ -22,6 +24,35 @@ fn error_engine_code(response: RpcResponse) -> String {
             .unwrap_or_else(|| "<missing>".to_owned()),
         RpcResponse::Success { .. } => panic!("Expected error, got success"),
     }
+}
+
+fn wait_for_analysis_ready(state: &mut EngineState, module_id: &str) -> Value {
+    for _ in 0..200 {
+        let status = success_result(state.handle_request(RpcRequest {
+            jsonrpc: "2.0".to_owned(),
+            id: json!(9_000),
+            method: "module.getAnalysisStatus".to_owned(),
+            params: json!({ "moduleId": module_id }),
+        }));
+        let state_name = status
+            .get("state")
+            .and_then(Value::as_str)
+            .expect("analysis status should include state");
+        match state_name {
+            "ready" => return status,
+            "failed" => panic!(
+                "Analysis failed: {}",
+                status
+                    .get("message")
+                    .and_then(Value::as_str)
+                    .unwrap_or("<missing message>")
+            ),
+            "canceled" => panic!("Analysis unexpectedly canceled"),
+            _ => thread::sleep(Duration::from_millis(10)),
+        }
+    }
+
+    panic!("Timed out waiting for analysis to become ready");
 }
 
 #[test]
@@ -52,6 +83,12 @@ fn opens_module_lists_functions_and_disassembles() {
         .and_then(Value::as_str)
         .expect("entryVa should be string")
         .to_owned();
+
+    let ready_status = wait_for_analysis_ready(&mut state, &module_id);
+    assert_eq!(
+        ready_status.get("state").and_then(Value::as_str),
+        Some("ready")
+    );
 
     let list_result = success_result(state.handle_request(RpcRequest {
         jsonrpc: "2.0".to_owned(),
@@ -308,6 +345,12 @@ fn discovers_pdb_functions_and_requires_strict_guid_age_match() {
         .expect("moduleId should be string")
         .to_owned();
 
+    let ready_status = wait_for_analysis_ready(&mut state, &module_id);
+    assert_eq!(
+        ready_status.get("state").and_then(Value::as_str),
+        Some("ready")
+    );
+
     let list_result = success_result(state.handle_request(RpcRequest {
         jsonrpc: "2.0".to_owned(),
         id: json!(101),
@@ -375,6 +418,39 @@ fn discovers_pdb_functions_and_requires_strict_guid_age_match() {
     );
 
     let _ = fs::remove_dir_all(temp_dir);
+}
+
+#[test]
+fn unload_removes_module_from_engine_state() {
+    let fixture = fixture_path("minimal_x64.exe");
+    let mut state = EngineState::default();
+
+    let open_result = success_result(state.handle_request(RpcRequest {
+        jsonrpc: "2.0".to_owned(),
+        id: json!(200),
+        method: "module.open".to_owned(),
+        params: json!({ "path": fixture.to_string_lossy() }),
+    }));
+    let module_id = open_result
+        .get("moduleId")
+        .and_then(Value::as_str)
+        .expect("moduleId should be string")
+        .to_owned();
+
+    success_result(state.handle_request(RpcRequest {
+        jsonrpc: "2.0".to_owned(),
+        id: json!(201),
+        method: "module.unload".to_owned(),
+        params: json!({ "moduleId": module_id }),
+    }));
+
+    let status_error = error_engine_code(state.handle_request(RpcRequest {
+        jsonrpc: "2.0".to_owned(),
+        id: json!(202),
+        method: "module.getAnalysisStatus".to_owned(),
+        params: json!({ "moduleId": module_id }),
+    }));
+    assert_eq!(status_error, "MODULE_NOT_FOUND");
 }
 
 fn unique_temp_dir(prefix: &str) -> PathBuf {

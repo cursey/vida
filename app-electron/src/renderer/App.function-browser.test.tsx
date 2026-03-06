@@ -83,6 +83,14 @@ describe("App function browser virtualization", () => {
         imageBase: "0x140000000",
         entryVa: functions[0].start,
       }),
+      unloadModule: vi.fn().mockResolvedValue({}),
+      getModuleAnalysisStatus: vi.fn().mockResolvedValue({
+        state: "ready",
+        message: "Analysis ready.",
+        discoveredFunctionCount: FUNCTION_COUNT,
+        totalFunctionCount: FUNCTION_COUNT,
+        analyzedFunctionCount: FUNCTION_COUNT,
+      }),
       getModuleInfo: vi.fn().mockResolvedValue({
         sections: [],
         imports: [],

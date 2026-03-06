@@ -13,6 +13,15 @@ pub(crate) struct ModuleOpenParams {
     pub(crate) path: String,
 }
 
+#[derive(Debug, Deserialize)]
+pub(crate) struct ModuleUnloadParams {
+    #[serde(rename = "moduleId")]
+    pub(crate) module_id: String,
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct ModuleUnloadResult {}
+
 #[derive(Debug, Serialize)]
 pub(crate) struct ModuleOpenResult {
     #[serde(rename = "moduleId")]
@@ -22,6 +31,27 @@ pub(crate) struct ModuleOpenResult {
     pub(crate) image_base: String,
     #[serde(rename = "entryVa")]
     pub(crate) entry_va: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct ModuleAnalysisStatusParams {
+    #[serde(rename = "moduleId")]
+    pub(crate) module_id: String,
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct ModuleAnalysisStatusResult {
+    pub(crate) state: &'static str,
+    pub(crate) message: String,
+    #[serde(rename = "discoveredFunctionCount")]
+    pub(crate) discovered_function_count: usize,
+    #[serde(rename = "totalFunctionCount", skip_serializing_if = "Option::is_none")]
+    pub(crate) total_function_count: Option<usize>,
+    #[serde(
+        rename = "analyzedFunctionCount",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub(crate) analyzed_function_count: Option<usize>,
 }
 
 #[derive(Debug, Deserialize)]

@@ -72,6 +72,14 @@ describe("App disassembly window virtualization", () => {
         imageBase: "0x140000000",
         entryVa: "0x140001000",
       }),
+      unloadModule: vi.fn().mockResolvedValue({}),
+      getModuleAnalysisStatus: vi.fn().mockResolvedValue({
+        state: "ready",
+        message: "Analysis ready.",
+        discoveredFunctionCount: 1,
+        totalFunctionCount: 1,
+        analyzedFunctionCount: 1,
+      }),
       getModuleInfo: vi.fn().mockResolvedValue({
         sections: [
           {
