@@ -48,7 +48,7 @@ export type StopReason =
 export type FunctionSeed = {
   start: HexAddress;
   name: string;
-  kind: "entry" | "export" | "exception";
+  kind: "entry" | "export" | "exception" | "pdb";
 };
 
 export type SectionInfo = {

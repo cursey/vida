@@ -1,6 +1,7 @@
 mod disasm;
 mod error;
 mod linear;
+mod pdb_symbols;
 mod pe_utils;
 mod protocol;
 mod rpc;

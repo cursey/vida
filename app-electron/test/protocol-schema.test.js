@@ -37,6 +37,7 @@ test("protocol request and response examples validate", () => {
         { start: "0x1000", name: "entry", kind: "entry" },
         { start: "0x2000", name: "exported", kind: "export" },
         { start: "0x3000", name: "exception_0x3000", kind: "exception" },
+        { start: "0x4000", name: "module::main", kind: "pdb" },
       ],
     },
   };

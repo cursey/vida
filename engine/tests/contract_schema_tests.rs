@@ -74,7 +74,7 @@ fn ping_response_validates_against_schema() {
 }
 
 #[test]
-fn function_list_response_with_exception_kind_validates_against_schema() {
+fn function_list_response_with_extended_kinds_validates_against_schema() {
     let schema = load_protocol_schema();
     let validator = validator_for(&schema).expect("schema should compile");
 
@@ -85,7 +85,8 @@ fn function_list_response_with_exception_kind_validates_against_schema() {
             "functions": [
                 { "start": "0x1000", "name": "entry", "kind": "entry" },
                 { "start": "0x2000", "name": "exported", "kind": "export" },
-                { "start": "0x3000", "name": "exception_0x3000", "kind": "exception" }
+                { "start": "0x3000", "name": "exception_0x3000", "kind": "exception" },
+                { "start": "0x4000", "name": "module::main", "kind": "pdb" }
             ]
         }
     });

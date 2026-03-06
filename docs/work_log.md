@@ -1,5 +1,22 @@
 # Work Log
 
+## 2026-03-05 - Add PDB-Based Function Discovery with Strict RSDS Matching
+
+Summary:
+- Added engine-side PDB-backed function discovery that reads RSDS debug metadata from PE debug directory and auto-discovers candidate PDB files on disk using targeted local path resolution.
+- Introduced a dedicated reusable PDB parsing module that validates strict GUID+age matches, parses Procedure/Public symbols, filters to executable RVAs, and best-effort demangles Rust/MSVC names.
+- Extended `function.list` seed kinds with `pdb` and merged PDB-derived seeds with precedence over overlapping PE-derived seeds at the same RVA.
+- Added deterministic fixture coverage by checking in a matching PDB fixture and adding integration tests for both positive discovery and strict GUID+age mismatch fallback behavior.
+- Updated shared protocol schema/app schema tests and shared TypeScript protocol type to include the new `pdb` function seed kind.
+
+Validation commands executed:
+- `just fmt`
+- `just check`
+- `just test`
+
+Changed files index:
+- See `docs/change_files.md` for the detailed file list for this work item.
+
 ## 2026-03-05 - Add File Menu Unload Command Flow
 
 Summary:

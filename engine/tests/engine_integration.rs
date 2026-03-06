@@ -1,3 +1,7 @@
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::time::{SystemTime, UNIX_EPOCH};
+
 use engine::{EngineState, RpcRequest, RpcResponse, fixture_path};
 use serde_json::{Value, json};
 
@@ -55,8 +59,8 @@ fn opens_module_lists_functions_and_disassembles() {
     assert!(
         functions
             .iter()
-            .any(|seed| { seed.get("kind").and_then(Value::as_str) == Some("entry") }),
-        "Expected entry seed to be present"
+            .any(|seed| seed.get("start").and_then(Value::as_str) == Some(entry_rva.as_str())),
+        "Expected at least one function seed at entry RVA"
     );
 
     let starts = functions
@@ -88,7 +92,7 @@ fn opens_module_lists_functions_and_disassembles() {
             .and_then(Value::as_str)
             .expect("function kind should be string");
         assert!(
-            matches!(kind, "entry" | "export" | "exception"),
+            matches!(kind, "entry" | "export" | "exception" | "pdb"),
             "Unexpected function seed kind: {kind}"
         );
 
@@ -96,21 +100,25 @@ fn opens_module_lists_functions_and_disassembles() {
             .get("name")
             .and_then(Value::as_str)
             .expect("function name should be string");
-        assert!(
-            name.starts_with("sub_"),
-            "Function name should start with sub_: {name}"
-        );
-        assert_eq!(
-            name.len(),
-            12,
-            "Function name should be sub_ plus 8 hex chars: {name}"
-        );
-        assert!(
-            name[4..]
-                .chars()
-                .all(|value| value.is_ascii_digit() || ('a'..='f').contains(&value)),
-            "Function name suffix should be lowercase hex: {name}"
-        );
+        if kind == "pdb" {
+            assert!(!name.is_empty(), "PDB function names should not be empty");
+        } else {
+            assert!(
+                name.starts_with("sub_"),
+                "Function name should start with sub_: {name}"
+            );
+            assert_eq!(
+                name.len(),
+                12,
+                "Function name should be sub_ plus 8 hex chars: {name}"
+            );
+            assert!(
+                name[4..]
+                    .chars()
+                    .all(|value| value.is_ascii_digit() || ('a'..='f').contains(&value)),
+                "Function name suffix should be lowercase hex: {name}"
+            );
+        }
     }
 
     let start = list_result
@@ -191,4 +199,131 @@ fn opens_module_lists_functions_and_disassembles() {
             .is_some(),
         "instruction rows should include instructionCategory"
     );
+}
+
+#[test]
+fn discovers_pdb_functions_and_requires_strict_guid_age_match() {
+    let fixture_exe = fixture_path("minimal_x64.exe");
+    let fixture_pdb = fixture_path("fixture_builder.pdb");
+    assert!(
+        fixture_exe.exists(),
+        "Fixture EXE does not exist: {}",
+        fixture_exe.display()
+    );
+    assert!(
+        fixture_pdb.exists(),
+        "Fixture PDB does not exist: {}",
+        fixture_pdb.display()
+    );
+
+    let mut state = EngineState::default();
+    let open_result = success_result(state.handle_request(RpcRequest {
+        jsonrpc: "2.0".to_owned(),
+        id: json!(100),
+        method: "module.open".to_owned(),
+        params: json!({ "path": fixture_exe.to_string_lossy() }),
+    }));
+    let module_id = open_result
+        .get("moduleId")
+        .and_then(Value::as_str)
+        .expect("moduleId should be string")
+        .to_owned();
+
+    let list_result = success_result(state.handle_request(RpcRequest {
+        jsonrpc: "2.0".to_owned(),
+        id: json!(101),
+        method: "function.list".to_owned(),
+        params: json!({ "moduleId": module_id }),
+    }));
+    let functions = list_result
+        .get("functions")
+        .and_then(Value::as_array)
+        .expect("functions array should exist");
+
+    let pdb_seeds = functions
+        .iter()
+        .filter(|seed| seed.get("kind").and_then(Value::as_str) == Some("pdb"))
+        .collect::<Vec<_>>();
+    assert!(
+        !pdb_seeds.is_empty(),
+        "Expected at least one function seed from matching PDB"
+    );
+    assert!(
+        pdb_seeds.iter().any(|seed| {
+            seed.get("name")
+                .and_then(Value::as_str)
+                .is_some_and(|name| !name.starts_with("sub_"))
+        }),
+        "Expected demangled/raw symbol names from PDB seed output"
+    );
+
+    let temp_dir = unique_temp_dir("engine-pdb-mismatch");
+    fs::create_dir_all(&temp_dir).expect("failed to create temp directory for mismatch test");
+    let mismatch_exe = temp_dir.join("minimal_x64.exe");
+    let mismatch_pdb = temp_dir.join("fixture_builder.pdb");
+    fs::copy(&fixture_exe, &mismatch_exe).expect("failed to copy fixture exe");
+    fs::copy(&fixture_pdb, &mismatch_pdb).expect("failed to copy fixture pdb");
+    increment_rsds_age(&mismatch_exe);
+
+    let mut mismatch_state = EngineState::default();
+    let mismatch_open = success_result(mismatch_state.handle_request(RpcRequest {
+        jsonrpc: "2.0".to_owned(),
+        id: json!(102),
+        method: "module.open".to_owned(),
+        params: json!({ "path": mismatch_exe.to_string_lossy() }),
+    }));
+    let mismatch_module_id = mismatch_open
+        .get("moduleId")
+        .and_then(Value::as_str)
+        .expect("moduleId should be string")
+        .to_owned();
+    let mismatch_list = success_result(mismatch_state.handle_request(RpcRequest {
+        jsonrpc: "2.0".to_owned(),
+        id: json!(103),
+        method: "function.list".to_owned(),
+        params: json!({ "moduleId": mismatch_module_id }),
+    }));
+    let mismatch_functions = mismatch_list
+        .get("functions")
+        .and_then(Value::as_array)
+        .expect("functions array should exist");
+
+    assert!(
+        mismatch_functions
+            .iter()
+            .all(|seed| seed.get("kind").and_then(Value::as_str) != Some("pdb")),
+        "Strict GUID+age mismatch should reject PDB symbols"
+    );
+
+    let _ = fs::remove_dir_all(temp_dir);
+}
+
+fn unique_temp_dir(prefix: &str) -> PathBuf {
+    let stamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("time should be monotonic")
+        .as_nanos();
+    std::env::temp_dir().join(format!("{prefix}-{stamp}"))
+}
+
+fn increment_rsds_age(path: &Path) {
+    let mut bytes = fs::read(path).expect("failed to read fixture copy for RSDS mutation");
+    let marker_index = bytes
+        .windows(4)
+        .position(|window| window == b"RSDS")
+        .expect("fixture should contain an RSDS record");
+    let age_offset = marker_index + 20;
+
+    let age_bytes = bytes
+        .get(age_offset..age_offset + 4)
+        .expect("RSDS age bytes should be in range");
+    let age = u32::from_le_bytes(
+        age_bytes
+            .try_into()
+            .expect("age bytes should always be exactly 4 bytes"),
+    );
+    let updated_age = age.wrapping_add(1);
+    bytes[age_offset..age_offset + 4].copy_from_slice(&updated_age.to_le_bytes());
+
+    fs::write(path, bytes).expect("failed to write mutated RSDS age");
 }

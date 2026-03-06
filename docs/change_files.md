@@ -1,5 +1,28 @@
 # Change Files
 
+## 2026-03-05 - Add PDB-Based Function Discovery with Strict RSDS Matching
+
+Docs:
+- `docs/work_log.md`
+- `docs/change_files.md`
+
+Shared:
+- `shared/schemas/protocol.schema.json`
+
+Electron app:
+- `app-electron/src/shared/protocol.ts`
+- `app-electron/test/protocol-schema.test.js`
+
+Engine:
+- `engine/Cargo.toml`
+- `engine/Cargo.lock`
+- `engine/src/lib.rs`
+- `engine/src/state.rs`
+- `engine/src/pdb_symbols.rs`
+- `engine/tests/fixtures/fixture_builder.pdb`
+- `engine/tests/contract_schema_tests.rs`
+- `engine/tests/engine_integration.rs`
+
 ## 2026-03-05 - Add File Menu Unload Command Flow
 
 Docs:

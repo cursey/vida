@@ -17,6 +17,7 @@ use crate::linear::{
     DATA_GROUP_SIZE, LINEAR_ROW_HEIGHT, LinearView, MAX_LINEAR_PAGE_ROWS, build_linear_view,
     find_row_by_rva, materialize_linear_row,
 };
+use crate::pdb_symbols::discover_pdb_function_seeds;
 use crate::pe_utils::{collect_exception_function_starts, find_section_for_rva, parse_pe64};
 use crate::protocol::{
     EnginePingParams, EnginePingResult, ExportInfo, FunctionListParams, FunctionListResult,
@@ -33,7 +34,7 @@ const MAX_MAX_INSTRUCTIONS: usize = 4096;
 
 #[derive(Debug)]
 struct ModuleState {
-    _path: PathBuf,
+    path: PathBuf,
     bytes: Vec<u8>,
     linear_view: Option<LinearView>,
 }
@@ -120,7 +121,7 @@ impl EngineState {
         self.modules.insert(
             module_id.clone(),
             ModuleState {
-                _path: path,
+                path,
                 bytes,
                 linear_view: None,
             },
@@ -222,6 +223,18 @@ impl EngineState {
                 name: default_function_name(rva),
                 kind: "exception",
             });
+        }
+
+        for pdb_function in discover_pdb_function_seeds(&module.path, &pe) {
+            let rva = pdb_function.start_rva;
+            ordered.insert(
+                rva,
+                FunctionSeed {
+                    start: to_hex(rva),
+                    name: pdb_function.name,
+                    kind: "pdb",
+                },
+            );
         }
 
         Ok(FunctionListResult {
