@@ -1,5 +1,21 @@
 # Work Log
 
+## 2026-03-05 - Add Frameless Custom Window Chrome and Menubar Integration
+
+Summary:
+- Enabled frameless Electron windows on all desktop platforms and added window-state IPC events/actions so the renderer can drive minimize/maximize/close controls.
+- Implemented a shared custom title bar component in the renderer with shadcn dropdown-based application menus and native-style window controls.
+- Added backend title-bar menu modeling and command dispatch in Electron main so the custom menubar stays synchronized with native menu actions, including existing Open and Open Recent flows.
+- Expanded renderer tests to cover the new custom chrome API surface and added a regression test for title bar menu and window control interactions.
+
+Validation commands executed:
+- `npm run fmt` (in `app-electron`)
+- `just check`
+- `just test`
+
+Changed files index:
+- See `docs/change_files.md` for the detailed file list for this work item.
+
 ## 2026-03-05 - Unify Deferred Rebase Logic for Virtualized Scroll Panels
 
 Summary:

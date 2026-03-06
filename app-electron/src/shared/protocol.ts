@@ -144,11 +144,58 @@ export type MethodResult = {
   };
 };
 
+export type WindowControlAction = "minimize" | "toggleMaximize" | "close";
+
+export type WindowChromeState = {
+  useCustomChrome: boolean;
+  platform: string;
+  isMaximized: boolean;
+  isFocused: boolean;
+};
+
+export type TitleBarMenuItem =
+  | {
+      type: "item";
+      label: string;
+      enabled: boolean;
+      commandId?: string;
+      accelerator?: string;
+    }
+  | {
+      type: "separator";
+    }
+  | {
+      type: "submenu";
+      label: string;
+      enabled: boolean;
+      items: TitleBarMenuItem[];
+    };
+
+export type TitleBarMenu = {
+  id: string;
+  label: string;
+  items: TitleBarMenuItem[];
+};
+
+export type TitleBarMenuModel = {
+  menus: TitleBarMenu[];
+};
+
 export type ElectronApi = {
   pickExecutable: () => Promise<string | null>;
   onMenuOpenExecutable: (callback: () => void) => () => void;
   onMenuOpenRecentExecutable: (callback: (path: string) => void) => () => void;
   addRecentExecutable: (path: string) => Promise<void>;
+  getWindowChromeState: () => Promise<WindowChromeState>;
+  onWindowChromeStateChanged: (
+    callback: (state: WindowChromeState) => void,
+  ) => () => void;
+  windowControl: (action: WindowControlAction) => Promise<void>;
+  getTitleBarMenuModel: () => Promise<TitleBarMenuModel>;
+  onTitleBarMenuModelChanged: (
+    callback: (model: TitleBarMenuModel) => void,
+  ) => () => void;
+  invokeTitleBarMenuAction: (commandId: string) => Promise<void>;
   pingEngine: () => Promise<MethodResult["engine.ping"]>;
   openModule: (path: string) => Promise<MethodResult["module.open"]>;
   getModuleInfo: (moduleId: string) => Promise<MethodResult["module.info"]>;

@@ -53,6 +53,17 @@ describe("App disassembly window virtualization", () => {
         return () => {};
       }),
       onMenuOpenRecentExecutable: vi.fn(() => () => {}),
+      getWindowChromeState: vi.fn().mockResolvedValue({
+        useCustomChrome: false,
+        platform: "win32",
+        isMaximized: false,
+        isFocused: true,
+      }),
+      onWindowChromeStateChanged: vi.fn(() => () => {}),
+      windowControl: vi.fn().mockResolvedValue(undefined),
+      getTitleBarMenuModel: vi.fn().mockResolvedValue({ menus: [] }),
+      onTitleBarMenuModelChanged: vi.fn(() => () => {}),
+      invokeTitleBarMenuAction: vi.fn().mockResolvedValue(undefined),
       pingEngine: vi.fn().mockResolvedValue({ version: "0.1.0" }),
       openModule: vi.fn().mockResolvedValue({
         moduleId: "huge-module",

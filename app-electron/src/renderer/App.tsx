@@ -11,6 +11,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
+import { WindowChrome } from "@/components/window-chrome";
 import { cn } from "@/lib/utils";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
@@ -29,6 +30,9 @@ import type {
   LinearRow,
   MethodResult,
   SectionInfo,
+  TitleBarMenuModel,
+  WindowChromeState,
+  WindowControlAction,
 } from "../shared/protocol";
 
 type ResizeSide = "left" | "right";
@@ -273,6 +277,17 @@ export function App() {
   const [goToAddress, setGoToAddress] = useState<string>("");
   const [functions, setFunctions] = useState<FunctionSeed[]>([]);
   const [sections, setSections] = useState<SectionInfo[]>([]);
+  const [windowChromeState, setWindowChromeState] = useState<WindowChromeState>(
+    {
+      useCustomChrome: true,
+      platform: "win32",
+      isMaximized: false,
+      isFocused: false,
+    },
+  );
+  const [titleBarMenuModel, setTitleBarMenuModel] = useState<TitleBarMenuModel>(
+    { menus: [] },
+  );
   const [linearInfo, setLinearInfo] = useState<
     MethodResult["linear.getViewInfo"] | null
   >(null);
@@ -324,6 +339,45 @@ export function App() {
       ? `${modulePath} - Electron Disassembler`
       : "Electron Disassembler";
   }, [modulePath]);
+
+  useEffect(() => {
+    let isMounted = true;
+    void Promise.all([
+      window.electronAPI.getWindowChromeState(),
+      window.electronAPI.getTitleBarMenuModel(),
+    ])
+      .then(([chromeState, menuModel]) => {
+        if (!isMounted) {
+          return;
+        }
+        setWindowChromeState(chromeState);
+        setTitleBarMenuModel(menuModel);
+      })
+      .catch((error: unknown) => {
+        setErrorText(
+          error instanceof Error
+            ? error.message
+            : "Failed to load window chrome state",
+        );
+      });
+
+    const unsubscribeChrome = window.electronAPI.onWindowChromeStateChanged(
+      (state) => {
+        setWindowChromeState(state);
+      },
+    );
+    const unsubscribeMenu = window.electronAPI.onTitleBarMenuModelChanged(
+      (model) => {
+        setTitleBarMenuModel(model);
+      },
+    );
+
+    return () => {
+      isMounted = false;
+      unsubscribeChrome();
+      unsubscribeMenu();
+    };
+  }, []);
 
   useEffect(() => {
     void window.electronAPI
@@ -1091,10 +1145,37 @@ export function App() {
     return "";
   }
 
+  const handleWindowControl = useCallback((action: WindowControlAction) => {
+    void window.electronAPI.windowControl(action).catch((error: unknown) => {
+      setErrorText(
+        error instanceof Error ? error.message : "Window control failed",
+      );
+    });
+  }, []);
+
+  const handleInvokeTitleBarMenuAction = useCallback((commandId: string) => {
+    void window.electronAPI
+      .invokeTitleBarMenuAction(commandId)
+      .catch((error: unknown) => {
+        setErrorText(
+          error instanceof Error ? error.message : "Menu action failed",
+        );
+      });
+  }, []);
+
   return (
     <div
       className={cn("shell", (isResizing || isColumnResizing) && "is-resizing")}
     >
+      {windowChromeState.useCustomChrome ? (
+        <WindowChrome
+          menuModel={titleBarMenuModel}
+          onInvokeMenuAction={handleInvokeTitleBarMenuAction}
+          onWindowControl={handleWindowControl}
+          titleText={modulePath || "Electron Disassembler"}
+          windowState={windowChromeState}
+        />
+      ) : null}
       {errorText ? <div className="error-banner">{errorText}</div> : null}
 
       <main className="layout" ref={layoutRef} style={layoutStyle}>

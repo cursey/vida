@@ -3,6 +3,9 @@ import type {
   ElectronApi,
   MethodParams,
   MethodResult,
+  TitleBarMenuModel,
+  WindowChromeState,
+  WindowControlAction,
 } from "./shared/protocol";
 
 const electronApi: ElectronApi = {
@@ -10,6 +13,42 @@ const electronApi: ElectronApi = {
     ipcRenderer.invoke("app:pickExecutable"),
   addRecentExecutable: (path: string): Promise<void> =>
     ipcRenderer.invoke("app:addRecentExecutable", path),
+  getWindowChromeState: (): Promise<WindowChromeState> =>
+    ipcRenderer.invoke("app:getWindowChromeState"),
+  onWindowChromeStateChanged: (
+    callback: (state: WindowChromeState) => void,
+  ): (() => void) => {
+    const listener = (
+      _event: Electron.IpcRendererEvent,
+      state: WindowChromeState,
+    ): void => {
+      callback(state);
+    };
+    ipcRenderer.on("app:window-chrome-state-changed", listener);
+    return () => {
+      ipcRenderer.removeListener("app:window-chrome-state-changed", listener);
+    };
+  },
+  windowControl: (action: WindowControlAction): Promise<void> =>
+    ipcRenderer.invoke("app:windowControl", action),
+  getTitleBarMenuModel: (): Promise<TitleBarMenuModel> =>
+    ipcRenderer.invoke("app:getTitleBarMenuModel"),
+  onTitleBarMenuModelChanged: (
+    callback: (model: TitleBarMenuModel) => void,
+  ): (() => void) => {
+    const listener = (
+      _event: Electron.IpcRendererEvent,
+      model: TitleBarMenuModel,
+    ): void => {
+      callback(model);
+    };
+    ipcRenderer.on("app:title-bar-menu-model-changed", listener);
+    return () => {
+      ipcRenderer.removeListener("app:title-bar-menu-model-changed", listener);
+    };
+  },
+  invokeTitleBarMenuAction: (commandId: string): Promise<void> =>
+    ipcRenderer.invoke("app:invokeTitleBarMenuAction", commandId),
   onMenuOpenExecutable: (callback: () => void): (() => void) => {
     const listener = (): void => {
       callback();
