@@ -1,5 +1,23 @@
 # Work Log
 
+## 2026-03-05 - Mirror Shadcn Site Theme and Typography (Light + Dark)
+
+Summary:
+- Added system-aware light/dark theme infrastructure in the renderer with persisted user override (`vite-ui-theme`) and in-app theme toggle controls.
+- Updated global renderer tokens and typography to mirror shadcn site styling conventions, including dual light/dark token sets and Geist Sans/Geist Mono font usage.
+- Refined shared UI primitives and renderer chrome styles to better match shadcn interaction and visual defaults while preserving disassembly workflows.
+- Added renderer test coverage for theme toggle behavior and maintained raw-control consistency guardrails.
+- Updated visual guidelines to document light/dark parity and typography standards.
+
+Validation commands executed:
+- `just fmt`
+- `just check`
+- `just test`
+- `just build`
+
+Changed files index:
+- See `docs/change_files.md` for the detailed file list for this work item.
+
 ## 2026-03-05 - Migrate Renderer UI Foundation to Shadcn Consistency Model
 
 Summary:

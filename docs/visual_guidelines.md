@@ -1,47 +1,36 @@
-# Visual Guidelines (Shadcn Consistency Baseline)
+# Visual Guidelines (Shadcn Site Parity)
 
 ## Design Intent
-The renderer UI uses a `shadcn/ui` consistency model:
-- Dark-first interface with stable semantic tokens.
-- Shared primitives for all interactive controls.
-- Dense desktop-oriented layout for reverse-engineering workflows.
-- Predictable spacing, typography, and state styling across panels.
+The renderer should mirror the visual language of `ui.shadcn.com`:
+- Shared semantic tokens for both light and dark themes.
+- Geist Sans / Geist Mono typography baseline.
+- Shared component primitives for all interactive controls.
+- Clean, neutral styling with predictable states and spacing.
 
-## Token Baseline
-- Theme source: CSS variables aligned with shadcn default dark token structure.
-- Primary semantic layers:
-  - `background` for app canvas
-  - `card` for panel bodies
-  - `secondary` for panel headers/chrome
-  - `border`/`input` for separators and control outlines
-  - `primary` for selected/active emphasis
-  - `destructive` for error surfaces
-- Radius scale follows shadcn defaults (`lg`/`md`/`sm` based on `--radius`).
+## Theme and Tokens
+- Maintain both `:root` (light) and `.dark` token sets.
+- Use semantic variables for app surfaces and controls:
+  - `background`, `foreground`
+  - `card`, `popover`
+  - `primary`, `secondary`, `accent`, `muted`
+  - `destructive`, `border`, `input`, `ring`
+- Theme switching policy:
+  - default: system
+  - user override options: `light`, `dark`, `system`
+  - persisted via `vite-ui-theme`
 
-## Component Rules
-- Use shared UI primitives for controls:
-  - `Button`
-  - `Input`
-  - `Dialog`
-  - `Badge`
-  - `ScrollArea`
-  - `Separator`
-- Do not introduce raw `button`/`input` elements in renderer feature components.
-- Feature surfaces should compose primitives rather than redefining ad hoc control styles.
+## Typography
+- Base UI font: Geist Sans (`--font-sans`).
+- Monospace/code font: Geist Mono (`--font-mono`).
+- Avoid legacy uppercase-heavy and tight letter-spacing treatments for headers/meta text.
+- Use shadcn-like text scale and weight defaults for panel chrome and controls.
 
-## Layout and Density
-- Preserve 3-panel workbench behavior:
-  - Browser
-  - Disassembly
-  - Inspector
-- Keep panel resize behavior and independent panel scrolling.
-- Keep disassembly rendering dense and monospaced, with custom virtualization preserved for performance.
+## Component and Interaction Rules
+- Use shared primitives (`Button`, `Input`, `Dialog`, `Badge`, `ScrollArea`, `Separator`, `DropdownMenu`) rather than raw controls in feature components.
+- Keep focus rings and invalid states aligned with shadcn semantics.
+- Keep destructive/warning/success states semantic, not hardcoded per component.
 
-## Interaction and States
-- Active panel and current-row states must be visually distinct and consistent with semantic tokens.
-- Focus visibility must remain clear (`ring`-based, keyboard-friendly).
-- Error and offline states must use destructive semantics rather than one-off colors.
-
-## Motion
-- Limit motion to short, purposeful transitions.
-- Use subtle panel/dialog entrance animation only where it improves orientation.
+## Layout and RE-Specific Behavior
+- Preserve 3-panel workbench behavior and panel resize interaction.
+- Preserve virtualized disassembly rendering for performance.
+- Mnemonic category colors are allowed but should remain subtle and consistent with the active theme.

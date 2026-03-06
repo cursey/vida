@@ -1,6 +1,9 @@
+import "@fontsource/geist-mono";
+import "@fontsource/geist-sans";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
+import { ThemeProvider } from "./components/theme-provider";
 import "./styles.css";
 
 const rootElement = document.getElementById("root");
@@ -10,6 +13,14 @@ if (!rootElement) {
 
 createRoot(rootElement).render(
   <StrictMode>
-    <App />
+    <ThemeProvider
+      attribute="class"
+      defaultTheme="system"
+      disableTransitionOnChange
+      enableSystem
+      storageKey="vite-ui-theme"
+    >
+      <App />
+    </ThemeProvider>
   </StrictMode>,
 );

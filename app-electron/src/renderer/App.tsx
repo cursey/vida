@@ -1,3 +1,4 @@
+import { ModeToggle } from "@/components/mode-toggle";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -1034,6 +1035,9 @@ export function App() {
         <Badge className={`engine-state ${engineStateClass}`} variant="outline">
           Engine {engineStatus}
         </Badge>
+        <span className="status-path">{modulePath || "No module loaded"}</span>
+        <div className="status-spacer" />
+        <ModeToggle />
       </footer>
 
       <Dialog onOpenChange={setIsGoToModalOpen} open={isGoToModalOpen}>

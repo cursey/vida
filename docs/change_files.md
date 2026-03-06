@@ -1,5 +1,30 @@
 # Change Files
 
+## 2026-03-05 - Mirror Shadcn Site Theme and Typography (Light + Dark)
+
+Docs:
+- `docs/visual_guidelines.md`
+- `docs/work_log.md`
+- `docs/change_files.md`
+
+Electron app:
+- `app-electron/package.json`
+- `app-electron/package-lock.json`
+- `app-electron/components.json`
+- `app-electron/tailwind.config.cjs`
+- `app-electron/vitest.config.ts`
+- `app-electron/src/renderer/main.tsx`
+- `app-electron/src/renderer/App.tsx`
+- `app-electron/src/renderer/styles.css`
+- `app-electron/src/renderer/components/theme-provider.tsx`
+- `app-electron/src/renderer/components/mode-toggle.tsx`
+- `app-electron/src/renderer/components/mode-toggle.test.tsx`
+- `app-electron/src/renderer/components/ui/dropdown-menu.tsx`
+- `app-electron/src/renderer/components/ui/button.tsx`
+- `app-electron/src/renderer/components/ui/badge.tsx`
+- `app-electron/src/renderer/components/ui/input.tsx`
+- `app-electron/src/renderer/test/setup.ts`
+
 ## 2026-03-05 - Migrate Renderer UI Foundation to Shadcn Consistency Model
 
 Docs:
