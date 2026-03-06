@@ -1,5 +1,52 @@
 # Change Files
 
+## 2026-03-05 - Unify Deferred Rebase Logic for Virtualized Scroll Panels
+
+Docs:
+- `docs/work_log.md`
+- `docs/change_files.md`
+
+Electron app:
+- `app-electron/src/renderer/App.tsx`
+
+## 2026-03-05 - Add Deferred Edge Rebase for Function Browser Scrolling
+
+Docs:
+- `docs/work_log.md`
+- `docs/change_files.md`
+
+Electron app:
+- `app-electron/src/renderer/App.tsx`
+- `app-electron/src/renderer/App.function-browser-window.test.tsx`
+
+## 2026-03-05 - Defer Disassembly Rebase Until Scroll Ends
+
+Docs:
+- `docs/work_log.md`
+- `docs/change_files.md`
+
+Electron app:
+- `app-electron/src/renderer/App.tsx`
+
+## 2026-03-05 - Stabilize Deep-Scroll Disassembly Rebase Behavior
+
+Docs:
+- `docs/work_log.md`
+- `docs/change_files.md`
+
+Electron app:
+- `app-electron/src/renderer/App.tsx`
+
+## 2026-03-05 - Fix Large-Module Disassembly Scroll Coverage
+
+Docs:
+- `docs/work_log.md`
+- `docs/change_files.md`
+
+Electron app:
+- `app-electron/src/renderer/App.tsx`
+- `app-electron/src/renderer/App.disassembly-window.test.tsx`
+
 ## 2026-03-05 - Add Persistent File Menu Open Recent Flow
 
 Docs:

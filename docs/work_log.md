@@ -1,5 +1,77 @@
 # Work Log
 
+## 2026-03-05 - Unify Deferred Rebase Logic for Virtualized Scroll Panels
+
+Summary:
+- Refactored duplicated deferred edge-rebase behavior into shared renderer helpers for setup, timer cleanup, and state reset.
+- Switched both Browser and Disassembly panels to use the same `setupDeferredEdgeRebase` implementation with panel-specific parameters.
+- Kept existing behavior unchanged while reducing duplication and centralizing maintenance for scroll-rebase behavior.
+
+Validation commands executed:
+- `just check`
+- `just test`
+
+Changed files index:
+- See `docs/change_files.md` for the detailed file list for this work item.
+
+## 2026-03-05 - Add Deferred Edge Rebase for Function Browser Scrolling
+
+Summary:
+- Applied bounded window virtualization to the function browser list to prevent oversized scroll canvases on very large function sets.
+- Added deferred edge rebasing for the function list so rebases do not happen during active scrolling, and are applied on `scrollend` (or idle fallback) when the viewport reaches an edge zone.
+- Preserved scroll-thumb continuity by adjusting `scrollTop` only after rebase application.
+- Added renderer regression coverage for huge function counts to ensure the function-list canvas stays bounded.
+
+Validation commands executed:
+- `just check`
+- `just test`
+
+Changed files index:
+- See `docs/change_files.md` for the detailed file list for this work item.
+
+## 2026-03-05 - Defer Disassembly Rebase Until Scroll Ends
+
+Summary:
+- Updated large-view disassembly rebasing to avoid any window rebase while `scroll` events are actively firing.
+- Added deferred rebase application that runs on `scrollend` when available, with an idle fallback timer for environments lacking `scrollend` support.
+- Ensured edge rebases still preserve viewport continuity by adjusting `scrollTop` after rebasing, but only after scroll interaction completion.
+
+Validation commands executed:
+- `just check`
+- `just test`
+
+Changed files index:
+- See `docs/change_files.md` for the detailed file list for this work item.
+
+## 2026-03-05 - Stabilize Deep-Scroll Disassembly Rebase Behavior
+
+Summary:
+- Replaced virtual-item edge-triggered disassembly window rebasing with scroll-position-based rebasing to avoid renderer instability during deep scrolling.
+- Preserved viewport continuity by adjusting `scrollTop` during rebase transitions instead of relying on repeated `scrollToIndex` rebases.
+- Retained bounded disassembly window rendering for large modules while preventing blank/vanishing UI behavior at large scroll offsets.
+
+Validation commands executed:
+- `just check`
+- `just test`
+
+Changed files index:
+- See `docs/change_files.md` for the detailed file list for this work item.
+
+## 2026-03-05 - Fix Large-Module Disassembly Scroll Coverage
+
+Summary:
+- Fixed disassembly navigation for very large modules by replacing a single unbounded virtual canvas with a bounded sliding window of rows.
+- Added automatic window rebasing when scrolling near window edges so users can continue scrolling through the full logical row space without hitting browser scroll-height limits.
+- Preserved existing paged row fetching and row selection semantics by mapping visible window indexes back to logical row indexes.
+- Added renderer regression coverage to ensure huge row counts keep the disassembly canvas bounded.
+
+Validation commands executed:
+- `just check`
+- `just test`
+
+Changed files index:
+- See `docs/change_files.md` for the detailed file list for this work item.
+
 ## 2026-03-05 - Add Persistent File Menu Open Recent Flow
 
 Summary:

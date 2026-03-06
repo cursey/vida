@@ -16,6 +16,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   type CSSProperties,
   type FormEvent,
+  type MutableRefObject,
   type PointerEvent,
   useCallback,
   useEffect,
@@ -48,6 +49,26 @@ type ColumnDragState = {
   startWidth: number;
 };
 
+type RebaseDirection = -1 | 0 | 1;
+
+type DeferredEdgeRebaseStateRefs = {
+  inProgressRef: MutableRefObject<boolean>;
+  pendingDirectionRef: MutableRefObject<RebaseDirection>;
+  idleTimerRef: MutableRefObject<number | null>;
+};
+
+type DeferredEdgeRebaseSetup = {
+  scrollElement: HTMLDivElement;
+  rowHeight: number;
+  windowRowCount: number;
+  windowStart: number;
+  maxWindowStart: number;
+  rebaseMarginRows: number;
+  rebaseIdleMs: number;
+  setWindowStart: (nextWindowStart: number) => void;
+  stateRefs: DeferredEdgeRebaseStateRefs;
+};
+
 const MIN_PANEL_WIDTH = 220;
 const MAX_PANEL_WIDTH = 420;
 const MIN_CENTER_WIDTH = 420;
@@ -59,6 +80,12 @@ const MAX_CACHED_PAGES = 32;
 const MAX_SELECTION_HISTORY = 512;
 const FUNCTION_ROW_HEIGHT = 26;
 const FUNCTION_OVERSCAN_ROWS = 12;
+const MAX_FUNCTION_WINDOW_ROWS = 100_000;
+const FUNCTION_REBASE_MARGIN_ROWS = 20_000;
+const FUNCTION_REBASE_IDLE_MS = 140;
+const MAX_DISASSEMBLY_WINDOW_ROWS = 100_000;
+const DISASSEMBLY_REBASE_MARGIN_ROWS = 20_000;
+const DISASSEMBLY_REBASE_IDLE_MS = 140;
 
 const MAX_COLUMN_WIDTH = 1200;
 const MIN_COLUMN_WIDTHS: Record<DisassemblyColumn, number> = {
@@ -97,6 +124,147 @@ function isEditableTarget(target: EventTarget | null): boolean {
   );
 }
 
+function clearDeferredEdgeRebaseIdleTimer(
+  idleTimerRef: MutableRefObject<number | null>,
+): void {
+  if (idleTimerRef.current !== null) {
+    window.clearTimeout(idleTimerRef.current);
+    idleTimerRef.current = null;
+  }
+}
+
+function resetDeferredEdgeRebaseState(
+  stateRefs: DeferredEdgeRebaseStateRefs,
+): void {
+  stateRefs.inProgressRef.current = false;
+  stateRefs.pendingDirectionRef.current = 0;
+  clearDeferredEdgeRebaseIdleTimer(stateRefs.idleTimerRef);
+}
+
+function setupDeferredEdgeRebase({
+  scrollElement,
+  rowHeight,
+  windowRowCount,
+  windowStart,
+  maxWindowStart,
+  rebaseMarginRows,
+  rebaseIdleMs,
+  setWindowStart,
+  stateRefs,
+}: DeferredEdgeRebaseSetup): () => void {
+  const supportsScrollEnd = "onscrollend" in scrollElement;
+
+  function detectPendingRebaseDirection(): RebaseDirection {
+    const viewportRows = Math.max(
+      1,
+      Math.ceil(scrollElement.clientHeight / rowHeight),
+    );
+    const marginRows = Math.min(
+      rebaseMarginRows,
+      Math.max(viewportRows * 2, Math.floor(windowRowCount / 5)),
+    );
+    const marginPx = marginRows * rowHeight;
+    const maxScrollTop = Math.max(
+      0,
+      scrollElement.scrollHeight - scrollElement.clientHeight,
+    );
+    if (maxScrollTop <= 0) {
+      return 0;
+    }
+    if (scrollElement.scrollTop <= marginPx && windowStart > 0) {
+      return -1;
+    }
+    if (
+      scrollElement.scrollTop >= maxScrollTop - marginPx &&
+      windowStart < maxWindowStart
+    ) {
+      return 1;
+    }
+    return 0;
+  }
+
+  function applyPendingRebase(): void {
+    if (stateRefs.inProgressRef.current) {
+      return;
+    }
+    const direction = stateRefs.pendingDirectionRef.current;
+    stateRefs.pendingDirectionRef.current = 0;
+    if (direction === 0) {
+      return;
+    }
+
+    const windowShiftRows = Math.max(1, Math.floor(windowRowCount / 2));
+    const shiftRows =
+      direction < 0
+        ? Math.min(windowShiftRows, windowStart)
+        : Math.min(windowShiftRows, maxWindowStart - windowStart);
+    if (shiftRows <= 0) {
+      return;
+    }
+
+    const nextWindowStart =
+      direction < 0 ? windowStart - shiftRows : windowStart + shiftRows;
+    if (nextWindowStart === windowStart) {
+      return;
+    }
+
+    stateRefs.inProgressRef.current = true;
+    setWindowStart(nextWindowStart);
+    const nextScrollTop =
+      scrollElement.scrollTop +
+      (direction < 0 ? shiftRows : -shiftRows) * rowHeight;
+    requestAnimationFrame(() => {
+      const maxNextScrollTop = Math.max(
+        0,
+        scrollElement.scrollHeight - scrollElement.clientHeight,
+      );
+      scrollElement.scrollTop = clamp(nextScrollTop, 0, maxNextScrollTop);
+      stateRefs.inProgressRef.current = false;
+    });
+  }
+
+  function scheduleDeferredRebase() {
+    clearDeferredEdgeRebaseIdleTimer(stateRefs.idleTimerRef);
+    stateRefs.idleTimerRef.current = window.setTimeout(() => {
+      stateRefs.idleTimerRef.current = null;
+      applyPendingRebase();
+    }, rebaseIdleMs);
+  }
+
+  function handleScroll() {
+    if (stateRefs.inProgressRef.current) {
+      return;
+    }
+    stateRefs.pendingDirectionRef.current = detectPendingRebaseDirection();
+    if (!supportsScrollEnd) {
+      scheduleDeferredRebase();
+    }
+  }
+
+  function handleScrollEnd() {
+    clearDeferredEdgeRebaseIdleTimer(stateRefs.idleTimerRef);
+    applyPendingRebase();
+  }
+
+  scrollElement.addEventListener("scroll", handleScroll, {
+    passive: true,
+  });
+  if (supportsScrollEnd) {
+    scrollElement.addEventListener("scrollend", handleScrollEnd, {
+      passive: true,
+    });
+  }
+
+  return () => {
+    clearDeferredEdgeRebaseIdleTimer(stateRefs.idleTimerRef);
+    stateRefs.pendingDirectionRef.current = 0;
+    scrollElement.removeEventListener("scroll", handleScroll);
+    if (supportsScrollEnd) {
+      scrollElement.removeEventListener("scrollend", handleScrollEnd);
+    }
+  };
+}
+
 export function App() {
   const [engineStatus, setEngineStatus] = useState<string>("checking");
   const [modulePath, setModulePath] = useState<string>("");
@@ -120,6 +288,8 @@ export function App() {
   const [isColumnResizing, setIsColumnResizing] = useState(false);
   const [cacheEpoch, setCacheEpoch] = useState(0);
   const [panelWidths, setPanelWidths] = useState({ left: 268, right: 300 });
+  const [functionWindowStartIndex, setFunctionWindowStartIndex] = useState(0);
+  const [disassemblyWindowStartRow, setDisassemblyWindowStartRow] = useState(0);
   const [disassemblyColumnWidths, setDisassemblyColumnWidths] = useState({
     section: 88,
     address: 110,
@@ -135,6 +305,12 @@ export function App() {
   const goToInputRef = useRef<HTMLInputElement | null>(null);
   const pageCacheRef = useRef<Map<number, LinearRow[]>>(new Map());
   const inflightPagesRef = useRef<Set<number>>(new Set());
+  const functionRebaseInProgressRef = useRef(false);
+  const functionPendingRebaseDirectionRef = useRef<-1 | 0 | 1>(0);
+  const functionRebaseIdleTimerRef = useRef<number | null>(null);
+  const disassemblyRebaseInProgressRef = useRef(false);
+  const disassemblyPendingRebaseDirectionRef = useRef<-1 | 0 | 1>(0);
+  const disassemblyRebaseIdleTimerRef = useRef<number | null>(null);
   const activeModuleIdRef = useRef("");
   const selectionHistoryRef = useRef<string[]>([]);
   const selectionHistoryIndexRef = useRef(-1);
@@ -236,8 +412,23 @@ export function App() {
       .sort((left, right) => left.start - right.start);
   }, [sections]);
 
+  const functionCount = functions.length;
+  const functionWindowSize = Math.min(functionCount, MAX_FUNCTION_WINDOW_ROWS);
+  const maxFunctionWindowStart = Math.max(
+    0,
+    functionCount - functionWindowSize,
+  );
+  const boundedFunctionWindowStart = Math.min(
+    functionWindowStartIndex,
+    maxFunctionWindowStart,
+  );
+  const functionWindowRowCount = Math.min(
+    functionWindowSize,
+    Math.max(0, functionCount - boundedFunctionWindowStart),
+  );
+
   const functionRowVirtualizer = useVirtualizer({
-    count: functions.length,
+    count: functionWindowRowCount,
     getScrollElement: () => functionScrollRef.current,
     estimateSize: () => FUNCTION_ROW_HEIGHT,
     overscan: FUNCTION_OVERSCAN_ROWS,
@@ -246,18 +437,81 @@ export function App() {
 
   const rowCount = linearInfo?.rowCount ?? 0;
   const rowHeight = linearInfo?.rowHeight ?? 24;
+  const disassemblyWindowSize = Math.min(rowCount, MAX_DISASSEMBLY_WINDOW_ROWS);
+  const maxDisassemblyWindowStart = Math.max(
+    0,
+    rowCount - disassemblyWindowSize,
+  );
+  const boundedDisassemblyWindowStart = Math.min(
+    disassemblyWindowStartRow,
+    maxDisassemblyWindowStart,
+  );
+  const disassemblyWindowRowCount = Math.min(
+    disassemblyWindowSize,
+    Math.max(0, rowCount - boundedDisassemblyWindowStart),
+  );
 
   const rowVirtualizer = useVirtualizer({
-    count: rowCount,
+    count: disassemblyWindowRowCount,
     getScrollElement: () => disassemblyScrollRef.current,
     estimateSize: () => rowHeight,
     overscan: OVERSCAN_ROWS,
   });
 
   const virtualItems = rowVirtualizer.getVirtualItems();
-  const visibleStart = virtualItems.length > 0 ? virtualItems[0].index : 0;
+  const visibleStart =
+    virtualItems.length > 0
+      ? boundedDisassemblyWindowStart + virtualItems[0].index
+      : boundedDisassemblyWindowStart;
   const visibleEnd =
-    virtualItems.length > 0 ? virtualItems[virtualItems.length - 1].index : 0;
+    virtualItems.length > 0
+      ? boundedDisassemblyWindowStart +
+        virtualItems[virtualItems.length - 1].index
+      : boundedDisassemblyWindowStart;
+
+  useEffect(() => {
+    setDisassemblyWindowStartRow((prev) =>
+      clamp(prev, 0, maxDisassemblyWindowStart),
+    );
+  }, [maxDisassemblyWindowStart]);
+
+  useEffect(() => {
+    setFunctionWindowStartIndex((prev) =>
+      clamp(prev, 0, maxFunctionWindowStart),
+    );
+  }, [maxFunctionWindowStart]);
+
+  useEffect(() => {
+    const scrollElementCandidate = functionScrollRef.current;
+    if (
+      !scrollElementCandidate ||
+      functionCount <= functionWindowSize ||
+      functionWindowRowCount <= 0
+    ) {
+      return;
+    }
+    return setupDeferredEdgeRebase({
+      scrollElement: scrollElementCandidate,
+      rowHeight: FUNCTION_ROW_HEIGHT,
+      windowRowCount: functionWindowRowCount,
+      windowStart: boundedFunctionWindowStart,
+      maxWindowStart: maxFunctionWindowStart,
+      rebaseMarginRows: FUNCTION_REBASE_MARGIN_ROWS,
+      rebaseIdleMs: FUNCTION_REBASE_IDLE_MS,
+      setWindowStart: setFunctionWindowStartIndex,
+      stateRefs: {
+        inProgressRef: functionRebaseInProgressRef,
+        pendingDirectionRef: functionPendingRebaseDirectionRef,
+        idleTimerRef: functionRebaseIdleTimerRef,
+      },
+    });
+  }, [
+    functionCount,
+    functionWindowSize,
+    functionWindowRowCount,
+    boundedFunctionWindowStart,
+    maxFunctionWindowStart,
+  ]);
 
   useEffect(() => {
     function clampPanelWidths() {
@@ -409,6 +663,40 @@ export function App() {
   }, [isColumnResizing]);
 
   useEffect(() => {
+    const scrollElementCandidate = disassemblyScrollRef.current;
+    if (
+      !scrollElementCandidate ||
+      rowCount <= disassemblyWindowSize ||
+      disassemblyWindowRowCount <= 0 ||
+      rowHeight <= 0
+    ) {
+      return;
+    }
+    return setupDeferredEdgeRebase({
+      scrollElement: scrollElementCandidate,
+      rowHeight,
+      windowRowCount: disassemblyWindowRowCount,
+      windowStart: boundedDisassemblyWindowStart,
+      maxWindowStart: maxDisassemblyWindowStart,
+      rebaseMarginRows: DISASSEMBLY_REBASE_MARGIN_ROWS,
+      rebaseIdleMs: DISASSEMBLY_REBASE_IDLE_MS,
+      setWindowStart: setDisassemblyWindowStartRow,
+      stateRefs: {
+        inProgressRef: disassemblyRebaseInProgressRef,
+        pendingDirectionRef: disassemblyPendingRebaseDirectionRef,
+        idleTimerRef: disassemblyRebaseIdleTimerRef,
+      },
+    });
+  }, [
+    rowCount,
+    rowHeight,
+    disassemblyWindowSize,
+    disassemblyWindowRowCount,
+    boundedDisassemblyWindowStart,
+    maxDisassemblyWindowStart,
+  ]);
+
+  useEffect(() => {
     if (
       !moduleId ||
       !linearInfo ||
@@ -442,14 +730,34 @@ export function App() {
     }
 
     const nextIndex = clamp(pendingScrollRow, 0, rowCount - 1);
+    const nextWindowStart = clamp(
+      nextIndex - Math.floor(disassemblyWindowSize / 2),
+      0,
+      maxDisassemblyWindowStart,
+    );
+    const windowIndex = nextIndex - nextWindowStart;
     setSelectedRowIndex(nextIndex);
-    rowVirtualizer.scrollToIndex(nextIndex, { align: "center" });
+    setDisassemblyWindowStartRow(nextWindowStart);
+    requestAnimationFrame(() => {
+      rowVirtualizer.scrollToIndex(windowIndex, { align: "center" });
+    });
     setPendingScrollRow(null);
-  }, [pendingScrollRow, rowCount, rowVirtualizer]);
+  }, [
+    pendingScrollRow,
+    rowCount,
+    rowVirtualizer,
+    disassemblyWindowSize,
+    maxDisassemblyWindowStart,
+  ]);
 
   function resetLinearCache() {
     pageCacheRef.current.clear();
     inflightPagesRef.current.clear();
+    resetDeferredEdgeRebaseState({
+      inProgressRef: disassemblyRebaseInProgressRef,
+      pendingDirectionRef: disassemblyPendingRebaseDirectionRef,
+      idleTimerRef: disassemblyRebaseIdleTimerRef,
+    });
     setCacheEpoch((value) => value + 1);
   }
 
@@ -597,9 +905,16 @@ export function App() {
       setEntryRva(opened.entryRva);
       setSections(info.sections);
       setFunctions(listed.functions);
+      resetDeferredEdgeRebaseState({
+        inProgressRef: functionRebaseInProgressRef,
+        pendingDirectionRef: functionPendingRebaseDirectionRef,
+        idleTimerRef: functionRebaseIdleTimerRef,
+      });
+      setFunctionWindowStartIndex(0);
       setLinearInfo(viewInfo);
       setGoToAddress(initialRva);
       setSelectedRowIndex(null);
+      setDisassemblyWindowStartRow(0);
       resetSelectionHistory(initialRva);
       resetLinearCache();
       setPendingScrollRow(rowLookup.rowIndex);
@@ -802,14 +1117,16 @@ export function App() {
                 style={{ height: `${functionRowVirtualizer.getTotalSize()}px` }}
               >
                 {functionVirtualItems.map((virtualRow) => {
-                  const func = functions[virtualRow.index];
+                  const logicalFunctionIndex =
+                    boundedFunctionWindowStart + virtualRow.index;
+                  const func = functions[logicalFunctionIndex];
                   if (!func) {
                     return null;
                   }
                   return (
                     <li
                       className="function-row"
-                      key={`${func.kind}-${func.start}-${virtualRow.index}`}
+                      key={`${func.kind}-${func.start}-${logicalFunctionIndex}`}
                       style={{ transform: `translateY(${virtualRow.start}px)` }}
                     >
                       <Button
@@ -916,13 +1233,15 @@ export function App() {
                 style={{ height: `${rowVirtualizer.getTotalSize()}px` }}
               >
                 {virtualItems.map((virtualRow) => {
-                  const row = readRow(virtualRow.index);
+                  const logicalRowIndex =
+                    boundedDisassemblyWindowStart + virtualRow.index;
+                  const row = readRow(logicalRowIndex);
                   const top = virtualRow.start;
 
                   if (!row) {
                     return (
                       <div
-                        key={`loading-${virtualRow.index}`}
+                        key={`loading-${logicalRowIndex}`}
                         className="disassembly-row row-loading"
                         style={{ transform: `translateY(${top}px)` }}
                       >
@@ -941,18 +1260,16 @@ export function App() {
 
                   return (
                     <div
-                      key={`${virtualRow.index}-${cacheEpoch}-${row.address}`}
+                      key={`${logicalRowIndex}-${cacheEpoch}-${row.address}`}
                       className={`disassembly-row kind-${row.kind} ${
-                        selectedRowIndex === virtualRow.index
-                          ? "is-current"
-                          : ""
+                        selectedRowIndex === logicalRowIndex ? "is-current" : ""
                       }`}
                       style={{ transform: `translateY(${top}px)` }}
                       onPointerDown={(event) => {
                         if (event.button !== 0) {
                           return;
                         }
-                        setSelectedRowIndex(virtualRow.index);
+                        setSelectedRowIndex(logicalRowIndex);
                         setGoToAddress(row.address);
                         pushSelectionHistory(row.address);
                       }}
