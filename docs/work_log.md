@@ -1,5 +1,20 @@
 # Work Log
 
+## 2026-03-05 - Add Persistent File Menu Open Recent Flow
+
+Summary:
+- Added a `File -> Open Recent` submenu in the Electron app menu that lists recently opened executable paths and dispatches open events to the focused renderer window.
+- Implemented a 10-item persistent MRU list stored in Electron `userData` as `recent-executables.json`, with path normalization, deduplication, and stale-file filtering.
+- Extended preload/shared renderer API contracts for recent-file add/open IPC, and wired renderer open flows so successful module loads are recorded in the MRU list.
+- Updated renderer virtualization test mocks to include the new Electron API surface.
+
+Validation commands executed:
+- `just check`
+- `just test`
+
+Changed files index:
+- See `docs/change_files.md` for the detailed file list for this work item.
+
 ## 2026-03-05 - Split Engine Library into Domain Modules
 
 Summary:

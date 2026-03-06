@@ -1,5 +1,18 @@
 # Change Files
 
+## 2026-03-05 - Add Persistent File Menu Open Recent Flow
+
+Docs:
+- `docs/work_log.md`
+- `docs/change_files.md`
+
+Electron app:
+- `app-electron/src/main/main.ts`
+- `app-electron/src/preload.ts`
+- `app-electron/src/shared/protocol.ts`
+- `app-electron/src/renderer/App.tsx`
+- `app-electron/src/renderer/App.function-browser.test.tsx`
+
 ## 2026-03-05 - Split Engine Library into Domain Modules
 
 Docs:

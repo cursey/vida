@@ -20,10 +20,12 @@ function buildFunctions(count: number): FunctionSeed[] {
 
 describe("App function browser virtualization", () => {
   let menuOpenHandler: (() => void) | null = null;
+  let menuOpenRecentHandler: ((path: string) => void) | null = null;
   let rectSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
     menuOpenHandler = null;
+    menuOpenRecentHandler = null;
     rectSpy = vi
       .spyOn(HTMLElement.prototype, "getBoundingClientRect")
       .mockImplementation(() => ({
@@ -45,6 +47,11 @@ describe("App function browser virtualization", () => {
         menuOpenHandler = callback;
         return () => {};
       }),
+      onMenuOpenRecentExecutable: vi.fn((callback: (path: string) => void) => {
+        menuOpenRecentHandler = callback;
+        return () => {};
+      }),
+      addRecentExecutable: vi.fn().mockResolvedValue(undefined),
       pingEngine: vi.fn().mockResolvedValue({ version: "0.1.0" }),
       openModule: vi.fn().mockResolvedValue({
         moduleId: "m1",
@@ -99,6 +106,8 @@ describe("App function browser virtualization", () => {
     await act(async () => {
       menuOpenHandler?.();
     });
+
+    expect(menuOpenRecentHandler).toBeTypeOf("function");
 
     await waitFor(() => {
       expect(container.textContent).toContain(`${FUNCTION_COUNT} functions`);

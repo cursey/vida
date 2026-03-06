@@ -172,6 +172,18 @@ export function App() {
     };
   }, []);
 
+  useEffect(() => {
+    const unsubscribe = window.electronAPI.onMenuOpenRecentExecutable(
+      (selectedPath: string) => {
+        setErrorText("");
+        void openModuleFromPath(selectedPath);
+      },
+    );
+    return () => {
+      unsubscribe();
+    };
+  }, []);
+
   const engineStateClass = useMemo(() => {
     if (engineStatus.startsWith("online")) {
       return "state-online";
@@ -563,6 +575,7 @@ export function App() {
   }
 
   async function openModuleFromPath(chosenPath: string) {
+    setErrorText("");
     setIsLoading(true);
 
     try {
@@ -590,6 +603,9 @@ export function App() {
       resetSelectionHistory(initialRva);
       resetLinearCache();
       setPendingScrollRow(rowLookup.rowIndex);
+      void window.electronAPI.addRecentExecutable(chosenPath).catch((error) => {
+        console.warn("Failed to add executable to recent list:", error);
+      });
     } catch (error: unknown) {
       setErrorText(
         error instanceof Error ? error.message : "Failed to open executable",
