@@ -37,7 +37,7 @@
     --sidebar-accent-foreground: 0.21 0.006 285.885;
     --sidebar-border: 0.92 0.004 286.32;
     --sidebar-ring: 0.705 0.015 286.067;
-    --radius: 0.625rem;
+    --radius: 0.5rem;
 
     --font-sans: "Geist Sans", "Inter", "Segoe UI", sans-serif;
     --font-mono: "Geist Mono", "JetBrains Mono", "Cascadia Mono", monospace;
@@ -232,7 +232,7 @@
   flex-direction: column;
   overflow: hidden;
   border: var(--line-width-strong) solid var(--line-strong);
-  border-radius: calc(var(--radius) + 2px);
+  border-radius: calc(var(--radius) - 2px);
   background: var(--bg-panel);
   animation: fade-in-up 180ms ease-out;
 }
@@ -274,7 +274,6 @@
   padding: var(--space-2);
 }
 
-.function-list,
 .section-list {
   margin: 0;
   padding: 0;
@@ -282,6 +281,30 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
+}
+
+.function-scroll-region {
+  height: 100%;
+  overflow: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+}
+
+.function-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  min-height: 100%;
+  position: relative;
+}
+
+.function-row {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 26px;
+  padding-bottom: 2px;
 }
 
 .function-link {

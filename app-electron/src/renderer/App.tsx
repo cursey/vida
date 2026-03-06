@@ -57,6 +57,8 @@ const PAGE_SIZE = 512;
 const OVERSCAN_ROWS = 40;
 const MAX_CACHED_PAGES = 32;
 const MAX_SELECTION_HISTORY = 512;
+const FUNCTION_ROW_HEIGHT = 26;
+const FUNCTION_OVERSCAN_ROWS = 12;
 
 const MAX_COLUMN_WIDTH = 1200;
 const MIN_COLUMN_WIDTHS: Record<DisassemblyColumn, number> = {
@@ -128,6 +130,7 @@ export function App() {
   const layoutRef = useRef<HTMLElement | null>(null);
   const dragStateRef = useRef<DragState | null>(null);
   const columnDragStateRef = useRef<ColumnDragState | null>(null);
+  const functionScrollRef = useRef<HTMLDivElement | null>(null);
   const disassemblyScrollRef = useRef<HTMLDivElement | null>(null);
   const goToInputRef = useRef<HTMLInputElement | null>(null);
   const pageCacheRef = useRef<Map<number, LinearRow[]>>(new Map());
@@ -220,6 +223,14 @@ export function App() {
       )
       .sort((left, right) => left.start - right.start);
   }, [sections]);
+
+  const functionRowVirtualizer = useVirtualizer({
+    count: functions.length,
+    getScrollElement: () => functionScrollRef.current,
+    estimateSize: () => FUNCTION_ROW_HEIGHT,
+    overscan: FUNCTION_OVERSCAN_ROWS,
+  });
+  const functionVirtualItems = functionRowVirtualizer.getVirtualItems();
 
   const rowCount = linearInfo?.rowCount ?? 0;
   const rowHeight = linearInfo?.rowHeight ?? 24;
@@ -769,27 +780,40 @@ export function App() {
             <span>{functions.length} functions</span>
           </header>
           <div className="panel-body">
-            <ScrollArea className="h-full">
-              <ul className="function-list">
-                {functions.map((func) => (
-                  <li key={`${func.kind}-${func.start}`}>
-                    <Button
-                      className={cn(
-                        "function-link",
-                        func.start === goToAddress && "is-active",
-                      )}
-                      variant="ghost"
-                      type="button"
-                      onClick={() => void navigateToRva(func.start)}
+            <div className="function-scroll-region" ref={functionScrollRef}>
+              <ul
+                className="function-list"
+                style={{ height: `${functionRowVirtualizer.getTotalSize()}px` }}
+              >
+                {functionVirtualItems.map((virtualRow) => {
+                  const func = functions[virtualRow.index];
+                  if (!func) {
+                    return null;
+                  }
+                  return (
+                    <li
+                      className="function-row"
+                      key={`${func.kind}-${func.start}-${virtualRow.index}`}
+                      style={{ transform: `translateY(${virtualRow.start}px)` }}
                     >
-                      <span className="function-meta">{func.kind}</span>
-                      <span className="function-name">{func.name}</span>
-                      <code>{func.start}</code>
-                    </Button>
-                  </li>
-                ))}
+                      <Button
+                        className={cn(
+                          "function-link",
+                          func.start === goToAddress && "is-active",
+                        )}
+                        variant="ghost"
+                        type="button"
+                        onClick={() => void navigateToRva(func.start)}
+                      >
+                        <span className="function-meta">{func.kind}</span>
+                        <span className="function-name">{func.name}</span>
+                        <code>{func.start}</code>
+                      </Button>
+                    </li>
+                  );
+                })}
               </ul>
-            </ScrollArea>
+            </div>
           </div>
         </section>
 
