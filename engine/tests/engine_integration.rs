@@ -14,6 +14,16 @@ fn success_result(response: RpcResponse) -> Value {
     }
 }
 
+fn error_engine_code(response: RpcResponse) -> String {
+    match response {
+        RpcResponse::Error { error, .. } => error
+            .data
+            .map(|value| value.code)
+            .unwrap_or_else(|| "<missing>".to_owned()),
+        RpcResponse::Success { .. } => panic!("Expected error, got success"),
+    }
+}
+
 #[test]
 fn opens_module_lists_functions_and_disassembles() {
     let fixture = fixture_path("minimal_x64.exe");
@@ -197,6 +207,81 @@ fn opens_module_lists_functions_and_disassembles() {
             .is_some(),
         "instruction rows should include instructionCategory"
     );
+
+    let graph_result = success_result(state.handle_request(RpcRequest {
+        jsonrpc: "2.0".to_owned(),
+        id: json!(6),
+        method: "function.getGraphByVa".to_owned(),
+        params: json!({
+            "moduleId": module_id,
+            "va": entry_va
+        }),
+    }));
+
+    let blocks = graph_result
+        .get("blocks")
+        .and_then(Value::as_array)
+        .expect("graph blocks should be present");
+    assert!(!blocks.is_empty(), "Expected at least one graph block");
+    assert!(
+        graph_result
+            .get("focusBlockId")
+            .and_then(Value::as_str)
+            .is_some_and(|value| !value.is_empty()),
+        "Graph result should include focusBlockId"
+    );
+
+    let first_block = &blocks[0];
+    assert!(
+        first_block
+            .get("startVa")
+            .and_then(Value::as_str)
+            .is_some_and(|value| value.starts_with("0x")),
+        "Graph blocks should include a startVa label",
+    );
+    let first_instruction = first_block
+        .get("instructions")
+        .and_then(Value::as_array)
+        .and_then(|value| value.first())
+        .expect("graph blocks should include instruction rows");
+    assert!(
+        first_instruction
+            .get("mnemonic")
+            .and_then(Value::as_str)
+            .is_some(),
+        "Graph instruction rows should include mnemonic",
+    );
+    assert!(
+        first_instruction
+            .get("operands")
+            .and_then(Value::as_str)
+            .is_some(),
+        "Graph instruction rows should include operands",
+    );
+    assert!(
+        first_instruction
+            .get("instructionCategory")
+            .and_then(Value::as_str)
+            .is_some(),
+        "Graph instruction rows should include instructionCategory",
+    );
+    assert!(
+        first_instruction.get("address").is_none()
+            && first_instruction.get("comment").is_none()
+            && first_instruction.get("section").is_none(),
+        "Graph instruction rows should not include disassembly-only fields",
+    );
+
+    let invalid_graph_error_code = error_engine_code(state.handle_request(RpcRequest {
+        jsonrpc: "2.0".to_owned(),
+        id: json!(7),
+        method: "function.getGraphByVa".to_owned(),
+        params: json!({
+            "moduleId": module_id,
+            "va": "0x1"
+        }),
+    }));
+    assert_eq!(invalid_graph_error_code, "INVALID_ADDRESS");
 }
 
 #[test]

@@ -3,6 +3,7 @@ import { GoToDialog, LoadingDialog } from "@/features/app/app-dialogs";
 import { AppStatusBar } from "@/features/app/status-bar";
 import { BrowserPanel } from "@/features/browser/browser-panel";
 import { DisassemblyPanel } from "@/features/disassembly/disassembly-panel";
+import { GraphPanel } from "@/features/graph/graph-panel";
 import {
   resetDeferredEdgeRebaseState,
   setupDeferredEdgeRebase,
@@ -38,6 +39,7 @@ type DragState = {
 
 type DisassemblyColumn = "section" | "address" | "bytes" | "instruction";
 type ActivePanel = "browser" | "disassembly";
+type CenterView = "disassembly" | "graph";
 
 type ColumnDragState = {
   key: DisassemblyColumn;
@@ -99,6 +101,10 @@ export function App() {
   const [pendingScrollRow, setPendingScrollRow] = useState<number | null>(null);
   const [selectedRowIndex, setSelectedRowIndex] = useState<number | null>(null);
   const [activePanel, setActivePanel] = useState<ActivePanel>("disassembly");
+  const [centerView, setCenterView] = useState<CenterView>("disassembly");
+  const [graphData, setGraphData] = useState<
+    MethodResult["function.getGraphByVa"] | null
+  >(null);
   const [isGoToModalOpen, setIsGoToModalOpen] = useState(false);
   const [goToInputValue, setGoToInputValue] = useState("");
   const [isBrowserSearchVisible, setIsBrowserSearchVisible] = useState(false);
@@ -111,6 +117,7 @@ export function App() {
   const [isSearchingFunctions, setIsSearchingFunctions] = useState(false);
 
   const [errorText, setErrorText] = useState<string>("");
+  const [transientStatusMessage, setTransientStatusMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [loadingPath, setLoadingPath] = useState<string>("");
   const [isResizing, setIsResizing] = useState(false);
@@ -145,10 +152,20 @@ export function App() {
   const selectionHistoryRef = useRef<string[]>([]);
   const selectionHistoryIndexRef = useRef(-1);
   const functionSearchJobIdRef = useRef(0);
+  const statusMessageTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     activeModuleIdRef.current = moduleId;
   }, [moduleId]);
+
+  useEffect(() => {
+    return () => {
+      if (statusMessageTimerRef.current !== null) {
+        window.clearTimeout(statusMessageTimerRef.current);
+        statusMessageTimerRef.current = null;
+      }
+    };
+  }, []);
 
   useEffect(() => {
     document.title = modulePath
@@ -232,7 +249,12 @@ export function App() {
 
   const unloadCurrentModule = useCallback(() => {
     functionSearchJobIdRef.current += 1;
+    if (statusMessageTimerRef.current !== null) {
+      window.clearTimeout(statusMessageTimerRef.current);
+      statusMessageTimerRef.current = null;
+    }
     setErrorText("");
+    setTransientStatusMessage("");
     setIsLoading(false);
     setLoadingPath("");
     setIsGoToModalOpen(false);
@@ -258,6 +280,8 @@ export function App() {
     setSelectedRowIndex(null);
     setPendingScrollRow(null);
     setDisassemblyWindowStartRow(0);
+    setCenterView("disassembly");
+    setGraphData(null);
     resetSelectionHistory();
     resetLinearCache();
   }, []);
@@ -282,6 +306,18 @@ export function App() {
 
     return "state-offline";
   }, [engineStatus]);
+
+  const showTransientStatusMessage = useCallback((message: string) => {
+    if (statusMessageTimerRef.current !== null) {
+      window.clearTimeout(statusMessageTimerRef.current);
+      statusMessageTimerRef.current = null;
+    }
+    setTransientStatusMessage(message);
+    statusMessageTimerRef.current = window.setTimeout(() => {
+      setTransientStatusMessage("");
+      statusMessageTimerRef.current = null;
+    }, 2500);
+  }, []);
 
   const layoutStyle = useMemo(
     () =>
@@ -729,7 +765,7 @@ export function App() {
     setCacheEpoch((value) => value + 1);
   }
 
-  function readRow(index: number): LinearRow | undefined {
+  const readRow = useCallback((index: number): LinearRow | undefined => {
     const page = makePageKey(index, PAGE_SIZE);
     const pageRows = pageCacheRef.current.get(page);
     if (!pageRows) {
@@ -737,7 +773,73 @@ export function App() {
     }
 
     return pageRows[index % PAGE_SIZE];
-  }
+  }, []);
+
+  const toggleGraphViewForSelection = useCallback(async () => {
+    if (!moduleId || activePanel !== "disassembly") {
+      return;
+    }
+
+    if (centerView === "graph") {
+      setCenterView("disassembly");
+      return;
+    }
+
+    if (selectedRowIndex === null) {
+      showTransientStatusMessage(
+        "Select an instruction in Disassembly before opening Graph View.",
+      );
+      return;
+    }
+
+    let selectedRow = readRow(selectedRowIndex);
+    if (!selectedRow) {
+      await fetchLinearPage(moduleId, makePageKey(selectedRowIndex, PAGE_SIZE));
+      selectedRow = readRow(selectedRowIndex);
+    }
+    if (!selectedRow || selectedRow.kind !== "instruction") {
+      showTransientStatusMessage(
+        "The highlighted row is not a function instruction.",
+      );
+      return;
+    }
+
+    try {
+      const graph = await window.electronAPI.getFunctionGraphByVa({
+        moduleId,
+        va: selectedRow.address,
+      });
+      setGraphData(graph);
+      setCenterView("graph");
+      setErrorText("");
+      if (statusMessageTimerRef.current !== null) {
+        window.clearTimeout(statusMessageTimerRef.current);
+        statusMessageTimerRef.current = null;
+      }
+      setTransientStatusMessage("");
+    } catch (error: unknown) {
+      if (
+        error instanceof Error &&
+        error.message.toUpperCase().includes("INVALID_ADDRESS")
+      ) {
+        showTransientStatusMessage(
+          "The highlighted instruction does not belong to a discovered function.",
+        );
+        return;
+      }
+
+      setErrorText(
+        error instanceof Error ? error.message : "Failed to open graph view",
+      );
+    }
+  }, [
+    activePanel,
+    centerView,
+    moduleId,
+    readRow,
+    selectedRowIndex,
+    showTransientStatusMessage,
+  ]);
 
   function resetSelectionHistory(initialVa: string | null = null) {
     selectionHistoryRef.current = [];
@@ -847,6 +949,11 @@ export function App() {
 
   async function openModuleFromPath(chosenPath: string) {
     setErrorText("");
+    if (statusMessageTimerRef.current !== null) {
+      window.clearTimeout(statusMessageTimerRef.current);
+      statusMessageTimerRef.current = null;
+    }
+    setTransientStatusMessage("");
     setIsLoading(true);
     setLoadingPath(chosenPath);
 
@@ -880,6 +987,8 @@ export function App() {
       setGoToAddress(initialVa);
       setSelectedRowIndex(null);
       setDisassemblyWindowStartRow(0);
+      setCenterView("disassembly");
+      setGraphData(null);
       resetSelectionHistory(initialVa);
       resetLinearCache();
       setPendingScrollRow(rowLookup.rowIndex);
@@ -925,6 +1034,7 @@ export function App() {
           pushSelectionHistory(va);
         }
         setGoToAddress(va);
+        setCenterView("disassembly");
         setPendingScrollRow(found.rowIndex);
         return true;
       } catch (error: unknown) {
@@ -1055,6 +1165,19 @@ export function App() {
         return;
       }
 
+      if (event.code === "Space" && !event.repeat) {
+        if (event.ctrlKey || event.metaKey || event.altKey) {
+          return;
+        }
+        if (isEditableTarget(event.target) || isGoToModalOpen || !moduleId) {
+          return;
+        }
+
+        event.preventDefault();
+        void toggleGraphViewForSelection();
+        return;
+      }
+
       if (event.key.toLowerCase() !== "g" || event.repeat) {
         return;
       }
@@ -1067,7 +1190,12 @@ export function App() {
         return;
       }
 
-      if (activePanel !== "disassembly" || !moduleId || isGoToModalOpen) {
+      if (
+        activePanel !== "disassembly" ||
+        centerView !== "disassembly" ||
+        !moduleId ||
+        isGoToModalOpen
+      ) {
         return;
       }
 
@@ -1081,10 +1209,12 @@ export function App() {
     };
   }, [
     activePanel,
+    centerView,
     isBrowserSearchVisible,
     moduleId,
     isGoToModalOpen,
     openGoToModal,
+    toggleGraphViewForSelection,
   ]);
 
   async function handleGoToSubmit(event: FormEvent<HTMLFormElement>) {
@@ -1176,34 +1306,44 @@ export function App() {
           onPointerDown={startResizing}
         />
 
-        <DisassemblyPanel
-          isActive={activePanel === "disassembly"}
-          moduleId={moduleId}
-          rowCount={linearInfo?.rowCount ?? 0}
-          disassemblyColumnStyle={disassemblyColumnStyle}
-          onActivate={() => setActivePanel("disassembly")}
-          onStartColumnResizing={startColumnResizing}
-          disassemblyScrollRef={disassemblyScrollRef}
-          disassemblyListTotalSize={rowVirtualizer.getTotalSize()}
-          virtualItems={virtualItems}
-          boundedDisassemblyWindowStart={boundedDisassemblyWindowStart}
-          readRow={readRow}
-          cacheEpoch={cacheEpoch}
-          selectedRowIndex={selectedRowIndex}
-          onSelectRow={(rowIndex, address) => {
-            setSelectedRowIndex(rowIndex);
-            setGoToAddress(address);
-            pushSelectionHistory(address);
-          }}
-          findSectionName={findSectionName}
-          onNavigateToVa={navigateToVa}
-        />
+        {centerView === "disassembly" ? (
+          <DisassemblyPanel
+            isActive={activePanel === "disassembly"}
+            moduleId={moduleId}
+            rowCount={linearInfo?.rowCount ?? 0}
+            disassemblyColumnStyle={disassemblyColumnStyle}
+            onActivate={() => setActivePanel("disassembly")}
+            onStartColumnResizing={startColumnResizing}
+            disassemblyScrollRef={disassemblyScrollRef}
+            disassemblyListTotalSize={rowVirtualizer.getTotalSize()}
+            virtualItems={virtualItems}
+            boundedDisassemblyWindowStart={boundedDisassemblyWindowStart}
+            readRow={readRow}
+            cacheEpoch={cacheEpoch}
+            selectedRowIndex={selectedRowIndex}
+            onSelectRow={(rowIndex, address) => {
+              setSelectedRowIndex(rowIndex);
+              setGoToAddress(address);
+              pushSelectionHistory(address);
+            }}
+            findSectionName={findSectionName}
+            onNavigateToVa={navigateToVa}
+          />
+        ) : (
+          <GraphPanel
+            isActive={activePanel === "disassembly"}
+            moduleId={moduleId}
+            graph={graphData}
+            onActivate={() => setActivePanel("disassembly")}
+          />
+        )}
       </main>
 
       <AppStatusBar
         engineStatus={engineStatus}
         engineStateClass={engineStateClass}
         isSearchingFunctions={isSearchingFunctions}
+        transientMessage={transientStatusMessage}
       />
 
       <LoadingDialog isLoading={isLoading} loadingPath={loadingPath} />

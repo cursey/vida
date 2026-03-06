@@ -91,6 +91,13 @@ describe("App function browser virtualization", () => {
       listFunctions: vi.fn().mockResolvedValue({
         functions,
       }),
+      getFunctionGraphByVa: vi.fn().mockResolvedValue({
+        functionStartVa: functions[0]?.start ?? "0x140001000",
+        functionName: functions[0]?.name ?? "sub_140001000",
+        focusBlockId: "b_1000",
+        blocks: [],
+        edges: [],
+      }),
       disassembleLinear: vi.fn().mockResolvedValue({
         instructions: [],
         stopReason: "end_of_data",

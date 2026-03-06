@@ -5,12 +5,14 @@ type AppStatusBarProps = {
   engineStatus: string;
   engineStateClass: string;
   isSearchingFunctions: boolean;
+  transientMessage: string;
 };
 
 export function AppStatusBar({
   engineStatus,
   engineStateClass,
   isSearchingFunctions,
+  transientMessage,
 }: AppStatusBarProps) {
   return (
     <footer className="status-bar">
@@ -25,6 +27,11 @@ export function AppStatusBar({
             <span>.</span>
             <span>.</span>
           </span>
+        </span>
+      ) : null}
+      {transientMessage ? (
+        <span aria-live="polite" className="status-message">
+          {transientMessage}
         </span>
       ) : null}
       <div className="status-spacer" />

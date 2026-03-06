@@ -1,3 +1,4 @@
+mod cfg;
 mod disasm;
 mod error;
 mod linear;

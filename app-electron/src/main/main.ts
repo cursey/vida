@@ -541,6 +541,13 @@ ipcMain.handle("engine:listFunctions", async (_event, moduleId: string) => {
 });
 
 ipcMain.handle(
+  "engine:getFunctionGraphByVa",
+  async (_event, payload: MethodParams["function.getGraphByVa"]) => {
+    return engineClient.request("function.getGraphByVa", payload);
+  },
+);
+
+ipcMain.handle(
   "engine:disassembleLinear",
   async (_event, payload: MethodParams["function.disassembleLinear"]) => {
     return engineClient.request("function.disassembleLinear", payload);

@@ -83,6 +83,50 @@ pub(crate) struct FunctionListResult {
 }
 
 #[derive(Debug, Deserialize)]
+pub(crate) struct FunctionGraphByVaParams {
+    #[serde(rename = "moduleId")]
+    pub(crate) module_id: String,
+    pub(crate) va: String,
+}
+
+#[derive(Debug, Serialize, Clone)]
+pub(crate) struct FunctionGraphInstruction {
+    pub(crate) mnemonic: String,
+    pub(crate) operands: String,
+    #[serde(rename = "instructionCategory")]
+    pub(crate) instruction_category: InstructionCategory,
+}
+
+#[derive(Debug, Serialize, Clone)]
+pub(crate) struct FunctionGraphBlock {
+    pub(crate) id: String,
+    #[serde(rename = "startVa")]
+    pub(crate) start_va: String,
+    pub(crate) instructions: Vec<FunctionGraphInstruction>,
+}
+
+#[derive(Debug, Serialize, Clone)]
+pub(crate) struct FunctionGraphEdge {
+    #[serde(rename = "fromBlockId")]
+    pub(crate) from_block_id: String,
+    #[serde(rename = "toBlockId")]
+    pub(crate) to_block_id: String,
+    pub(crate) kind: &'static str,
+}
+
+#[derive(Debug, Serialize, Clone)]
+pub(crate) struct FunctionGraphByVaResult {
+    #[serde(rename = "functionStartVa")]
+    pub(crate) function_start_va: String,
+    #[serde(rename = "functionName")]
+    pub(crate) function_name: String,
+    #[serde(rename = "focusBlockId")]
+    pub(crate) focus_block_id: String,
+    pub(crate) blocks: Vec<FunctionGraphBlock>,
+    pub(crate) edges: Vec<FunctionGraphEdge>,
+}
+
+#[derive(Debug, Deserialize)]
 pub(crate) struct LinearDisassemblyParams {
     #[serde(rename = "moduleId")]
     pub(crate) module_id: String,

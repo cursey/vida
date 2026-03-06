@@ -164,6 +164,75 @@
         }
       }
     },
+    "FunctionGraphByVaParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["moduleId", "va"],
+      "properties": {
+        "moduleId": { "$ref": "#/$defs/ModuleId" },
+        "va": { "$ref": "#/$defs/HexAddress" }
+      }
+    },
+    "FunctionGraphInstruction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mnemonic", "operands", "instructionCategory"],
+      "properties": {
+        "mnemonic": { "type": "string" },
+        "operands": { "type": "string" },
+        "instructionCategory": { "$ref": "#/$defs/InstructionCategory" }
+      }
+    },
+    "FunctionGraphBlock": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "startVa", "instructions"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "startVa": { "$ref": "#/$defs/HexAddress" },
+        "instructions": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/FunctionGraphInstruction" }
+        }
+      }
+    },
+    "FunctionGraphEdge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["fromBlockId", "toBlockId", "kind"],
+      "properties": {
+        "fromBlockId": { "type": "string", "minLength": 1 },
+        "toBlockId": { "type": "string", "minLength": 1 },
+        "kind": {
+          "type": "string",
+          "enum": ["conditional", "unconditional", "fallthrough"]
+        }
+      }
+    },
+    "FunctionGraphByVaResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "functionStartVa",
+        "functionName",
+        "focusBlockId",
+        "blocks",
+        "edges"
+      ],
+      "properties": {
+        "functionStartVa": { "$ref": "#/$defs/HexAddress" },
+        "functionName": { "type": "string" },
+        "focusBlockId": { "type": "string", "minLength": 1 },
+        "blocks": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/FunctionGraphBlock" }
+        },
+        "edges": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/FunctionGraphEdge" }
+        }
+      }
+    },
     "LinearDisassemblyParams": {
       "type": "object",
       "additionalProperties": false,
@@ -264,6 +333,17 @@
         "params": { "$ref": "#/$defs/FunctionListParams" }
       }
     },
+    "FunctionGraphByVaRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["jsonrpc", "id", "method", "params"],
+      "properties": {
+        "jsonrpc": { "$ref": "#/$defs/JsonRpcVersion" },
+        "id": { "$ref": "#/$defs/RequestId" },
+        "method": { "type": "string", "const": "function.getGraphByVa" },
+        "params": { "$ref": "#/$defs/FunctionGraphByVaParams" }
+      }
+    },
     "LinearDisassemblyRequest": {
       "type": "object",
       "additionalProperties": false,
@@ -281,6 +361,7 @@
         { "$ref": "#/$defs/ModuleOpenRequest" },
         { "$ref": "#/$defs/ModuleInfoRequest" },
         { "$ref": "#/$defs/FunctionListRequest" },
+        { "$ref": "#/$defs/FunctionGraphByVaRequest" },
         { "$ref": "#/$defs/LinearDisassemblyRequest" }
       ]
     },

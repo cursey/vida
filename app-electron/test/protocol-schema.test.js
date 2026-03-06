@@ -20,6 +20,15 @@ test("protocol request and response examples validate", () => {
     method: "engine.ping",
     params: {},
   };
+  const graphRequest = {
+    jsonrpc: "2.0",
+    id: 2,
+    method: "function.getGraphByVa",
+    params: {
+      moduleId: "m1",
+      va: "0x140001000",
+    },
+  };
 
   const response = {
     jsonrpc: "2.0",
@@ -57,8 +66,32 @@ test("protocol request and response examples validate", () => {
       stopReason: "ret",
     },
   };
+  const graphResponse = {
+    jsonrpc: "2.0",
+    id: 4,
+    result: {
+      functionStartVa: "0x140001000",
+      functionName: "sub_140001000",
+      focusBlockId: "b_1000",
+      blocks: [
+        {
+          id: "b_1000",
+          startVa: "0x140001000",
+          instructions: [
+            {
+              mnemonic: "push",
+              operands: "rbp",
+              instructionCategory: "stack",
+            },
+          ],
+        },
+      ],
+      edges: [],
+    },
+  };
 
   assert.equal(validate(request), true, JSON.stringify(validate.errors));
+  assert.equal(validate(graphRequest), true, JSON.stringify(validate.errors));
   assert.equal(validate(response), true, JSON.stringify(validate.errors));
   assert.equal(
     validate(functionListResponse),
@@ -70,4 +103,5 @@ test("protocol request and response examples validate", () => {
     true,
     JSON.stringify(validate.errors),
   );
+  assert.equal(validate(graphResponse), true, JSON.stringify(validate.errors));
 });

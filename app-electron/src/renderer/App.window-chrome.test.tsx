@@ -62,6 +62,13 @@ describe("App custom window chrome", () => {
         exports: [],
       }),
       listFunctions: vi.fn().mockResolvedValue({ functions: [] }),
+      getFunctionGraphByVa: vi.fn().mockResolvedValue({
+        functionStartVa: "0x1000",
+        functionName: "sub_1000",
+        focusBlockId: "b_1000",
+        blocks: [],
+        edges: [],
+      }),
       disassembleLinear: vi.fn().mockResolvedValue({
         instructions: [],
         stopReason: "end_of_data",

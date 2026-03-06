@@ -9,6 +9,7 @@ export type Request =
   | ModuleOpenRequest
   | ModuleInfoRequest
   | FunctionListRequest
+  | FunctionGraphByVaRequest
   | LinearDisassemblyRequest;
 export type JsonRpcVersion = "2.0";
 export type RequestId = number | string;
@@ -49,6 +50,16 @@ export interface FunctionListRequest {
 }
 export interface FunctionListParams {
   moduleId: ModuleId;
+}
+export interface FunctionGraphByVaRequest {
+  jsonrpc: JsonRpcVersion;
+  id: RequestId;
+  method: "function.getGraphByVa";
+  params: FunctionGraphByVaParams;
+}
+export interface FunctionGraphByVaParams {
+  moduleId: ModuleId;
+  va: HexAddress;
 }
 export interface LinearDisassemblyRequest {
   jsonrpc: JsonRpcVersion;

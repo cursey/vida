@@ -31,9 +31,10 @@ fn request_examples_validate_against_schema() {
         json!({ "jsonrpc": "2.0", "id": 2, "method": "module.open", "params": { "path": "C:\\tmp\\a.exe" } }),
         json!({ "jsonrpc": "2.0", "id": 3, "method": "module.info", "params": { "moduleId": "m1" } }),
         json!({ "jsonrpc": "2.0", "id": 4, "method": "function.list", "params": { "moduleId": "m1" } }),
+        json!({ "jsonrpc": "2.0", "id": 5, "method": "function.getGraphByVa", "params": { "moduleId": "m1", "va": "0x140001000" } }),
         json!({
             "jsonrpc": "2.0",
-            "id": 5,
+            "id": 6,
             "method": "function.disassembleLinear",
             "params": { "moduleId": "m1", "start": "0x1000", "maxInstructions": 64 }
         }),
@@ -115,6 +116,40 @@ fn disassembly_response_with_instruction_category_validates_against_schema() {
                 }
             ],
             "stopReason": "ret"
+        }
+    });
+
+    validator
+        .validate(&response_value)
+        .unwrap_or_else(|error| panic!("response failed schema validation: {error}"));
+}
+
+#[test]
+fn graph_response_with_instruction_category_validates_against_schema() {
+    let schema = load_protocol_schema();
+    let validator = validator_for(&schema).expect("schema should compile");
+
+    let response_value = json!({
+        "jsonrpc": "2.0",
+        "id": 103,
+        "result": {
+            "functionStartVa": "0x140001000",
+            "functionName": "sub_140001000",
+            "focusBlockId": "b_1000",
+            "blocks": [
+                {
+                    "id": "b_1000",
+                    "startVa": "0x140001000",
+                    "instructions": [
+                        {
+                            "mnemonic": "push",
+                            "operands": "rbp",
+                            "instructionCategory": "stack"
+                        }
+                    ]
+                }
+            ],
+            "edges": []
         }
     });
 

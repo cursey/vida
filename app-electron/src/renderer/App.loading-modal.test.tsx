@@ -57,6 +57,13 @@ describe("App loading modal", () => {
       listFunctions: vi.fn().mockResolvedValue({
         functions: [{ start: "0x1000", name: "sub_00001000", kind: "entry" }],
       }),
+      getFunctionGraphByVa: vi.fn().mockResolvedValue({
+        functionStartVa: "0x1000",
+        functionName: "sub_00001000",
+        focusBlockId: "b_1000",
+        blocks: [],
+        edges: [],
+      }),
       disassembleLinear: vi.fn().mockResolvedValue({
         instructions: [],
         stopReason: "end_of_data",

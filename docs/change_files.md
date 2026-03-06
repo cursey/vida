@@ -1,5 +1,95 @@
 # Change Files
 
+## 2026-03-06 - Center Graph View on Highlighted Disassembly Instruction
+
+Docs:
+- `docs/work_log.md`
+- `docs/change_files.md`
+
+Shared:
+- `shared/schemas/protocol.schema.json`
+
+Electron app:
+- `app-electron/src/shared/protocol.gen.ts`
+- `app-electron/src/shared/protocol.ts`
+- `app-electron/src/renderer/features/graph/graph-panel.tsx`
+- `app-electron/src/renderer/App.graph-view.test.tsx`
+- `app-electron/src/renderer/App.function-browser.test.tsx`
+- `app-electron/src/renderer/App.function-browser-window.test.tsx`
+- `app-electron/src/renderer/App.disassembly-window.test.tsx`
+- `app-electron/src/renderer/App.loading-modal.test.tsx`
+- `app-electron/src/renderer/App.window-chrome.test.tsx`
+- `app-electron/test/protocol-schema.test.js`
+
+Engine:
+- `engine/src/cfg.rs`
+- `engine/src/protocol.rs`
+- `engine/src/state.rs`
+- `engine/tests/contract_schema_tests.rs`
+- `engine/tests/engine_integration.rs`
+
+## 2026-03-06 - Add Mnemonic Category Coloring to Graph View Blocks
+
+Docs:
+- `docs/work_log.md`
+- `docs/change_files.md`
+
+Shared:
+- `shared/schemas/protocol.schema.json`
+
+Electron app:
+- `app-electron/package.json`
+- `app-electron/package-lock.json`
+- `app-electron/src/shared/protocol.gen.ts`
+- `app-electron/src/shared/protocol.ts`
+- `app-electron/src/renderer/features/graph/graph-panel.tsx`
+- `app-electron/src/renderer/styles.css`
+- `app-electron/src/renderer/App.graph-view.test.tsx`
+- `app-electron/test/protocol-schema.test.js`
+
+Engine:
+- `engine/src/cfg.rs`
+- `engine/src/protocol.rs`
+- `engine/src/state.rs`
+- `engine/tests/contract_schema_tests.rs`
+- `engine/tests/engine_integration.rs`
+
+## 2026-03-06 - Add Function Graph View Toggle with Engine CFG RPC
+
+Docs:
+- `docs/work_log.md`
+- `docs/change_files.md`
+
+Shared:
+- `shared/schemas/protocol.schema.json`
+
+Electron app:
+- `app-electron/package.json`
+- `app-electron/package-lock.json`
+- `app-electron/src/main/main.ts`
+- `app-electron/src/preload.ts`
+- `app-electron/src/shared/protocol.gen.ts`
+- `app-electron/src/shared/protocol.ts`
+- `app-electron/src/renderer/App.tsx`
+- `app-electron/src/renderer/styles.css`
+- `app-electron/src/renderer/features/app/status-bar.tsx`
+- `app-electron/src/renderer/features/graph/graph-panel.tsx`
+- `app-electron/src/renderer/App.graph-view.test.tsx`
+- `app-electron/src/renderer/App.function-browser.test.tsx`
+- `app-electron/src/renderer/App.function-browser-window.test.tsx`
+- `app-electron/src/renderer/App.disassembly-window.test.tsx`
+- `app-electron/src/renderer/App.loading-modal.test.tsx`
+- `app-electron/src/renderer/App.window-chrome.test.tsx`
+- `app-electron/test/protocol-schema.test.js`
+
+Engine:
+- `engine/src/lib.rs`
+- `engine/src/cfg.rs`
+- `engine/src/protocol.rs`
+- `engine/src/state.rs`
+- `engine/tests/contract_schema_tests.rs`
+- `engine/tests/engine_integration.rs`
+
 ## 2026-03-06 - Generate Default Function Names from VA
 
 Docs:

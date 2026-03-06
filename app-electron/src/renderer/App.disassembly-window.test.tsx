@@ -88,6 +88,13 @@ describe("App disassembly window virtualization", () => {
       listFunctions: vi.fn().mockResolvedValue({
         functions: [{ start: "0x140001000", name: "entry", kind: "entry" }],
       }),
+      getFunctionGraphByVa: vi.fn().mockResolvedValue({
+        functionStartVa: "0x140001000",
+        functionName: "entry",
+        focusBlockId: "b_1000",
+        blocks: [],
+        edges: [],
+      }),
       disassembleLinear: vi.fn().mockResolvedValue({
         instructions: [],
         stopReason: "end_of_data",

@@ -1,5 +1,6 @@
 import type {
   EnginePingParams,
+  FunctionGraphByVaParams,
   FunctionListParams,
   LinearDisassemblyParams,
   ModuleInfoParams,
@@ -13,6 +14,7 @@ export type EngineMethod =
   | "module.open"
   | "module.info"
   | "function.list"
+  | "function.getGraphByVa"
   | "function.disassembleLinear"
   | "linear.getViewInfo"
   | "linear.getRows"
@@ -23,6 +25,7 @@ export type MethodParams = {
   "module.open": ModuleOpenParams;
   "module.info": ModuleInfoParams;
   "function.list": FunctionListParams;
+  "function.getGraphByVa": FunctionGraphByVaParams;
   "function.disassembleLinear": LinearDisassemblyParams;
   "linear.getViewInfo": {
     moduleId: string;
@@ -84,6 +87,24 @@ export type InstructionCategory =
   | "data_transfer"
   | "other";
 
+export type FunctionGraphInstruction = {
+  mnemonic: string;
+  operands: string;
+  instructionCategory: InstructionCategory;
+};
+
+export type FunctionGraphBlock = {
+  id: string;
+  startVa: HexAddress;
+  instructions: FunctionGraphInstruction[];
+};
+
+export type FunctionGraphEdge = {
+  fromBlockId: string;
+  toBlockId: string;
+  kind: "conditional" | "unconditional" | "fallthrough";
+};
+
 export type LinearInstruction = {
   address: HexAddress;
   bytes: string;
@@ -124,6 +145,13 @@ export type MethodResult = {
   };
   "function.list": {
     functions: FunctionSeed[];
+  };
+  "function.getGraphByVa": {
+    functionStartVa: HexAddress;
+    functionName: string;
+    focusBlockId: string;
+    blocks: FunctionGraphBlock[];
+    edges: FunctionGraphEdge[];
   };
   "function.disassembleLinear": {
     instructions: LinearInstruction[];
@@ -201,6 +229,9 @@ export type ElectronApi = {
   openModule: (path: string) => Promise<MethodResult["module.open"]>;
   getModuleInfo: (moduleId: string) => Promise<MethodResult["module.info"]>;
   listFunctions: (moduleId: string) => Promise<MethodResult["function.list"]>;
+  getFunctionGraphByVa: (
+    payload: MethodParams["function.getGraphByVa"],
+  ) => Promise<MethodResult["function.getGraphByVa"]>;
   disassembleLinear: (
     payload: MethodParams["function.disassembleLinear"],
   ) => Promise<MethodResult["function.disassembleLinear"]>;

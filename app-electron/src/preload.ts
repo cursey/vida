@@ -89,6 +89,10 @@ const electronApi: ElectronApi = {
     ipcRenderer.invoke("engine:getModuleInfo", moduleId),
   listFunctions: (moduleId: string): Promise<MethodResult["function.list"]> =>
     ipcRenderer.invoke("engine:listFunctions", moduleId),
+  getFunctionGraphByVa: (
+    payload: MethodParams["function.getGraphByVa"],
+  ): Promise<MethodResult["function.getGraphByVa"]> =>
+    ipcRenderer.invoke("engine:getFunctionGraphByVa", payload),
   disassembleLinear: (
     payload: MethodParams["function.disassembleLinear"],
   ): Promise<MethodResult["function.disassembleLinear"]> =>

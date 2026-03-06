@@ -1,5 +1,55 @@
 # Work Log
 
+## 2026-03-06 - Center Graph View on Highlighted Disassembly Instruction
+
+Summary:
+- Extended `function.getGraphByVa` results with `focusBlockId` to identify the basic block containing the highlighted instruction VA used to open Graph View.
+- Added engine-side instruction-RVA to block-id mapping in cached CFG results and returned the focused block id for both cached and newly-built graphs.
+- Updated Graph View initialization to keep default zoom at 100% and center on the focused block instead of fitting the full graph extents.
+- Updated shared schema/types and renderer/engine tests and mocks to reflect the new graph response contract.
+
+Validation commands executed:
+- `just fmt`
+- `just check`
+- `just test`
+
+Changed files index:
+- See `docs/change_files.md` for the detailed file list for this work item.
+
+## 2026-03-06 - Add Mnemonic Category Coloring to Graph View Blocks
+
+Summary:
+- Extended graph instruction payloads to include `instructionCategory` so Graph View can reuse Disassembly mnemonic color semantics.
+- Updated engine CFG decode output and graph result assembly to populate per-instruction categories in `function.getGraphByVa` responses.
+- Updated protocol schema/shared types and regenerated app protocol bindings for the graph instruction contract change.
+- Reworked Graph View node text rendering to HTML labels so each instruction line can style mnemonic spans using existing `.mnemonic-*` classes.
+- Added schema/integration test coverage for graph instruction category presence and updated renderer graph test fixtures.
+
+Validation commands executed:
+- `just fmt`
+- `just check`
+- `just test`
+
+Changed files index:
+- See `docs/change_files.md` for the detailed file list for this work item.
+
+## 2026-03-06 - Add Function Graph View Toggle with Engine CFG RPC
+
+Summary:
+- Added a new schema/RPC surface (`function.getGraphByVa`) across shared schema, Electron bridge layers, and engine protocol handling.
+- Implemented engine-side function CFG analysis in a dedicated `cfg` module, with basic block/edge extraction and cached instruction-to-function ownership lookup for VA-targeted graph requests.
+- Added a renderer Graph View panel (Cytoscape-backed) and Space key toggle behavior from Disassembly, including transient status feedback when the highlighted instruction is not part of a discovered function.
+- Hardened graph-opening behavior by ensuring the selected disassembly row page is fetched on-demand before validating instruction row kind.
+- Added/updated renderer and engine tests to cover schema contract changes, graph request behavior, and UI toggle/status flows.
+
+Validation commands executed:
+- `just fmt`
+- `just check`
+- `just test`
+
+Changed files index:
+- See `docs/change_files.md` for the detailed file list for this work item.
+
 ## 2026-03-06 - Generate Default Function Names from VA
 
 Summary:
