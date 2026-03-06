@@ -26,6 +26,7 @@ const USE_CUSTOM_CHROME = true;
 const FILE_MENU_ID = "file";
 const FILE_OPEN_COMMAND_ID = "file.open";
 const FILE_OPEN_RECENT_COMMAND_PREFIX = "file.openRecent.";
+const FILE_UNLOAD_COMMAND_ID = "file.unload";
 const FILE_CLOSE_OR_QUIT_COMMAND_ID = "file.closeOrQuit";
 
 let recentExecutables: string[] = [];
@@ -67,6 +68,10 @@ function sendOpenRecentExecutableMenuEvent(
     "app:menu-open-recent-executable",
     executablePath,
   );
+}
+
+function sendUnloadModuleMenuEvent(targetWindow?: BrowserWindow): void {
+  resolveTargetWindow(targetWindow)?.webContents.send("app:menu-unload-module");
 }
 
 function getRecentExecutablesFilePath(): string {
@@ -260,6 +265,9 @@ function buildFileMenuDefinition(): {
   registerMenuAction(FILE_OPEN_COMMAND_ID, (targetWindow) => {
     sendOpenExecutableMenuEvent(targetWindow);
   });
+  registerMenuAction(FILE_UNLOAD_COMMAND_ID, (targetWindow) => {
+    sendUnloadModuleMenuEvent(targetWindow);
+  });
   registerMenuAction(FILE_CLOSE_OR_QUIT_COMMAND_ID, (targetWindow) => {
     if (IS_MAC) {
       resolveTargetWindow(targetWindow)?.close();
@@ -285,6 +293,15 @@ function buildFileMenuDefinition(): {
     {
       label: "Open Recent",
       submenu: openRecent.native,
+    },
+    {
+      label: "Unload",
+      click: (_menuItem, browserWindow) => {
+        invokeMenuAction(
+          FILE_UNLOAD_COMMAND_ID,
+          resolveMenuClickWindow(browserWindow),
+        );
+      },
     },
     { type: "separator" },
     {
@@ -315,6 +332,12 @@ function buildFileMenuDefinition(): {
         label: "Open Recent",
         enabled: true,
         items: openRecent.model,
+      },
+      {
+        type: "item",
+        label: "Unload",
+        enabled: true,
+        commandId: FILE_UNLOAD_COMMAND_ID,
       },
       { type: "separator" },
       {

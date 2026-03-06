@@ -21,11 +21,13 @@ function buildFunctions(count: number): FunctionSeed[] {
 describe("App function browser virtualization", () => {
   let menuOpenHandler: (() => void) | null = null;
   let menuOpenRecentHandler: ((path: string) => void) | null = null;
+  let menuUnloadHandler: (() => void) | null = null;
   let rectSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
     menuOpenHandler = null;
     menuOpenRecentHandler = null;
+    menuUnloadHandler = null;
     rectSpy = vi
       .spyOn(HTMLElement.prototype, "getBoundingClientRect")
       .mockImplementation(() => ({
@@ -49,6 +51,10 @@ describe("App function browser virtualization", () => {
       }),
       onMenuOpenRecentExecutable: vi.fn((callback: (path: string) => void) => {
         menuOpenRecentHandler = callback;
+        return () => {};
+      }),
+      onMenuUnloadModule: vi.fn((callback: () => void) => {
+        menuUnloadHandler = callback;
         return () => {};
       }),
       addRecentExecutable: vi.fn().mockResolvedValue(undefined),
@@ -119,6 +125,7 @@ describe("App function browser virtualization", () => {
     });
 
     expect(menuOpenRecentHandler).toBeTypeOf("function");
+    expect(menuUnloadHandler).toBeTypeOf("function");
 
     await waitFor(() => {
       expect(container.textContent).toContain(`${FUNCTION_COUNT} functions`);
@@ -130,5 +137,14 @@ describe("App function browser virtualization", () => {
 
     const renderedRowCount = container.querySelectorAll(".function-row").length;
     expect(renderedRowCount).toBeLessThan(FUNCTION_COUNT);
+
+    await act(async () => {
+      menuUnloadHandler?.();
+    });
+
+    await waitFor(() => {
+      expect(container.textContent).not.toContain("0 functions");
+      expect(container.textContent).not.toContain("No module");
+    });
   });
 });

@@ -52,6 +52,11 @@
     --text-primary: oklch(var(--foreground));
     --text-secondary: oklch(var(--foreground) / 0.72);
     --text-muted: oklch(var(--muted-foreground));
+    --scrollbar-size: 10px;
+    --scrollbar-track: oklch(var(--secondary));
+    --scrollbar-thumb: oklch(var(--muted-foreground) / 0.45);
+    --scrollbar-thumb-hover: oklch(var(--foreground) / 0.55);
+    --scrollbar-thumb-active: oklch(var(--foreground) / 0.68);
     --danger-bg: oklch(var(--destructive) / 0.15);
     --danger-line: oklch(var(--destructive));
     --danger-text: oklch(var(--destructive-foreground));
@@ -74,7 +79,7 @@
     --space-3: 8px;
     --space-4: 10px;
     --cell-height: 24px;
-    --splitter-width: 6px;
+    --splitter-width: 0px;
   }
 
   .dark {
@@ -128,6 +133,35 @@
 
   * {
     box-sizing: border-box;
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+  }
+
+  *::-webkit-scrollbar {
+    width: var(--scrollbar-size);
+    height: var(--scrollbar-size);
+  }
+
+  *::-webkit-scrollbar-track {
+    background: var(--scrollbar-track);
+  }
+
+  *::-webkit-scrollbar-thumb {
+    border: 2px solid var(--scrollbar-track);
+    border-radius: calc(var(--radius) - 4px);
+    background: var(--scrollbar-thumb);
+  }
+
+  *::-webkit-scrollbar-thumb:hover {
+    background: var(--scrollbar-thumb-hover);
+  }
+
+  *::-webkit-scrollbar-thumb:active {
+    background: var(--scrollbar-thumb-active);
+  }
+
+  *::-webkit-scrollbar-corner {
+    background: var(--scrollbar-track);
   }
 
   html,
@@ -159,7 +193,7 @@
 .shell {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: 0;
   height: 100vh;
   min-height: 0;
   overflow: hidden;
@@ -203,16 +237,30 @@
 }
 
 .window-chrome-left {
+  align-self: stretch;
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 0;
   min-width: 0;
 }
 
+.window-chrome-app-label {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 0 6px 0 2px;
+  white-space: nowrap;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
 .window-chrome-menubar {
+  align-self: stretch;
   display: flex;
   align-items: center;
   gap: 1px;
+  padding-left: 6px;
+  border-left: var(--line-width-soft) solid var(--line-soft);
 }
 
 .titlebar-menu-trigger {
@@ -220,14 +268,34 @@
   min-width: 42px;
   border: 0;
   border-radius: calc(var(--radius) - 4px);
+  background: transparent;
   padding-inline: 10px;
   font-size: 12px;
   font-weight: 500;
+  color: var(--text-muted);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.titlebar-menu-trigger,
+.titlebar-menu-trigger:hover,
+.titlebar-menu-trigger:active,
+.titlebar-menu-trigger:focus,
+.titlebar-menu-trigger:focus-visible,
+.titlebar-menu-trigger[data-state="open"] {
+  border-color: transparent !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+.titlebar-menu-trigger:hover {
   color: var(--text-primary);
 }
 
 .titlebar-menu-content {
   min-width: 210px;
+  border-color: oklch(var(--foreground) / 0.14) !important;
 }
 
 .window-chrome-title {
@@ -279,6 +347,7 @@
   min-height: 0;
   display: grid;
   gap: 0;
+  margin: 0 calc(-1 * var(--space-3));
   grid-template-columns:
     var(--left-panel-width, 268px)
     var(--splitter-width)
@@ -309,8 +378,11 @@
 }
 
 .splitter {
+  width: 8px;
+  min-width: 8px;
   min-height: 0;
-  margin-inline: -2px;
+  justify-self: center;
+  margin-inline: -4px;
   z-index: 2;
   border: 0;
   border-radius: 0;
@@ -325,7 +397,7 @@
   flex-direction: column;
   overflow: hidden;
   border: var(--line-width-strong) solid var(--line-strong);
-  border-radius: calc(var(--radius) - 2px);
+  border-radius: 0;
   background: var(--bg-panel);
   animation: fade-in-up 180ms ease-out;
 }
@@ -336,14 +408,14 @@
 }
 
 .panel-header {
-  height: 36px;
+  height: 30px;
   border-bottom: var(--line-width-soft) solid var(--line-strong);
   background: var(--bg-panel-header);
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-3);
-  padding: 0 10px;
+  padding: 0 8px;
 }
 
 .panel-header h2 {
@@ -365,6 +437,10 @@
   overflow: auto;
   overscroll-behavior: contain;
   padding: var(--space-2);
+}
+
+.panel-nav .panel-body {
+  padding: 0;
 }
 
 .section-list {
@@ -715,6 +791,26 @@
   background: oklch(var(--background));
 }
 
+.mode-toggle-trigger,
+.mode-toggle-trigger:hover,
+.mode-toggle-trigger:active,
+.mode-toggle-trigger:focus,
+.mode-toggle-trigger:focus-visible,
+.mode-toggle-trigger[data-state="open"] {
+  border-color: transparent !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+.mode-toggle-trigger {
+  color: var(--text-muted);
+}
+
+.mode-toggle-trigger:hover {
+  color: var(--text-primary);
+}
+
 .engine-state {
   height: 20px;
   display: inline-flex;
@@ -740,15 +836,6 @@
   border-color: oklch(var(--destructive));
   background: oklch(var(--destructive) / 0.15);
   color: oklch(var(--destructive));
-}
-
-.status-path {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--text-muted);
-  font-size: 12px;
 }
 
 .status-spacer {

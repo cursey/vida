@@ -1,5 +1,20 @@
 # Work Log
 
+## 2026-03-05 - Add File Menu Unload Command Flow
+
+Summary:
+- Added a new `File -> Unload` command in Electron main menu construction and mirrored it through the custom title-bar menu model.
+- Introduced a new `app:menu-unload-module` IPC event and preload/shared API subscription so the renderer can react to unload commands from either native or custom chrome menus.
+- Implemented renderer unload handling to clear module/disassembly/function state and reset virtualization/cache/history state back to an unloaded baseline.
+- Added renderer test coverage to verify unloading resets visible module state after a module load.
+
+Validation commands executed:
+- `just check`
+- `just test`
+
+Changed files index:
+- See `docs/change_files.md` for the detailed file list for this work item.
+
 ## 2026-03-05 - Add Frameless Custom Window Chrome and Menubar Integration
 
 Summary:

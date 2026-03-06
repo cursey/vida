@@ -414,6 +414,40 @@ export function App() {
     };
   }, []);
 
+  const unloadCurrentModule = useCallback(() => {
+    setErrorText("");
+    setIsLoading(false);
+    setIsGoToModalOpen(false);
+    setGoToInputValue("");
+    setModulePath("");
+    setModuleId("");
+    setEntryRva("");
+    setSections([]);
+    setFunctions([]);
+    resetDeferredEdgeRebaseState({
+      inProgressRef: functionRebaseInProgressRef,
+      pendingDirectionRef: functionPendingRebaseDirectionRef,
+      idleTimerRef: functionRebaseIdleTimerRef,
+    });
+    setFunctionWindowStartIndex(0);
+    setLinearInfo(null);
+    setGoToAddress("");
+    setSelectedRowIndex(null);
+    setPendingScrollRow(null);
+    setDisassemblyWindowStartRow(0);
+    resetSelectionHistory();
+    resetLinearCache();
+  }, []);
+
+  useEffect(() => {
+    const unsubscribe = window.electronAPI.onMenuUnloadModule(() => {
+      unloadCurrentModule();
+    });
+    return () => {
+      unsubscribe();
+    };
+  }, [unloadCurrentModule]);
+
   const engineStateClass = useMemo(() => {
     if (engineStatus.startsWith("online")) {
       return "state-online";
@@ -1172,7 +1206,7 @@ export function App() {
           menuModel={titleBarMenuModel}
           onInvokeMenuAction={handleInvokeTitleBarMenuAction}
           onWindowControl={handleWindowControl}
-          titleText={modulePath || "Electron Disassembler"}
+          titleText={modulePath}
           windowState={windowChromeState}
         />
       ) : null}
@@ -1189,7 +1223,7 @@ export function App() {
         >
           <header className="panel-header">
             <h2>Browser</h2>
-            <span>{functions.length} functions</span>
+            <span>{moduleId ? `${functions.length} functions` : ""}</span>
           </header>
           <div className="panel-body">
             <div className="function-scroll-region" ref={functionScrollRef}>
@@ -1250,7 +1284,9 @@ export function App() {
         >
           <header className="panel-header">
             <h2>Disassembly</h2>
-            <span>{linearInfo ? `${linearInfo.rowCount} rows` : "Ready"}</span>
+            <span>
+              {moduleId && linearInfo ? `${linearInfo.rowCount} rows` : ""}
+            </span>
           </header>
           <div className="panel-body table-body" style={disassemblyColumnStyle}>
             <div className="disassembly-columns-header">
@@ -1430,7 +1466,7 @@ export function App() {
         >
           <header className="panel-header">
             <h2>Inspector</h2>
-            <span>{moduleId || "No module"}</span>
+            <span>{moduleId}</span>
           </header>
           <div className="panel-body inspector-grid">
             <div className="detail-row">
@@ -1473,7 +1509,6 @@ export function App() {
         <Badge className={`engine-state ${engineStateClass}`} variant="outline">
           Engine {engineStatus}
         </Badge>
-        <span className="status-path">{modulePath || "No module loaded"}</span>
         <div className="status-spacer" />
         <ModeToggle />
       </footer>

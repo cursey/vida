@@ -53,6 +53,7 @@ describe("App disassembly window virtualization", () => {
         return () => {};
       }),
       onMenuOpenRecentExecutable: vi.fn(() => () => {}),
+      onMenuUnloadModule: vi.fn(() => () => {}),
       getWindowChromeState: vi.fn().mockResolvedValue({
         useCustomChrome: false,
         platform: "win32",

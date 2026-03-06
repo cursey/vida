@@ -16,7 +16,7 @@ export function ModeToggle() {
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button
-          className="relative h-8 w-8 border-0 bg-transparent text-muted-foreground shadow-none hover:bg-transparent hover:text-foreground"
+          className="mode-toggle-trigger relative h-8 w-8 border-0 bg-transparent text-muted-foreground shadow-none"
           size="icon"
           variant="ghost"
         >

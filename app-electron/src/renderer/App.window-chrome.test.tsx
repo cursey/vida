@@ -21,6 +21,7 @@ describe("App custom window chrome", () => {
       addRecentExecutable: vi.fn().mockResolvedValue(undefined),
       onMenuOpenExecutable: vi.fn(() => () => {}),
       onMenuOpenRecentExecutable: vi.fn(() => () => {}),
+      onMenuUnloadModule: vi.fn(() => () => {}),
       getWindowChromeState: vi.fn().mockResolvedValue({
         useCustomChrome: true,
         platform: "win32",

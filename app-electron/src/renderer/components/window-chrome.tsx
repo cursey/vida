@@ -92,7 +92,8 @@ export function WindowChrome({
           onWindowControl("toggleMaximize");
         }}
       >
-        <div className="window-chrome-left app-no-drag">
+        <div className="window-chrome-left">
+          <span className="window-chrome-app-label">Electron Disassembler</span>
           <nav
             aria-label="Application menu"
             className="window-chrome-menubar app-no-drag"
@@ -101,7 +102,7 @@ export function WindowChrome({
               <DropdownMenu key={menu.id}>
                 <DropdownMenuTrigger asChild>
                   <Button
-                    className="titlebar-menu-trigger app-no-drag"
+                    className="titlebar-menu-trigger app-no-drag focus-visible:border-transparent focus-visible:ring-0"
                     size="sm"
                     type="button"
                     variant="ghost"

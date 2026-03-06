@@ -72,6 +72,15 @@ const electronApi: ElectronApi = {
       ipcRenderer.removeListener("app:menu-open-recent-executable", listener);
     };
   },
+  onMenuUnloadModule: (callback: () => void): (() => void) => {
+    const listener = (): void => {
+      callback();
+    };
+    ipcRenderer.on("app:menu-unload-module", listener);
+    return () => {
+      ipcRenderer.removeListener("app:menu-unload-module", listener);
+    };
+  },
   pingEngine: (): Promise<MethodResult["engine.ping"]> =>
     ipcRenderer.invoke("engine:ping"),
   openModule: (path: string): Promise<MethodResult["module.open"]> =>

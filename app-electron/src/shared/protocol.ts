@@ -185,6 +185,7 @@ export type ElectronApi = {
   pickExecutable: () => Promise<string | null>;
   onMenuOpenExecutable: (callback: () => void) => () => void;
   onMenuOpenRecentExecutable: (callback: (path: string) => void) => () => void;
+  onMenuUnloadModule: (callback: () => void) => () => void;
   addRecentExecutable: (path: string) => Promise<void>;
   getWindowChromeState: () => Promise<WindowChromeState>;
   onWindowChromeStateChanged: (
