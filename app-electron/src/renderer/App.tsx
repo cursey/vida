@@ -115,6 +115,23 @@ function parseHexRva(value: string): number | null {
   return parsed;
 }
 
+export function toFunctionProvenanceCode(kind: string): string {
+  switch (kind) {
+    case "pdb":
+      return "pdb";
+    case "exception":
+      return "exc";
+    case "import":
+      return "imp";
+    case "export":
+      return "exp";
+    case "entry":
+      return "ent";
+    default:
+      return kind.slice(0, 3).toLowerCase();
+  }
+}
+
 function isEditableTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) {
     return false;
@@ -1253,7 +1270,14 @@ export function App() {
                         type="button"
                         onClick={() => void navigateToRva(func.start)}
                       >
-                        <span className="function-meta">{func.kind}</span>
+                        <span
+                          className={cn(
+                            "function-meta",
+                            `function-meta-${func.kind}`,
+                          )}
+                        >
+                          {toFunctionProvenanceCode(func.kind)}
+                        </span>
                         <span className="function-name">{func.name}</span>
                         <code>{func.start}</code>
                       </Button>

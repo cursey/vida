@@ -1,5 +1,21 @@
 # Work Log
 
+## 2026-03-05 - Shorten Function Provenance Labels in Browser UI
+
+Summary:
+- Replaced raw function provenance strings in the Browser function list with stable shortcodes to reduce visual noise and improve scanability.
+- Added renderer mapping for known provenance kinds (`pdb`, `exception`, `import`, `export`, `entry`) and a lowercase 3-character fallback for unknown future kinds.
+- Restyled function provenance badges into compact pill-like chips and reduced spacing to the function name for a tighter list layout.
+- Added per-kind provenance badge colors so each source type is visually distinct while keeping light/dark theme consistency.
+- Added dedicated renderer unit tests for provenance-code mapping behavior.
+
+Validation commands executed:
+- `just check`
+- `just test`
+
+Changed files index:
+- See `docs/change_files.md` for the detailed file list for this work item.
+
 ## 2026-03-05 - Add PDB-Based Function Discovery with Strict RSDS Matching
 
 Summary:

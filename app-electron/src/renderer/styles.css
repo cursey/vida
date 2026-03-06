@@ -484,8 +484,8 @@
   justify-content: flex-start;
   padding: 0 6px;
   display: grid;
-  grid-template-columns: minmax(44px, auto) 1fr auto;
-  gap: 8px;
+  grid-template-columns: minmax(34px, max-content) 1fr auto;
+  gap: 4px;
   text-align: left;
   font-size: 12px;
   font-weight: 400;
@@ -502,9 +502,51 @@
 }
 
 .function-meta {
-  color: var(--text-muted);
-  font-size: 10px;
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 12px;
+  padding: 0 5px;
+  border: 1px solid oklch(var(--border));
+  border-radius: 9999px;
+  background: oklch(var(--secondary));
+  color: var(--text-secondary);
+  font-size: 9px;
   font-weight: 500;
+  line-height: 1;
+  letter-spacing: 0.01em;
+  text-transform: lowercase;
+}
+
+.function-meta-entry {
+  border-color: oklch(var(--chart-3) / 0.45);
+  background: oklch(var(--chart-3) / 0.14);
+  color: oklch(var(--chart-3));
+}
+
+.function-meta-export {
+  border-color: oklch(var(--chart-2) / 0.45);
+  background: oklch(var(--chart-2) / 0.14);
+  color: oklch(var(--chart-2));
+}
+
+.function-meta-import {
+  border-color: oklch(var(--chart-1) / 0.45);
+  background: oklch(var(--chart-1) / 0.14);
+  color: oklch(var(--chart-1));
+}
+
+.function-meta-exception {
+  border-color: oklch(var(--chart-5) / 0.45);
+  background: oklch(var(--chart-5) / 0.14);
+  color: oklch(var(--chart-5));
+}
+
+.function-meta-pdb {
+  border-color: oklch(var(--chart-4) / 0.45);
+  background: oklch(var(--chart-4) / 0.14);
+  color: oklch(var(--chart-4));
 }
 
 .function-name {

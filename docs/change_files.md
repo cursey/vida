@@ -1,5 +1,16 @@
 # Change Files
 
+## 2026-03-05 - Shorten Function Provenance Labels in Browser UI
+
+Docs:
+- `docs/work_log.md`
+- `docs/change_files.md`
+
+Electron app:
+- `app-electron/src/renderer/App.tsx`
+- `app-electron/src/renderer/App.function-provenance.test.ts`
+- `app-electron/src/renderer/styles.css`
+
 ## 2026-03-05 - Add PDB-Based Function Discovery with Strict RSDS Matching
 
 Docs:
