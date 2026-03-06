@@ -1,5 +1,14 @@
 # Change Files
 
+## 2026-03-06 - Fix C++ PDB Name Extraction for Complex Template Signatures
+
+Docs:
+- `docs/work_log.md`
+- `docs/change_files.md`
+
+Engine:
+- `engine/src/pdb_symbols.rs`
+
 ## 2026-03-06 - Simplify PDB Demangled Names to Function Names
 
 Docs:

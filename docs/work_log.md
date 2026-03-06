@@ -1,5 +1,18 @@
 # Work Log
 
+## 2026-03-06 - Fix C++ PDB Name Extraction for Complex Template Signatures
+
+Summary:
+- Reworked PDB symbol-name simplification so C++ demangled names are extracted by scanning from the end of the signature instead of splitting on whitespace.
+- Preserved fully qualified callable names across nested template arguments and conversion-operator type names while still dropping return types and parameter lists.
+- Added unit coverage for complex templated member functions and conversion operators.
+
+Validation commands executed:
+- `cargo test --manifest-path engine/Cargo.toml`
+
+Changed files index:
+- See `docs/change_files.md` for the detailed file list for this work item.
+
 ## 2026-03-06 - Simplify PDB Demangled Names to Function Names
 
 Summary:

@@ -240,23 +240,13 @@ fn simplify_function_name(name: &str) -> String {
         return String::new();
     }
 
-    let tokens = signature_prefix.split_whitespace().collect::<Vec<_>>();
-    if tokens.is_empty() {
-        return signature_prefix.to_owned();
-    }
+    let start = if let Some(operator_start) = find_operator_start(signature_prefix) {
+        find_trailing_name_start(&signature_prefix[..operator_start])
+    } else {
+        find_trailing_name_start(signature_prefix)
+    };
 
-    if let Some(index) = tokens
-        .iter()
-        .rposition(|token| *token == "operator" || token.ends_with("::operator"))
-    {
-        return tokens[index..].join(" ");
-    }
-
-    if let Some(index) = tokens.iter().rposition(|token| token.contains("::")) {
-        return tokens[index..].join(" ");
-    }
-
-    tokens[tokens.len() - 1].to_owned()
+    signature_prefix[start..].trim().to_owned()
 }
 
 fn strip_rust_hash_suffix(name: &str) -> &str {
@@ -269,6 +259,35 @@ fn strip_rust_hash_suffix(name: &str) -> &str {
     } else {
         name
     }
+}
+
+fn find_operator_start(name: &str) -> Option<usize> {
+    name.rmatch_indices("operator")
+        .map(|(index, _)| index)
+        .find(|index| {
+            let before = name[..*index].chars().next_back();
+            let after = name[*index + "operator".len()..].chars().next();
+            !before.is_some_and(is_identifier_char) && !after.is_some_and(is_identifier_char)
+        })
+}
+
+fn find_trailing_name_start(name: &str) -> usize {
+    let mut angle_depth = 0_u32;
+
+    for (index, ch) in name.char_indices().rev() {
+        match ch {
+            '>' => angle_depth = angle_depth.saturating_add(1),
+            '<' => angle_depth = angle_depth.saturating_sub(1),
+            ' ' | '\t' if angle_depth == 0 => return index + ch.len_utf8(),
+            _ => {}
+        }
+    }
+
+    0
+}
+
+fn is_identifier_char(ch: char) -> bool {
+    ch.is_ascii_alphanumeric() || ch == '_'
 }
 
 fn is_executable_rva(pe: &PE<'_>, rva: u64) -> bool {
@@ -339,6 +358,14 @@ mod tests {
         assert_eq!(
             simplify_function_name("crate::module::run::h0123456789abcdef"),
             "crate::module::run"
+        );
+        assert_eq!(
+            simplify_function_name("public: class std::unique_ptr<class ns::value,struct std::default_delete<class ns::value> > __cdecl ns::widget<class std::vector<struct std::pair<int,float>,class std::allocator<struct std::pair<int,float> > > >::build<class foo::bar<int, class baz::qux<long> > >(void)"),
+            "ns::widget<class std::vector<struct std::pair<int,float>,class std::allocator<struct std::pair<int,float> > > >::build<class foo::bar<int, class baz::qux<long> > >"
+        );
+        assert_eq!(
+            simplify_function_name("public: __cdecl ns::widget<class std::vector<int,class std::allocator<int> > >::operator class std::basic_string<char,struct std::char_traits<char>,class std::allocator<char> >(void)"),
+            "ns::widget<class std::vector<int,class std::allocator<int> > >::operator class std::basic_string<char,struct std::char_traits<char>,class std::allocator<char> >"
         );
     }
 }
