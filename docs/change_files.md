@@ -1,5 +1,33 @@
 # Change Files
 
+## 2026-03-05 - Split Engine Library into Domain Modules
+
+Docs:
+- `docs/work_log.md`
+- `docs/change_files.md`
+
+Engine:
+- `engine/src/lib.rs`
+- `engine/src/error.rs`
+- `engine/src/rpc.rs`
+- `engine/src/protocol.rs`
+- `engine/src/state.rs`
+- `engine/src/pe_utils.rs`
+- `engine/src/disasm.rs`
+- `engine/src/linear.rs`
+- `engine/src/tests.rs`
+
+## 2026-03-05 - Virtualize Function Browser List Rendering
+
+Docs:
+- `docs/work_log.md`
+- `docs/change_files.md`
+
+Electron app:
+- `app-electron/src/renderer/App.tsx`
+- `app-electron/src/renderer/styles.css`
+- `app-electron/src/renderer/App.function-browser.test.tsx`
+
 ## 2026-03-05 - Align Renderer Theme Tokens with Shadcn New York v4 Zinc
 
 Docs:

@@ -1,5 +1,37 @@
 # Work Log
 
+## 2026-03-05 - Split Engine Library into Domain Modules
+
+Summary:
+- Refactored `engine/src/lib.rs` into focused modules for errors, RPC transport, protocol payloads, engine state/method handlers, PE helpers, disassembly helpers, and linear-view logic.
+- Preserved existing public engine API (`EngineState`, JSON-RPC request/response types, stdio server entrypoint, fixture path helper) while reducing `lib.rs` to module wiring and re-exports.
+- Moved crate unit tests out of `lib.rs` into a dedicated `engine/src/tests.rs` module file.
+
+Validation commands executed:
+- `cargo test --manifest-path engine/Cargo.toml`
+- `cargo fmt --manifest-path engine/Cargo.toml`
+- `just check`
+- `just test`
+
+Changed files index:
+- See `docs/change_files.md` for the detailed file list for this work item.
+
+## 2026-03-05 - Virtualize Function Browser List Rendering
+
+Summary:
+- Replaced eager function-list rendering with windowed virtualization in the Browser panel using `@tanstack/react-virtual`.
+- Added a dedicated virtualized scroll region and absolute-positioned function rows to avoid mounting thousands of function buttons at once.
+- Added renderer test coverage to ensure large function datasets use the virtualized list path.
+
+Validation commands executed:
+- `cd app-electron; npx biome check --write src/renderer/App.tsx src/renderer/styles.css src/renderer/App.function-browser.test.tsx`
+- `cd app-electron; npm run test:renderer -- src/renderer/App.function-browser.test.tsx`
+- `just check`
+- `just test`
+
+Changed files index:
+- See `docs/change_files.md` for the detailed file list for this work item.
+
 ## 2026-03-05 - Align Renderer Theme Tokens with Shadcn New York v4 Zinc
 
 Summary:
