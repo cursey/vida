@@ -1,5 +1,36 @@
 # Work Log
 
+## 2026-03-05 - Refine Title Badge Chrome and Loading Modal Presentation
+
+Summary:
+- Updated the custom title-bar badge label to `V.ıDA Pro` and refined badge-area spacing/background so it reads as a distinct left-edge chrome segment.
+- Added and then simplified loading-modal behavior to keep interaction blocking and spinner feedback while removing modal/backdrop fade motion for immediate appearance/disappearance.
+- Aligned loading spinner inline with loading text for cleaner visual hierarchy.
+- Extended shared dialog primitive support with loading-specific overlay class customization for targeted modal styling.
+
+Validation commands executed:
+- `cd app-electron; npm run check`
+- `cd app-electron; npm run test:renderer -- src/renderer/App.loading-modal.test.tsx`
+- `cd app-electron; npm run test:renderer -- src/renderer/App.window-chrome.test.tsx`
+
+Changed files index:
+- See `docs/change_files.md` for the detailed file list for this work item.
+
+## 2026-03-05 - Add Blocking File Loading Modal Overlay
+
+Summary:
+- Added a blocking loading dialog that opens while a file is being loaded, dims the main UI, and prevents interaction until loading completes.
+- Added explicit loading copy and the selected file path in the modal so users have clear status feedback during module open.
+- Wired loading-path state to module-open lifecycle and reset paths on completion/unload.
+- Added renderer test coverage for loading-modal visibility during asynchronous file open.
+
+Validation commands executed:
+- `just check`
+- `just test`
+
+Changed files index:
+- See `docs/change_files.md` for the detailed file list for this work item.
+
 ## 2026-03-05 - Shorten Function Provenance Labels in Browser UI
 
 Summary:

@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -316,6 +317,7 @@ export function App() {
 
   const [errorText, setErrorText] = useState<string>("");
   const [isLoading, setIsLoading] = useState(false);
+  const [loadingPath, setLoadingPath] = useState<string>("");
   const [isResizing, setIsResizing] = useState(false);
   const [isColumnResizing, setIsColumnResizing] = useState(false);
   const [cacheEpoch, setCacheEpoch] = useState(0);
@@ -434,6 +436,7 @@ export function App() {
   const unloadCurrentModule = useCallback(() => {
     setErrorText("");
     setIsLoading(false);
+    setLoadingPath("");
     setIsGoToModalOpen(false);
     setGoToInputValue("");
     setModulePath("");
@@ -990,6 +993,7 @@ export function App() {
   async function openModuleFromPath(chosenPath: string) {
     setErrorText("");
     setIsLoading(true);
+    setLoadingPath(chosenPath);
 
     try {
       const opened = await window.electronAPI.openModule(chosenPath);
@@ -1032,6 +1036,7 @@ export function App() {
       );
     } finally {
       setIsLoading(false);
+      setLoadingPath("");
     }
   }
 
@@ -1536,6 +1541,27 @@ export function App() {
         <div className="status-spacer" />
         <ModeToggle />
       </footer>
+
+      <Dialog open={isLoading}>
+        <DialogContent
+          className="loading-modal"
+          overlayClassName="loading-modal-overlay"
+          onEscapeKeyDown={(event) => event.preventDefault()}
+          onInteractOutside={(event) => event.preventDefault()}
+          onPointerDownOutside={(event) => event.preventDefault()}
+        >
+          <DialogHeader className="loading-header">
+            <div aria-hidden="true" className="loading-spinner" />
+            <DialogTitle className="loading-title">Loading File</DialogTitle>
+          </DialogHeader>
+          <DialogHeader className="loading-copy">
+            <DialogDescription className="loading-description">
+              The selected file is being loaded and analyzed. Please wait.
+            </DialogDescription>
+          </DialogHeader>
+          <code className="loading-path">{loadingPath}</code>
+        </DialogContent>
+      </Dialog>
 
       <Dialog onOpenChange={setIsGoToModalOpen} open={isGoToModalOpen}>
         <DialogContent className="go-to-modal">

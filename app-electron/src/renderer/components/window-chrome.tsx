@@ -93,7 +93,7 @@ export function WindowChrome({
         }}
       >
         <div className="window-chrome-left">
-          <span className="window-chrome-app-label">Electron Disassembler</span>
+          <span className="window-chrome-app-label">V.ıDA Pro</span>
           <nav
             aria-label="Application menu"
             className="window-chrome-menubar app-no-drag"

@@ -233,7 +233,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 0 6px;
+  padding: 0 6px 0 0;
 }
 
 .window-chrome-left {
@@ -245,10 +245,15 @@
 }
 
 .window-chrome-app-label {
+  align-self: stretch;
+  display: inline-flex;
+  align-items: center;
   color: var(--text-muted);
   font-size: 11px;
   font-weight: 700;
-  padding: 0 6px 0 2px;
+  padding: 0 10px;
+  background: var(--bg-panel);
+  border-right: var(--line-width-soft) solid var(--line-soft);
   white-space: nowrap;
   user-select: none;
   -webkit-user-select: none;
@@ -260,7 +265,7 @@
   align-items: center;
   gap: 1px;
   padding-left: 6px;
-  border-left: var(--line-width-soft) solid var(--line-soft);
+  border-left: 0;
 }
 
 .titlebar-menu-trigger {
@@ -884,6 +889,71 @@
   flex: 1;
 }
 
+.loading-modal {
+  width: min(460px, calc(100vw - 32px));
+  padding: 14px;
+  gap: 8px;
+}
+
+.loading-modal-overlay {
+  animation: none !important;
+  transition: none !important;
+}
+
+.loading-modal {
+  animation: none !important;
+  transition: none !important;
+}
+
+.loading-header {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+
+.loading-copy {
+  display: block;
+}
+
+.loading-spinner {
+  width: 16px;
+  height: 16px;
+  border-radius: 9999px;
+  border: 2px solid oklch(var(--border));
+  border-top-color: oklch(var(--primary));
+  animation: loading-spin 700ms linear infinite;
+  flex: 0 0 auto;
+}
+
+.loading-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.loading-description {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.loading-path {
+  display: block;
+  margin: 0;
+  border: 1px solid var(--line-soft);
+  border-radius: calc(var(--radius) - 4px);
+  background: var(--bg-panel-header);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.4;
+  padding: 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .go-to-modal {
   width: min(420px, calc(100vw - 32px));
   padding: 12px;
@@ -922,5 +992,15 @@
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@keyframes loading-spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
   }
 }

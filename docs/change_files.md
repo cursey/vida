@@ -1,5 +1,29 @@
 # Change Files
 
+## 2026-03-05 - Refine Title Badge Chrome and Loading Modal Presentation
+
+Docs:
+- `docs/work_log.md`
+- `docs/change_files.md`
+
+Electron app:
+- `app-electron/src/renderer/App.tsx`
+- `app-electron/src/renderer/styles.css`
+- `app-electron/src/renderer/App.loading-modal.test.tsx`
+- `app-electron/src/renderer/components/ui/dialog.tsx`
+- `app-electron/src/renderer/components/window-chrome.tsx`
+
+## 2026-03-05 - Add Blocking File Loading Modal Overlay
+
+Docs:
+- `docs/work_log.md`
+- `docs/change_files.md`
+
+Electron app:
+- `app-electron/src/renderer/App.tsx`
+- `app-electron/src/renderer/styles.css`
+- `app-electron/src/renderer/App.loading-modal.test.tsx`
+
 ## 2026-03-05 - Shorten Function Provenance Labels in Browser UI
 
 Docs:
