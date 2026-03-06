@@ -1,5 +1,20 @@
 # Work Log
 
+## 2026-03-06 - Surface Graph Generation Status in Status Bar
+
+Summary:
+- Added renderer state tracking for in-flight graph generation when opening Graph View from Disassembly.
+- Updated status bar UI to display a live `Building graph...` indicator while `function.getGraphByVa` is in progress.
+- Cleared graph-building status during unload/open flows and after graph request completion (success or error).
+
+Validation commands executed:
+- `just fmt`
+- `just check`
+- `just test`
+
+Changed files index:
+- See `docs/change_files.md` for the detailed file list for this work item.
+
 ## 2026-03-06 - Center Graph View on Highlighted Disassembly Instruction
 
 Summary:

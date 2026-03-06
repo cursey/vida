@@ -1,5 +1,15 @@
 # Change Files
 
+## 2026-03-06 - Surface Graph Generation Status in Status Bar
+
+Docs:
+- `docs/work_log.md`
+- `docs/change_files.md`
+
+Electron app:
+- `app-electron/src/renderer/App.tsx`
+- `app-electron/src/renderer/features/app/status-bar.tsx`
+
 ## 2026-03-06 - Center Graph View on Highlighted Disassembly Instruction
 
 Docs:

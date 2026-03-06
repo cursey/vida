@@ -115,6 +115,7 @@ export function App() {
   const [appliedFunctionSearchQuery, setAppliedFunctionSearchQuery] =
     useState("");
   const [isSearchingFunctions, setIsSearchingFunctions] = useState(false);
+  const [isBuildingGraph, setIsBuildingGraph] = useState(false);
 
   const [errorText, setErrorText] = useState<string>("");
   const [transientStatusMessage, setTransientStatusMessage] = useState("");
@@ -264,6 +265,7 @@ export function App() {
     setSearchedFunctionIndexes(null);
     setAppliedFunctionSearchQuery("");
     setIsSearchingFunctions(false);
+    setIsBuildingGraph(false);
     setModulePath("");
     setModuleId("");
     setEntryVa("");
@@ -805,6 +807,7 @@ export function App() {
     }
 
     try {
+      setIsBuildingGraph(true);
       const graph = await window.electronAPI.getFunctionGraphByVa({
         moduleId,
         va: selectedRow.address,
@@ -831,6 +834,8 @@ export function App() {
       setErrorText(
         error instanceof Error ? error.message : "Failed to open graph view",
       );
+    } finally {
+      setIsBuildingGraph(false);
     }
   }, [
     activePanel,
@@ -956,6 +961,7 @@ export function App() {
     setTransientStatusMessage("");
     setIsLoading(true);
     setLoadingPath(chosenPath);
+    setIsBuildingGraph(false);
 
     try {
       const opened = await window.electronAPI.openModule(chosenPath);
@@ -1343,6 +1349,7 @@ export function App() {
         engineStatus={engineStatus}
         engineStateClass={engineStateClass}
         isSearchingFunctions={isSearchingFunctions}
+        isBuildingGraph={isBuildingGraph}
         transientMessage={transientStatusMessage}
       />
 
