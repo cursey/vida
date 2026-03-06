@@ -1,5 +1,21 @@
 # Work Log
 
+## 2026-03-06 - Split Renderer App Monolith into Feature Modules
+
+Summary:
+- Refactored `App.tsx` into a composition-oriented root by extracting major UI sections into reusable feature components (`BrowserPanel`, `DisassemblyPanel`, status bar, and dialogs).
+- Moved shared renderer utilities out of `App.tsx` into dedicated modules for deferred edge rebasing, DOM edit-target detection, and numeric helpers.
+- Moved function provenance shortcode mapping into a browser feature utility and preserved `toFunctionProvenanceCode` compatibility by re-exporting it from `App.tsx`.
+- Preserved runtime behavior and existing DOM class/test contracts while reducing `App.tsx` size and grouping code by functionality.
+
+Validation commands executed:
+- `just fmt`
+- `just check`
+- `just test`
+
+Changed files index:
+- See `docs/change_files.md` for the detailed file list for this work item.
+
 ## 2026-03-06 - Toggle Browser Search with Ctrl+F and Compact Search Label
 
 Summary:

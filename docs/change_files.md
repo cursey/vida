@@ -1,5 +1,22 @@
 # Change Files
 
+## 2026-03-06 - Split Renderer App Monolith into Feature Modules
+
+Docs:
+- `docs/work_log.md`
+- `docs/change_files.md`
+
+Electron app:
+- `app-electron/src/renderer/App.tsx`
+- `app-electron/src/renderer/features/app/app-dialogs.tsx`
+- `app-electron/src/renderer/features/app/status-bar.tsx`
+- `app-electron/src/renderer/features/browser/browser-panel.tsx`
+- `app-electron/src/renderer/features/browser/function-provenance.ts`
+- `app-electron/src/renderer/features/disassembly/disassembly-panel.tsx`
+- `app-electron/src/renderer/features/shared/deferred-edge-rebase.ts`
+- `app-electron/src/renderer/features/shared/dom-utils.ts`
+- `app-electron/src/renderer/features/shared/number-utils.ts`
+
 ## 2026-03-06 - Toggle Browser Search with Ctrl+F and Compact Search Label
 
 Docs:

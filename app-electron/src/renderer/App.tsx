@@ -1,22 +1,23 @@
-import { ModeToggle } from "@/components/mode-toggle";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { WindowChrome } from "@/components/window-chrome";
+import { GoToDialog, LoadingDialog } from "@/features/app/app-dialogs";
+import { AppStatusBar } from "@/features/app/status-bar";
+import { BrowserPanel } from "@/features/browser/browser-panel";
+import { DisassemblyPanel } from "@/features/disassembly/disassembly-panel";
+import {
+  resetDeferredEdgeRebaseState,
+  setupDeferredEdgeRebase,
+} from "@/features/shared/deferred-edge-rebase";
+import { isEditableTarget } from "@/features/shared/dom-utils";
+import {
+  clamp,
+  makePageKey,
+  parseHexRva,
+} from "@/features/shared/number-utils";
 import { cn } from "@/lib/utils";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   type CSSProperties,
   type FormEvent,
-  type MutableRefObject,
   type PointerEvent,
   useCallback,
   useEffect,
@@ -48,25 +49,7 @@ type ColumnDragState = {
   startWidth: number;
 };
 
-type RebaseDirection = -1 | 0 | 1;
-
-type DeferredEdgeRebaseStateRefs = {
-  inProgressRef: MutableRefObject<boolean>;
-  pendingDirectionRef: MutableRefObject<RebaseDirection>;
-  idleTimerRef: MutableRefObject<number | null>;
-};
-
-type DeferredEdgeRebaseSetup = {
-  scrollElement: HTMLDivElement;
-  rowHeight: number;
-  windowRowCount: number;
-  windowStart: number;
-  maxWindowStart: number;
-  rebaseMarginRows: number;
-  rebaseIdleMs: number;
-  setWindowStart: (nextWindowStart: number) => void;
-  stateRefs: DeferredEdgeRebaseStateRefs;
-};
+export { toFunctionProvenanceCode } from "@/features/browser/function-provenance";
 
 const MIN_PANEL_WIDTH = 220;
 const MAX_PANEL_WIDTH = 420;
@@ -94,193 +77,6 @@ const MIN_COLUMN_WIDTHS: Record<DisassemblyColumn, number> = {
   bytes: 120,
   instruction: 120,
 };
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(Math.max(value, min), max);
-}
-
-function makePageKey(index: number): number {
-  return Math.floor(index / PAGE_SIZE);
-}
-
-function parseHexRva(value: string): number | null {
-  const parsed = Number.parseInt(value, 16);
-  if (!Number.isFinite(parsed) || Number.isNaN(parsed)) {
-    return null;
-  }
-  return parsed;
-}
-
-export function toFunctionProvenanceCode(kind: string): string {
-  switch (kind) {
-    case "pdb":
-      return "pdb";
-    case "exception":
-      return "exc";
-    case "import":
-      return "imp";
-    case "export":
-      return "exp";
-    case "entry":
-      return "ent";
-    default:
-      return kind.slice(0, 3).toLowerCase();
-  }
-}
-
-function isEditableTarget(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) {
-    return false;
-  }
-  const tag = target.tagName;
-  return (
-    target.isContentEditable ||
-    tag === "INPUT" ||
-    tag === "TEXTAREA" ||
-    tag === "SELECT"
-  );
-}
-
-function clearDeferredEdgeRebaseIdleTimer(
-  idleTimerRef: MutableRefObject<number | null>,
-): void {
-  if (idleTimerRef.current !== null) {
-    window.clearTimeout(idleTimerRef.current);
-    idleTimerRef.current = null;
-  }
-}
-
-function resetDeferredEdgeRebaseState(
-  stateRefs: DeferredEdgeRebaseStateRefs,
-): void {
-  stateRefs.inProgressRef.current = false;
-  stateRefs.pendingDirectionRef.current = 0;
-  clearDeferredEdgeRebaseIdleTimer(stateRefs.idleTimerRef);
-}
-
-function setupDeferredEdgeRebase({
-  scrollElement,
-  rowHeight,
-  windowRowCount,
-  windowStart,
-  maxWindowStart,
-  rebaseMarginRows,
-  rebaseIdleMs,
-  setWindowStart,
-  stateRefs,
-}: DeferredEdgeRebaseSetup): () => void {
-  const supportsScrollEnd = "onscrollend" in scrollElement;
-
-  function detectPendingRebaseDirection(): RebaseDirection {
-    const viewportRows = Math.max(
-      1,
-      Math.ceil(scrollElement.clientHeight / rowHeight),
-    );
-    const marginRows = Math.min(
-      rebaseMarginRows,
-      Math.max(viewportRows * 2, Math.floor(windowRowCount / 5)),
-    );
-    const marginPx = marginRows * rowHeight;
-    const maxScrollTop = Math.max(
-      0,
-      scrollElement.scrollHeight - scrollElement.clientHeight,
-    );
-    if (maxScrollTop <= 0) {
-      return 0;
-    }
-    if (scrollElement.scrollTop <= marginPx && windowStart > 0) {
-      return -1;
-    }
-    if (
-      scrollElement.scrollTop >= maxScrollTop - marginPx &&
-      windowStart < maxWindowStart
-    ) {
-      return 1;
-    }
-    return 0;
-  }
-
-  function applyPendingRebase(): void {
-    if (stateRefs.inProgressRef.current) {
-      return;
-    }
-    const direction = stateRefs.pendingDirectionRef.current;
-    stateRefs.pendingDirectionRef.current = 0;
-    if (direction === 0) {
-      return;
-    }
-
-    const windowShiftRows = Math.max(1, Math.floor(windowRowCount / 2));
-    const shiftRows =
-      direction < 0
-        ? Math.min(windowShiftRows, windowStart)
-        : Math.min(windowShiftRows, maxWindowStart - windowStart);
-    if (shiftRows <= 0) {
-      return;
-    }
-
-    const nextWindowStart =
-      direction < 0 ? windowStart - shiftRows : windowStart + shiftRows;
-    if (nextWindowStart === windowStart) {
-      return;
-    }
-
-    stateRefs.inProgressRef.current = true;
-    setWindowStart(nextWindowStart);
-    const nextScrollTop =
-      scrollElement.scrollTop +
-      (direction < 0 ? shiftRows : -shiftRows) * rowHeight;
-    requestAnimationFrame(() => {
-      const maxNextScrollTop = Math.max(
-        0,
-        scrollElement.scrollHeight - scrollElement.clientHeight,
-      );
-      scrollElement.scrollTop = clamp(nextScrollTop, 0, maxNextScrollTop);
-      stateRefs.inProgressRef.current = false;
-    });
-  }
-
-  function scheduleDeferredRebase() {
-    clearDeferredEdgeRebaseIdleTimer(stateRefs.idleTimerRef);
-    stateRefs.idleTimerRef.current = window.setTimeout(() => {
-      stateRefs.idleTimerRef.current = null;
-      applyPendingRebase();
-    }, rebaseIdleMs);
-  }
-
-  function handleScroll() {
-    if (stateRefs.inProgressRef.current) {
-      return;
-    }
-    stateRefs.pendingDirectionRef.current = detectPendingRebaseDirection();
-    if (!supportsScrollEnd) {
-      scheduleDeferredRebase();
-    }
-  }
-
-  function handleScrollEnd() {
-    clearDeferredEdgeRebaseIdleTimer(stateRefs.idleTimerRef);
-    applyPendingRebase();
-  }
-
-  scrollElement.addEventListener("scroll", handleScroll, {
-    passive: true,
-  });
-  if (supportsScrollEnd) {
-    scrollElement.addEventListener("scrollend", handleScrollEnd, {
-      passive: true,
-    });
-  }
-
-  return () => {
-    clearDeferredEdgeRebaseIdleTimer(stateRefs.idleTimerRef);
-    stateRefs.pendingDirectionRef.current = 0;
-    scrollElement.removeEventListener("scroll", handleScroll);
-    if (supportsScrollEnd) {
-      scrollElement.removeEventListener("scrollend", handleScrollEnd);
-    }
-  };
-}
 
 export function App() {
   const [engineStatus, setEngineStatus] = useState<string>("checking");
@@ -882,8 +678,8 @@ export function App() {
       return;
     }
 
-    const firstPage = makePageKey(visibleStart);
-    const lastPage = makePageKey(visibleEnd);
+    const firstPage = makePageKey(visibleStart, PAGE_SIZE);
+    const lastPage = makePageKey(visibleEnd, PAGE_SIZE);
 
     for (let page = firstPage - 1; page <= lastPage + 1; page += 1) {
       if (page < 0) {
@@ -938,7 +734,7 @@ export function App() {
   }
 
   function readRow(index: number): LinearRow | undefined {
-    const page = makePageKey(index);
+    const page = makePageKey(index, PAGE_SIZE);
     const pageRows = pageCacheRef.current.get(page);
     if (!pageRows) {
       return undefined;
@@ -1354,91 +1150,26 @@ export function App() {
       {errorText ? <div className="error-banner">{errorText}</div> : null}
 
       <main className="layout" ref={layoutRef} style={layoutStyle}>
-        <section
-          className={`panel panel-nav ${
-            activePanel === "browser" ? "is-panel-active" : ""
-          }`}
-          onPointerDown={() => setActivePanel("browser")}
-          onWheel={() => setActivePanel("browser")}
-          onFocusCapture={() => setActivePanel("browser")}
-        >
-          <header className="panel-header">
-            <h2>Browser</h2>
-            <span>
-              {moduleId
-                ? appliedFunctionSearchQuery
-                  ? `${functionCount}/${totalFunctionCount} functions`
-                  : `${totalFunctionCount} functions`
-                : ""}
-            </span>
-          </header>
-          <div className="panel-body">
-            <div className="function-scroll-region" ref={functionScrollRef}>
-              <ul
-                className="function-list"
-                style={{ height: `${functionRowVirtualizer.getTotalSize()}px` }}
-              >
-                {functionVirtualItems.map((virtualRow) => {
-                  const logicalFunctionIndex =
-                    boundedFunctionWindowStart + virtualRow.index;
-                  const sourceFunctionIndex =
-                    displayedFunctionIndexes?.[logicalFunctionIndex] ??
-                    logicalFunctionIndex;
-                  const func = functions[sourceFunctionIndex];
-                  if (!func) {
-                    return null;
-                  }
-                  return (
-                    <li
-                      className="function-row"
-                      key={`${func.kind}-${func.start}-${sourceFunctionIndex}`}
-                      style={{ transform: `translateY(${virtualRow.start}px)` }}
-                    >
-                      <Button
-                        className={cn(
-                          "function-link",
-                          func.start === goToAddress && "is-active",
-                        )}
-                        variant="ghost"
-                        type="button"
-                        onClick={() => void navigateToRva(func.start)}
-                      >
-                        <span
-                          className={cn(
-                            "function-meta",
-                            `function-meta-${func.kind}`,
-                          )}
-                        >
-                          {toFunctionProvenanceCode(func.kind)}
-                        </span>
-                        <span className="function-name">{func.name}</span>
-                        <code>{func.start}</code>
-                      </Button>
-                    </li>
-                  );
-                })}
-              </ul>
-            </div>
-            {isBrowserSearchVisible ? (
-              <div className="browser-search">
-                <Input
-                  ref={browserSearchInputRef}
-                  aria-label="Search functions"
-                  autoComplete="off"
-                  className="browser-search-input"
-                  disabled={!moduleId}
-                  onChange={(event) =>
-                    setFunctionSearchQuery(event.target.value)
-                  }
-                  placeholder="Search"
-                  spellCheck={false}
-                  type="text"
-                  value={functionSearchQuery}
-                />
-              </div>
-            ) : null}
-          </div>
-        </section>
+        <BrowserPanel
+          isActive={activePanel === "browser"}
+          moduleId={moduleId}
+          appliedFunctionSearchQuery={appliedFunctionSearchQuery}
+          functionCount={functionCount}
+          totalFunctionCount={totalFunctionCount}
+          functionScrollRef={functionScrollRef}
+          functionListTotalSize={functionRowVirtualizer.getTotalSize()}
+          functionVirtualItems={functionVirtualItems}
+          boundedFunctionWindowStart={boundedFunctionWindowStart}
+          displayedFunctionIndexes={displayedFunctionIndexes}
+          functions={functions}
+          goToAddress={goToAddress}
+          onNavigateToRva={navigateToRva}
+          isBrowserSearchVisible={isBrowserSearchVisible}
+          browserSearchInputRef={browserSearchInputRef}
+          functionSearchQuery={functionSearchQuery}
+          onFunctionSearchQueryChange={setFunctionSearchQuery}
+          onActivate={() => setActivePanel("browser")}
+        />
 
         <div
           className="splitter splitter-left"
@@ -1449,252 +1180,50 @@ export function App() {
           onPointerDown={startResizing}
         />
 
-        <section
-          className={`panel panel-disassembly ${
-            activePanel === "disassembly" ? "is-panel-active" : ""
-          }`}
-          onPointerDown={() => setActivePanel("disassembly")}
-          onWheel={() => setActivePanel("disassembly")}
-          onFocusCapture={() => setActivePanel("disassembly")}
-        >
-          <header className="panel-header">
-            <h2>Disassembly</h2>
-            <span>
-              {moduleId && linearInfo ? `${linearInfo.rowCount} rows` : ""}
-            </span>
-          </header>
-          <div className="panel-body table-body" style={disassemblyColumnStyle}>
-            <div className="disassembly-columns-header">
-              <div className="column-header-cell">
-                <span>Section</span>
-                <Button
-                  className="column-resizer"
-                  size="icon"
-                  variant="ghost"
-                  aria-label="Resize Section column"
-                  onPointerDown={(event) =>
-                    startColumnResizing("section", event)
-                  }
-                />
-              </div>
-              <div className="column-header-cell">
-                <span>Address</span>
-                <Button
-                  className="column-resizer"
-                  size="icon"
-                  variant="ghost"
-                  aria-label="Resize Address column"
-                  onPointerDown={(event) =>
-                    startColumnResizing("address", event)
-                  }
-                />
-              </div>
-              <div className="column-header-cell">
-                <span>Bytes</span>
-                <Button
-                  className="column-resizer"
-                  size="icon"
-                  variant="ghost"
-                  aria-label="Resize Bytes column"
-                  onPointerDown={(event) => startColumnResizing("bytes", event)}
-                />
-              </div>
-              <div className="column-header-cell">
-                <span>Instruction</span>
-                <Button
-                  className="column-resizer"
-                  size="icon"
-                  variant="ghost"
-                  aria-label="Resize Instruction column"
-                  onPointerDown={(event) =>
-                    startColumnResizing("instruction", event)
-                  }
-                />
-              </div>
-              <div className="column-header-cell">
-                <span>Comment</span>
-              </div>
-            </div>
-
-            <div
-              className="disassembly-scroll-region"
-              ref={disassemblyScrollRef}
-            >
-              <div
-                className="disassembly-rows-canvas"
-                style={{ height: `${rowVirtualizer.getTotalSize()}px` }}
-              >
-                {virtualItems.map((virtualRow) => {
-                  const logicalRowIndex =
-                    boundedDisassemblyWindowStart + virtualRow.index;
-                  const row = readRow(logicalRowIndex);
-                  const top = virtualRow.start;
-
-                  if (!row) {
-                    return (
-                      <div
-                        key={`loading-${logicalRowIndex}`}
-                        className="disassembly-row row-loading"
-                        style={{ transform: `translateY(${top}px)` }}
-                      >
-                        <div className="cell section-cell" />
-                        <div className="cell">
-                          <code>...</code>
-                        </div>
-                        <div className="cell">
-                          <code>...</code>
-                        </div>
-                        <div className="cell">loading</div>
-                        <div className="cell" />
-                      </div>
-                    );
-                  }
-
-                  return (
-                    <div
-                      key={`${logicalRowIndex}-${cacheEpoch}-${row.address}`}
-                      className={`disassembly-row kind-${row.kind} ${
-                        selectedRowIndex === logicalRowIndex ? "is-current" : ""
-                      }`}
-                      style={{ transform: `translateY(${top}px)` }}
-                      onPointerDown={(event) => {
-                        if (event.button !== 0) {
-                          return;
-                        }
-                        setSelectedRowIndex(logicalRowIndex);
-                        setGoToAddress(row.address);
-                        pushSelectionHistory(row.address);
-                      }}
-                    >
-                      <div className="cell section-cell">
-                        {findSectionName(row.address)}
-                      </div>
-                      <div className="cell">
-                        <code>{row.address}</code>
-                      </div>
-                      <div className="cell">
-                        <code>{row.bytes}</code>
-                      </div>
-                      <div className="cell">
-                        <span
-                          className={`mnemonic mnemonic-${
-                            row.instructionCategory ?? "other"
-                          }`}
-                        >
-                          {row.mnemonic}
-                        </span>
-                        {row.operands ? (
-                          <span className="operands">{row.operands}</span>
-                        ) : null}
-                      </div>
-                      <div className="cell comment-cell">
-                        {row.comment ? <span>{`; ${row.comment}`}</span> : null}
-                        {row.branchTarget ? (
-                          <a
-                            className="comment-link"
-                            href={`#${row.branchTarget}`}
-                            onClick={(event) => {
-                              event.preventDefault();
-                              void navigateToRva(row.branchTarget ?? "");
-                            }}
-                          >
-                            ; branch -&gt; {row.branchTarget}
-                          </a>
-                        ) : null}
-                        {row.callTarget ? (
-                          <a
-                            className="comment-link"
-                            href={`#${row.callTarget}`}
-                            onClick={(event) => {
-                              event.preventDefault();
-                              void navigateToRva(row.callTarget ?? "");
-                            }}
-                          >
-                            ; call -&gt; {row.callTarget}
-                          </a>
-                        ) : null}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-        </section>
+        <DisassemblyPanel
+          isActive={activePanel === "disassembly"}
+          moduleId={moduleId}
+          rowCount={linearInfo?.rowCount ?? 0}
+          disassemblyColumnStyle={disassemblyColumnStyle}
+          onActivate={() => setActivePanel("disassembly")}
+          onStartColumnResizing={startColumnResizing}
+          disassemblyScrollRef={disassemblyScrollRef}
+          disassemblyListTotalSize={rowVirtualizer.getTotalSize()}
+          virtualItems={virtualItems}
+          boundedDisassemblyWindowStart={boundedDisassemblyWindowStart}
+          readRow={readRow}
+          cacheEpoch={cacheEpoch}
+          selectedRowIndex={selectedRowIndex}
+          onSelectRow={(rowIndex, address) => {
+            setSelectedRowIndex(rowIndex);
+            setGoToAddress(address);
+            pushSelectionHistory(address);
+          }}
+          findSectionName={findSectionName}
+          onNavigateToRva={navigateToRva}
+        />
       </main>
 
-      <footer className="status-bar">
-        <Badge className={`engine-state ${engineStateClass}`} variant="outline">
-          Engine {engineStatus}
-        </Badge>
-        {isSearchingFunctions ? (
-          <span aria-live="polite" className="status-searching">
-            Searching
-            <span aria-hidden="true" className="status-searching-dots">
-              <span>.</span>
-              <span>.</span>
-              <span>.</span>
-            </span>
-          </span>
-        ) : null}
-        <div className="status-spacer" />
-        <ModeToggle />
-      </footer>
+      <AppStatusBar
+        engineStatus={engineStatus}
+        engineStateClass={engineStateClass}
+        isSearchingFunctions={isSearchingFunctions}
+      />
 
-      <Dialog open={isLoading}>
-        <DialogContent
-          className="loading-modal"
-          overlayClassName="loading-modal-overlay"
-          onEscapeKeyDown={(event) => event.preventDefault()}
-          onInteractOutside={(event) => event.preventDefault()}
-          onPointerDownOutside={(event) => event.preventDefault()}
-        >
-          <DialogHeader className="loading-header">
-            <div aria-hidden="true" className="loading-spinner" />
-            <DialogTitle className="loading-title">Loading File</DialogTitle>
-          </DialogHeader>
-          <DialogHeader className="loading-copy">
-            <DialogDescription className="loading-description">
-              The selected file is being loaded and analyzed. Please wait.
-            </DialogDescription>
-          </DialogHeader>
-          <code className="loading-path">{loadingPath}</code>
-        </DialogContent>
-      </Dialog>
+      <LoadingDialog isLoading={isLoading} loadingPath={loadingPath} />
 
-      <Dialog onOpenChange={setIsGoToModalOpen} open={isGoToModalOpen}>
-        <DialogContent className="go-to-modal">
-          <DialogHeader>
-            <DialogTitle className="go-to-title">Go To Address</DialogTitle>
-          </DialogHeader>
-          <form
-            className="go-to-form"
-            onSubmit={(event) => {
-              void handleGoToSubmit(event);
-            }}
-          >
-            <Input
-              ref={goToInputRef}
-              value={goToInputValue}
-              onChange={(event) => setGoToInputValue(event.target.value)}
-              placeholder="0x140001000"
-            />
-            <DialogFooter className="go-to-modal-actions">
-              <Button
-                onClick={() => setIsGoToModalOpen(false)}
-                type="button"
-                variant="outline"
-                disabled={isLoading}
-              >
-                Cancel
-              </Button>
-              <Button type="submit" disabled={!moduleId || isLoading}>
-                Jump
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+      <GoToDialog
+        isOpen={isGoToModalOpen}
+        isLoading={isLoading}
+        moduleId={moduleId}
+        goToInputRef={goToInputRef}
+        goToInputValue={goToInputValue}
+        onGoToInputChange={setGoToInputValue}
+        onOpenChange={setIsGoToModalOpen}
+        onSubmit={(event) => {
+          void handleGoToSubmit(event);
+        }}
+      />
     </div>
   );
 }
