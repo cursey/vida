@@ -1,5 +1,21 @@
 # Work Log
 
+## 2026-03-05 - Align Renderer Theme Tokens with Shadcn New York v4 Zinc
+
+Summary:
+- Replaced renderer light/dark semantic color tokens with the exact `theme-zinc` values from the live `ui.shadcn.com` `new-york-v4` registry.
+- Migrated semantic color rendering from `hsl(var(--token))` to `oklch(var(--token))` across renderer styles and Tailwind color mappings so tokens match the shadcn v4 color model.
+- Added chart and sidebar token variables from the same registry set to keep token coverage consistent with shadcn defaults.
+
+Validation commands executed:
+- `just fmt`
+- `just check`
+- `just test`
+- `just build`
+
+Changed files index:
+- See `docs/change_files.md` for the detailed file list for this work item.
+
 ## 2026-03-05 - Mirror Shadcn Site Theme and Typography (Light + Dark)
 
 Summary:

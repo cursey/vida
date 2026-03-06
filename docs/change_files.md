@@ -1,5 +1,15 @@
 # Change Files
 
+## 2026-03-05 - Align Renderer Theme Tokens with Shadcn New York v4 Zinc
+
+Docs:
+- `docs/work_log.md`
+- `docs/change_files.md`
+
+Electron app:
+- `app-electron/tailwind.config.cjs`
+- `app-electron/src/renderer/styles.css`
+
 ## 2026-03-05 - Mirror Shadcn Site Theme and Typography (Light + Dark)
 
 Docs:
