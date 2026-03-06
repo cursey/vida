@@ -19,7 +19,7 @@ type BrowserPanelProps = {
   displayedFunctionIndexes: number[] | null;
   functions: FunctionSeed[];
   goToAddress: string;
-  onNavigateToRva: (rva: string) => Promise<boolean>;
+  onNavigateToVa: (va: string) => Promise<boolean>;
   isBrowserSearchVisible: boolean;
   browserSearchInputRef: RefObject<HTMLInputElement | null>;
   functionSearchQuery: string;
@@ -40,7 +40,7 @@ export function BrowserPanel({
   displayedFunctionIndexes,
   functions,
   goToAddress,
-  onNavigateToRva,
+  onNavigateToVa,
   isBrowserSearchVisible,
   browserSearchInputRef,
   functionSearchQuery,
@@ -93,7 +93,7 @@ export function BrowserPanel({
                     )}
                     variant="ghost"
                     type="button"
-                    onClick={() => void onNavigateToRva(func.start)}
+                    onClick={() => void onNavigateToVa(func.start)}
                   >
                     <span
                       className={cn(

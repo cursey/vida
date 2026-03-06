@@ -24,7 +24,7 @@ type DisassemblyPanelProps = {
   selectedRowIndex: number | null;
   onSelectRow: (rowIndex: number, address: string) => void;
   findSectionName: (address: string) => string;
-  onNavigateToRva: (rva: string) => Promise<boolean>;
+  onNavigateToVa: (va: string) => Promise<boolean>;
 };
 
 export function DisassemblyPanel({
@@ -43,7 +43,7 @@ export function DisassemblyPanel({
   selectedRowIndex,
   onSelectRow,
   findSectionName,
-  onNavigateToRva,
+  onNavigateToVa,
 }: DisassemblyPanelProps) {
   return (
     <section
@@ -179,7 +179,7 @@ export function DisassemblyPanel({
                         href={`#${row.branchTarget}`}
                         onClick={(event) => {
                           event.preventDefault();
-                          void onNavigateToRva(row.branchTarget ?? "");
+                          void onNavigateToVa(row.branchTarget ?? "");
                         }}
                       >
                         ; branch -&gt; {row.branchTarget}
@@ -191,7 +191,7 @@ export function DisassemblyPanel({
                         href={`#${row.callTarget}`}
                         onClick={(event) => {
                           event.preventDefault();
-                          void onNavigateToRva(row.callTarget ?? "");
+                          void onNavigateToVa(row.callTarget ?? "");
                         }}
                       >
                         ; call -&gt; {row.callTarget}

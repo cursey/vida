@@ -559,9 +559,9 @@ ipcMain.handle(
 );
 
 ipcMain.handle(
-  "engine:findLinearRowByRva",
-  async (_event, payload: MethodParams["linear.findRowByRva"]) => {
-    return engineClient.request("linear.findRowByRva", payload);
+  "engine:findLinearRowByVa",
+  async (_event, payload: MethodParams["linear.findRowByVa"]) => {
+    return engineClient.request("linear.findRowByVa", payload);
   },
 );
 

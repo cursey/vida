@@ -94,13 +94,6 @@ fn matches_mnemonic_prefix(value: &str, prefixes: &[&str]) -> bool {
         .any(|prefix| value == *prefix || value.starts_with(prefix))
 }
 
-pub(crate) fn to_rva_hex(target_va: u64, image_base: u64) -> Option<String> {
-    if target_va < image_base {
-        return None;
-    }
-    Some(to_hex(target_va - image_base))
-}
-
 pub(crate) fn bytes_to_hex(bytes: &[u8]) -> String {
     bytes
         .iter()
@@ -122,6 +115,6 @@ pub(crate) fn to_hex(value: u64) -> String {
     format!("0x{value:X}")
 }
 
-pub(crate) fn default_function_name(rva: u64) -> String {
-    format!("sub_{:08x}", rva)
+pub(crate) fn default_function_name(va: u64) -> String {
+    format!("sub_{va:x}")
 }

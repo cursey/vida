@@ -20,8 +20,8 @@ pub(crate) struct ModuleOpenResult {
     pub(crate) arch: &'static str,
     #[serde(rename = "imageBase")]
     pub(crate) image_base: String,
-    #[serde(rename = "entryRva")]
-    pub(crate) entry_rva: String,
+    #[serde(rename = "entryVa")]
+    pub(crate) entry_va: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -40,10 +40,10 @@ pub(crate) struct ModuleInfoResult {
 #[derive(Debug, Serialize)]
 pub(crate) struct SectionInfo {
     pub(crate) name: String,
-    #[serde(rename = "startRva")]
-    pub(crate) start_rva: String,
-    #[serde(rename = "endRva")]
-    pub(crate) end_rva: String,
+    #[serde(rename = "startVa")]
+    pub(crate) start_va: String,
+    #[serde(rename = "endVa")]
+    pub(crate) end_va: String,
     #[serde(rename = "rawOffset")]
     pub(crate) raw_offset: usize,
     #[serde(rename = "rawSize")]
@@ -54,8 +54,8 @@ pub(crate) struct SectionInfo {
 pub(crate) struct ImportInfo {
     pub(crate) library: String,
     pub(crate) name: String,
-    #[serde(rename = "addressRva")]
-    pub(crate) address_rva: String,
+    #[serde(rename = "addressVa")]
+    pub(crate) address_va: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -101,10 +101,10 @@ pub(crate) struct LinearViewInfoParams {
 pub(crate) struct LinearViewInfoResult {
     #[serde(rename = "rowCount")]
     pub(crate) row_count: u64,
-    #[serde(rename = "minRva")]
-    pub(crate) min_rva: String,
-    #[serde(rename = "maxRva")]
-    pub(crate) max_rva: String,
+    #[serde(rename = "minVa")]
+    pub(crate) min_va: String,
+    #[serde(rename = "maxVa")]
+    pub(crate) max_va: String,
     #[serde(rename = "rowHeight")]
     pub(crate) row_height: u64,
     #[serde(rename = "dataGroupSize")]
@@ -127,14 +127,14 @@ pub(crate) struct LinearRowsResult {
 }
 
 #[derive(Debug, Deserialize)]
-pub(crate) struct LinearFindRowByRvaParams {
+pub(crate) struct LinearFindRowByVaParams {
     #[serde(rename = "moduleId")]
     pub(crate) module_id: String,
-    pub(crate) rva: String,
+    pub(crate) va: String,
 }
 
 #[derive(Debug, Serialize)]
-pub(crate) struct LinearFindRowByRvaResult {
+pub(crate) struct LinearFindRowByVaResult {
     #[serde(rename = "rowIndex")]
     pub(crate) row_index: u64,
 }

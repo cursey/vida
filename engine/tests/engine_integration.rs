@@ -37,10 +37,10 @@ fn opens_module_lists_functions_and_disassembles() {
         .and_then(Value::as_str)
         .expect("moduleId should be string")
         .to_owned();
-    let entry_rva = open_result
-        .get("entryRva")
+    let entry_va = open_result
+        .get("entryVa")
         .and_then(Value::as_str)
-        .expect("entryRva should be string")
+        .expect("entryVa should be string")
         .to_owned();
 
     let list_result = success_result(state.handle_request(RpcRequest {
@@ -59,8 +59,8 @@ fn opens_module_lists_functions_and_disassembles() {
     assert!(
         functions
             .iter()
-            .any(|seed| seed.get("start").and_then(Value::as_str) == Some(entry_rva.as_str())),
-        "Expected at least one function seed at entry RVA"
+            .any(|seed| seed.get("start").and_then(Value::as_str) == Some(entry_va.as_str())),
+        "Expected at least one function seed at entry VA"
     );
 
     let starts = functions
@@ -70,20 +70,20 @@ fn opens_module_lists_functions_and_disassembles() {
                 .get("start")
                 .and_then(Value::as_str)
                 .expect("function start should be string");
-            u64::from_str_radix(raw.trim_start_matches("0x"), 16).expect("valid hex RVA")
+            u64::from_str_radix(raw.trim_start_matches("0x"), 16).expect("valid hex VA")
         })
         .collect::<Vec<u64>>();
     let mut sorted_starts = starts.clone();
     sorted_starts.sort_unstable();
     assert_eq!(
         starts, sorted_starts,
-        "Function seeds should be sorted by RVA"
+        "Function seeds should be sorted by VA"
     );
     sorted_starts.dedup();
     assert_eq!(
         starts.len(),
         sorted_starts.len(),
-        "Function seed RVAs should be unique",
+        "Function seed VAs should be unique",
     );
 
     for seed in functions {
@@ -103,20 +103,18 @@ fn opens_module_lists_functions_and_disassembles() {
         if kind == "pdb" {
             assert!(!name.is_empty(), "PDB function names should not be empty");
         } else {
+            let start = seed
+                .get("start")
+                .and_then(Value::as_str)
+                .expect("function start should be string");
+            let expected_name = format!("sub_{}", start.trim_start_matches("0x").to_lowercase());
             assert!(
                 name.starts_with("sub_"),
                 "Function name should start with sub_: {name}"
             );
             assert_eq!(
-                name.len(),
-                12,
-                "Function name should be sub_ plus 8 hex chars: {name}"
-            );
-            assert!(
-                name[4..]
-                    .chars()
-                    .all(|value| value.is_ascii_digit() || ('a'..='f').contains(&value)),
-                "Function name suffix should be lowercase hex: {name}"
+                name, expected_name,
+                "Function name should be sub_<va>: {name}"
             );
         }
     }
@@ -161,10 +159,10 @@ fn opens_module_lists_functions_and_disassembles() {
     let row_lookup_result = success_result(state.handle_request(RpcRequest {
         jsonrpc: "2.0".to_owned(),
         id: json!(4),
-        method: "linear.findRowByRva".to_owned(),
+        method: "linear.findRowByVa".to_owned(),
         params: json!({
             "moduleId": module_id,
-            "rva": entry_rva
+            "va": entry_va
         }),
     }));
     let row_index = row_lookup_result

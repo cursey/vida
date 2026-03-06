@@ -3,9 +3,7 @@ use iced_x86::{
     Decoder, DecoderOptions, FlowControl, Formatter, Instruction, IntelFormatter, Mnemonic,
 };
 
-use crate::disasm::{
-    bytes_to_hex, categorize_instruction, split_instruction_text, to_hex, to_rva_hex,
-};
+use crate::disasm::{bytes_to_hex, categorize_instruction, split_instruction_text, to_hex};
 use crate::error::EngineError;
 use crate::pe_utils::get_byte_at_rva;
 use crate::protocol::LinearViewRow;
@@ -308,6 +306,7 @@ pub(crate) fn materialize_linear_row(
     view: &LinearView,
     bytes: &[u8],
     pe: &PE<'_>,
+    image_base: u64,
     row_index: u64,
 ) -> Result<LinearViewRow, EngineError> {
     let segment = find_segment_by_row(view, row_index)?;
@@ -318,7 +317,7 @@ pub(crate) fn materialize_linear_row(
             let gap_size = segment.end_rva.saturating_sub(segment.start_rva);
             Ok(LinearViewRow {
                 kind: "gap",
-                address: to_hex(segment.start_rva),
+                address: to_hex(image_base + segment.start_rva),
                 bytes: String::new(),
                 mnemonic: "<gap>".to_owned(),
                 operands: String::new(),
@@ -327,7 +326,7 @@ pub(crate) fn materialize_linear_row(
                 call_target: None,
                 comment: Some(format!(
                     "unmapped to {} ({} bytes)",
-                    to_hex(segment.end_rva),
+                    to_hex(image_base + segment.end_rva),
                     gap_size
                 )),
             })
@@ -349,7 +348,7 @@ pub(crate) fn materialize_linear_row(
 
             Ok(LinearViewRow {
                 kind: "data",
-                address: to_hex(rva),
+                address: to_hex(image_base + rva),
                 bytes: bytes_text,
                 mnemonic: "db".to_owned(),
                 operands,
@@ -368,7 +367,7 @@ pub(crate) fn materialize_linear_row(
                 let value = get_byte_at_rva(bytes, pe, exec_row.rva);
                 return Ok(LinearViewRow {
                     kind: "data",
-                    address: to_hex(exec_row.rva),
+                    address: to_hex(image_base + exec_row.rva),
                     bytes: format!("{value:02X}"),
                     mnemonic: "db".to_owned(),
                     operands: format!("0x{value:02X}"),
@@ -400,7 +399,7 @@ pub(crate) fn materialize_linear_row(
                 let value = get_byte_at_rva(bytes, pe, exec_row.rva);
                 return Ok(LinearViewRow {
                     kind: "data",
-                    address: to_hex(exec_row.rva),
+                    address: to_hex(image_base + exec_row.rva),
                     bytes: format!("{value:02X}"),
                     mnemonic: "db".to_owned(),
                     operands: format!("0x{value:02X}"),
@@ -421,18 +420,18 @@ pub(crate) fn materialize_linear_row(
 
             let branch_target = match instruction.flow_control() {
                 FlowControl::ConditionalBranch | FlowControl::UnconditionalBranch => {
-                    to_rva_hex(instruction.near_branch_target(), image_base)
+                    Some(to_hex(instruction.near_branch_target()))
                 }
                 _ => None,
             };
             let call_target = match instruction.flow_control() {
-                FlowControl::Call => to_rva_hex(instruction.near_branch_target(), image_base),
+                FlowControl::Call => Some(to_hex(instruction.near_branch_target())),
                 _ => None,
             };
 
             Ok(LinearViewRow {
                 kind: "instruction",
-                address: to_hex(exec_row.rva),
+                address: to_hex(image_base + exec_row.rva),
                 bytes: bytes_text,
                 mnemonic,
                 operands,

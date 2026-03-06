@@ -1,5 +1,36 @@
 # Work Log
 
+## 2026-03-06 - Generate Default Function Names from VA
+
+Summary:
+- Updated engine default auto-generated function seed names to use VA instead of RVA (`sub_<va>`).
+- Switched `function.list` default naming callsites (entry/export/exception) to pass VA values derived from image base plus RVA.
+- Updated engine integration assertions to validate non-PDB default names against each seed's VA start address.
+
+Validation commands executed:
+- `just fmt`
+- `just check`
+- `just test`
+
+Changed files index:
+- See `docs/change_files.md` for the detailed file list for this work item.
+
+## 2026-03-06 - Migrate Engine/App Linear Address Contract from RVA to VA
+
+Summary:
+- Completed the protocol migration from RVA-oriented payloads to VA-oriented payloads/results for module metadata and linear navigation surfaces.
+- Updated engine protocol boundaries to keep internal linear indexing in RVA while converting request/response addresses at the boundary using module image base.
+- Switched linear row/disassembly output addresses and branch/call targets to VA values so renderer address displays and navigation align with loaded image base.
+- Unified renderer/browser/disassembly navigation naming and payloads around VA (`findRowByVa` with `va` field) and aligned existing renderer tests with the updated contract.
+
+Validation commands executed:
+- `just fmt`
+- `just check`
+- `just test`
+
+Changed files index:
+- See `docs/change_files.md` for the detailed file list for this work item.
+
 ## 2026-03-06 - Split Renderer App Monolith into Feature Modules
 
 Summary:

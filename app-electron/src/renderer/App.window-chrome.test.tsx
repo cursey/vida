@@ -54,7 +54,7 @@ describe("App custom window chrome", () => {
         moduleId: "m1",
         arch: "x64",
         imageBase: "0x140000000",
-        entryRva: "0x1000",
+        entryVa: "0x1000",
       }),
       getModuleInfo: vi.fn().mockResolvedValue({
         sections: [],
@@ -68,13 +68,13 @@ describe("App custom window chrome", () => {
       }),
       getLinearViewInfo: vi.fn().mockResolvedValue({
         rowCount: 0,
-        minRva: "0x0",
-        maxRva: "0x0",
+        minVa: "0x0",
+        maxVa: "0x0",
         rowHeight: 24,
         dataGroupSize: 16,
       }),
       getLinearRows: vi.fn().mockResolvedValue({ rows: [] }),
-      findLinearRowByRva: vi.fn().mockResolvedValue({ rowIndex: 0 }),
+      findLinearRowByVa: vi.fn().mockResolvedValue({ rowIndex: 0 }),
     };
 
     Object.defineProperty(window, "electronAPI", {

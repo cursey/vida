@@ -69,22 +69,22 @@
     "ModuleOpenResult": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["moduleId", "arch", "imageBase", "entryRva"],
+      "required": ["moduleId", "arch", "imageBase", "entryVa"],
       "properties": {
         "moduleId": { "$ref": "#/$defs/ModuleId" },
         "arch": { "type": "string", "const": "x64" },
         "imageBase": { "$ref": "#/$defs/HexAddress" },
-        "entryRva": { "$ref": "#/$defs/HexAddress" }
+        "entryVa": { "$ref": "#/$defs/HexAddress" }
       }
     },
     "SectionInfo": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["name", "startRva", "endRva", "rawOffset", "rawSize"],
+      "required": ["name", "startVa", "endVa", "rawOffset", "rawSize"],
       "properties": {
         "name": { "type": "string" },
-        "startRva": { "$ref": "#/$defs/HexAddress" },
-        "endRva": { "$ref": "#/$defs/HexAddress" },
+        "startVa": { "$ref": "#/$defs/HexAddress" },
+        "endVa": { "$ref": "#/$defs/HexAddress" },
         "rawOffset": { "type": "integer", "minimum": 0 },
         "rawSize": { "type": "integer", "minimum": 0 }
       }
@@ -92,11 +92,11 @@
     "ImportInfo": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["library", "name", "addressRva"],
+      "required": ["library", "name", "addressVa"],
       "properties": {
         "library": { "type": "string" },
         "name": { "type": "string" },
-        "addressRva": { "$ref": "#/$defs/HexAddress" }
+        "addressVa": { "$ref": "#/$defs/HexAddress" }
       }
     },
     "ExportInfo": {
@@ -312,3 +312,4 @@
     }
   }
 }
+

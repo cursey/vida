@@ -101,10 +101,10 @@ const electronApi: ElectronApi = {
     payload: MethodParams["linear.getRows"],
   ): Promise<MethodResult["linear.getRows"]> =>
     ipcRenderer.invoke("engine:getLinearRows", payload),
-  findLinearRowByRva: (
-    payload: MethodParams["linear.findRowByRva"],
-  ): Promise<MethodResult["linear.findRowByRva"]> =>
-    ipcRenderer.invoke("engine:findLinearRowByRva", payload),
+  findLinearRowByVa: (
+    payload: MethodParams["linear.findRowByVa"],
+  ): Promise<MethodResult["linear.findRowByVa"]> =>
+    ipcRenderer.invoke("engine:findLinearRowByVa", payload),
 };
 
 contextBridge.exposeInMainWorld("electronAPI", electronApi);

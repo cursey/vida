@@ -70,14 +70,14 @@ describe("App disassembly window virtualization", () => {
         moduleId: "huge-module",
         arch: "x64",
         imageBase: "0x140000000",
-        entryRva: "0x140001000",
+        entryVa: "0x140001000",
       }),
       getModuleInfo: vi.fn().mockResolvedValue({
         sections: [
           {
             name: ".text",
-            startRva: "0x140001000",
-            endRva: "0x142001000",
+            startVa: "0x140001000",
+            endVa: "0x142001000",
             rawOffset: 0,
             rawSize: 0,
           },
@@ -94,8 +94,8 @@ describe("App disassembly window virtualization", () => {
       }),
       getLinearViewInfo: vi.fn().mockResolvedValue({
         rowCount: HUGE_ROW_COUNT,
-        minRva: "0x140000000",
-        maxRva: "0x160000000",
+        minVa: "0x140000000",
+        maxVa: "0x160000000",
         rowHeight: ROW_HEIGHT,
         dataGroupSize: 16,
       }),
@@ -106,7 +106,7 @@ describe("App disassembly window virtualization", () => {
             rows: buildLinearRows(payload.startRow, payload.rowCount),
           }),
         ),
-      findLinearRowByRva: vi.fn().mockResolvedValue({
+      findLinearRowByVa: vi.fn().mockResolvedValue({
         rowIndex: 0,
       }),
     };

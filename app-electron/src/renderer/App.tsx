@@ -8,11 +8,7 @@ import {
   setupDeferredEdgeRebase,
 } from "@/features/shared/deferred-edge-rebase";
 import { isEditableTarget } from "@/features/shared/dom-utils";
-import {
-  clamp,
-  makePageKey,
-  parseHexRva,
-} from "@/features/shared/number-utils";
+import { clamp, makePageKey, parseHexVa } from "@/features/shared/number-utils";
 import { cn } from "@/lib/utils";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
@@ -82,7 +78,7 @@ export function App() {
   const [engineStatus, setEngineStatus] = useState<string>("checking");
   const [modulePath, setModulePath] = useState<string>("");
   const [moduleId, setModuleId] = useState<string>("");
-  const [entryRva, setEntryRva] = useState<string>("");
+  const [entryVa, setEntryVa] = useState<string>("");
   const [goToAddress, setGoToAddress] = useState<string>("");
   const [functions, setFunctions] = useState<FunctionSeed[]>([]);
   const [sections, setSections] = useState<SectionInfo[]>([]);
@@ -248,7 +244,7 @@ export function App() {
     setIsSearchingFunctions(false);
     setModulePath("");
     setModuleId("");
-    setEntryRva("");
+    setEntryVa("");
     setSections([]);
     setFunctions([]);
     resetDeferredEdgeRebaseState({
@@ -309,8 +305,8 @@ export function App() {
   const sectionRanges = useMemo(() => {
     return sections
       .map((section) => {
-        const start = parseHexRva(section.startRva);
-        const end = parseHexRva(section.endRva);
+        const start = parseHexVa(section.startVa);
+        const end = parseHexVa(section.endVa);
         if (start === null || end === null || end <= start) {
           return null;
         }
@@ -743,27 +739,27 @@ export function App() {
     return pageRows[index % PAGE_SIZE];
   }
 
-  function resetSelectionHistory(initialRva: string | null = null) {
+  function resetSelectionHistory(initialVa: string | null = null) {
     selectionHistoryRef.current = [];
     selectionHistoryIndexRef.current = -1;
 
-    if (!initialRva) {
+    if (!initialVa) {
       return;
     }
 
-    selectionHistoryRef.current.push(initialRva);
+    selectionHistoryRef.current.push(initialVa);
     selectionHistoryIndexRef.current = 0;
   }
 
-  const pushSelectionHistory = useCallback((rva: string) => {
-    if (!rva) {
+  const pushSelectionHistory = useCallback((va: string) => {
+    if (!va) {
       return;
     }
 
     const history = selectionHistoryRef.current;
     const currentIndex = selectionHistoryIndexRef.current;
 
-    if (currentIndex >= 0 && history[currentIndex] === rva) {
+    if (currentIndex >= 0 && history[currentIndex] === va) {
       return;
     }
 
@@ -771,7 +767,7 @@ export function App() {
       history.splice(currentIndex + 1);
     }
 
-    history.push(rva);
+    history.push(va);
 
     if (history.length > MAX_SELECTION_HISTORY) {
       const overflow = history.length - MAX_SELECTION_HISTORY;
@@ -858,19 +854,19 @@ export function App() {
       const opened = await window.electronAPI.openModule(chosenPath);
       const info = await window.electronAPI.getModuleInfo(opened.moduleId);
       const listed = await window.electronAPI.listFunctions(opened.moduleId);
-      const initialRva = listed.functions[0]?.start ?? opened.entryRva;
+      const initialVa = listed.functions[0]?.start ?? opened.entryVa;
 
       const viewInfo = await window.electronAPI.getLinearViewInfo(
         opened.moduleId,
       );
-      const rowLookup = await window.electronAPI.findLinearRowByRva({
+      const rowLookup = await window.electronAPI.findLinearRowByVa({
         moduleId: opened.moduleId,
-        rva: initialRva,
+        va: initialVa,
       });
 
       setModulePath(chosenPath);
       setModuleId(opened.moduleId);
-      setEntryRva(opened.entryRva);
+      setEntryVa(opened.entryVa);
       setSections(info.sections);
       functionSearchJobIdRef.current += 1;
       setIsBrowserSearchVisible(false);
@@ -881,10 +877,10 @@ export function App() {
       setFunctions(listed.functions);
       resetFunctionBrowserViewport();
       setLinearInfo(viewInfo);
-      setGoToAddress(initialRva);
+      setGoToAddress(initialVa);
       setSelectedRowIndex(null);
       setDisassemblyWindowStartRow(0);
-      resetSelectionHistory(initialRva);
+      resetSelectionHistory(initialVa);
       resetLinearCache();
       setPendingScrollRow(rowLookup.rowIndex);
       void window.electronAPI.addRecentExecutable(chosenPath).catch((error) => {
@@ -909,9 +905,9 @@ export function App() {
     await openModuleFromPath(chosenPath);
   }
 
-  const navigateToRva = useCallback(
+  const navigateToVa = useCallback(
     async (
-      rva: string,
+      va: string,
       options: { recordHistory?: boolean } = { recordHistory: true },
     ) => {
       if (!moduleId) {
@@ -921,14 +917,14 @@ export function App() {
       setErrorText("");
 
       try {
-        const found = await window.electronAPI.findLinearRowByRva({
+        const found = await window.electronAPI.findLinearRowByVa({
           moduleId,
-          rva,
+          va,
         });
         if (options.recordHistory !== false) {
-          pushSelectionHistory(rva);
+          pushSelectionHistory(va);
         }
-        setGoToAddress(rva);
+        setGoToAddress(va);
         setPendingScrollRow(found.rowIndex);
         return true;
       } catch (error: unknown) {
@@ -954,25 +950,25 @@ export function App() {
         return;
       }
 
-      const targetRva = history[nextIndex];
+      const targetVa = history[nextIndex];
       selectionHistoryIndexRef.current = nextIndex;
-      const navigated = await navigateToRva(targetRva, {
+      const navigated = await navigateToVa(targetVa, {
         recordHistory: false,
       });
       if (!navigated) {
         selectionHistoryIndexRef.current = currentIndex;
       }
     },
-    [moduleId, navigateToRva],
+    [moduleId, navigateToVa],
   );
 
   const openGoToModal = useCallback(() => {
     if (!moduleId) {
       return;
     }
-    setGoToInputValue(goToAddress || entryRva || "");
+    setGoToInputValue(goToAddress || entryVa || "");
     setIsGoToModalOpen(true);
-  }, [moduleId, goToAddress, entryRva]);
+  }, [moduleId, goToAddress, entryVa]);
 
   useEffect(() => {
     function handleMouseHistoryButtons(event: MouseEvent) {
@@ -1097,19 +1093,19 @@ export function App() {
     if (!target) {
       return;
     }
-    const navigated = await navigateToRva(target);
+    const navigated = await navigateToVa(target);
     if (navigated) {
       setIsGoToModalOpen(false);
     }
   }
 
   function findSectionName(address: string): string {
-    const rva = parseHexRva(address);
-    if (rva === null) {
+    const va = parseHexVa(address);
+    if (va === null) {
       return "";
     }
     for (const range of sectionRanges) {
-      if (rva >= range.start && rva < range.end) {
+      if (va >= range.start && va < range.end) {
         return range.name;
       }
     }
@@ -1163,7 +1159,7 @@ export function App() {
           displayedFunctionIndexes={displayedFunctionIndexes}
           functions={functions}
           goToAddress={goToAddress}
-          onNavigateToRva={navigateToRva}
+          onNavigateToVa={navigateToVa}
           isBrowserSearchVisible={isBrowserSearchVisible}
           browserSearchInputRef={browserSearchInputRef}
           functionSearchQuery={functionSearchQuery}
@@ -1200,7 +1196,7 @@ export function App() {
             pushSelectionHistory(address);
           }}
           findSectionName={findSectionName}
-          onNavigateToRva={navigateToRva}
+          onNavigateToVa={navigateToVa}
         />
       </main>
 

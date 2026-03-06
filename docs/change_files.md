@@ -1,5 +1,46 @@
 # Change Files
 
+## 2026-03-06 - Generate Default Function Names from VA
+
+Docs:
+- `docs/work_log.md`
+- `docs/change_files.md`
+
+Engine:
+- `engine/src/disasm.rs`
+- `engine/src/state.rs`
+- `engine/tests/engine_integration.rs`
+
+## 2026-03-06 - Migrate Engine/App Linear Address Contract from RVA to VA
+
+Docs:
+- `docs/work_log.md`
+- `docs/change_files.md`
+
+Shared:
+- `shared/schemas/protocol.schema.json`
+
+Electron app:
+- `app-electron/src/main/main.ts`
+- `app-electron/src/preload.ts`
+- `app-electron/src/shared/protocol.ts`
+- `app-electron/src/renderer/App.tsx`
+- `app-electron/src/renderer/features/shared/number-utils.ts`
+- `app-electron/src/renderer/features/browser/browser-panel.tsx`
+- `app-electron/src/renderer/features/disassembly/disassembly-panel.tsx`
+- `app-electron/src/renderer/App.disassembly-window.test.tsx`
+- `app-electron/src/renderer/App.function-browser-window.test.tsx`
+- `app-electron/src/renderer/App.function-browser.test.tsx`
+- `app-electron/src/renderer/App.loading-modal.test.tsx`
+- `app-electron/src/renderer/App.window-chrome.test.tsx`
+
+Engine:
+- `engine/src/disasm.rs`
+- `engine/src/linear.rs`
+- `engine/src/protocol.rs`
+- `engine/src/state.rs`
+- `engine/tests/engine_integration.rs`
+
 ## 2026-03-06 - Split Renderer App Monolith into Feature Modules
 
 Docs:

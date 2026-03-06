@@ -16,7 +16,7 @@ export type EngineMethod =
   | "function.disassembleLinear"
   | "linear.getViewInfo"
   | "linear.getRows"
-  | "linear.findRowByRva";
+  | "linear.findRowByVa";
 
 export type MethodParams = {
   "engine.ping": EnginePingParams;
@@ -32,9 +32,9 @@ export type MethodParams = {
     startRow: number;
     rowCount: number;
   };
-  "linear.findRowByRva": {
+  "linear.findRowByVa": {
     moduleId: string;
-    rva: HexAddress;
+    va: HexAddress;
   };
 };
 
@@ -53,8 +53,8 @@ export type FunctionSeed = {
 
 export type SectionInfo = {
   name: string;
-  startRva: HexAddress;
-  endRva: HexAddress;
+  startVa: HexAddress;
+  endVa: HexAddress;
   rawOffset: number;
   rawSize: number;
 };
@@ -62,7 +62,7 @@ export type SectionInfo = {
 export type ImportInfo = {
   library: string;
   name: string;
-  addressRva: HexAddress;
+  addressVa: HexAddress;
 };
 
 export type ExportInfo = {
@@ -115,7 +115,7 @@ export type MethodResult = {
     moduleId: string;
     arch: "x64";
     imageBase: HexAddress;
-    entryRva: HexAddress;
+    entryVa: HexAddress;
   };
   "module.info": {
     sections: SectionInfo[];
@@ -131,15 +131,15 @@ export type MethodResult = {
   };
   "linear.getViewInfo": {
     rowCount: number;
-    minRva: HexAddress;
-    maxRva: HexAddress;
+    minVa: HexAddress;
+    maxVa: HexAddress;
     rowHeight: number;
     dataGroupSize: number;
   };
   "linear.getRows": {
     rows: LinearRow[];
   };
-  "linear.findRowByRva": {
+  "linear.findRowByVa": {
     rowIndex: number;
   };
 };
@@ -210,7 +210,7 @@ export type ElectronApi = {
   getLinearRows: (
     payload: MethodParams["linear.getRows"],
   ) => Promise<MethodResult["linear.getRows"]>;
-  findLinearRowByRva: (
-    payload: MethodParams["linear.findRowByRva"],
-  ) => Promise<MethodResult["linear.findRowByRva"]>;
+  findLinearRowByVa: (
+    payload: MethodParams["linear.findRowByVa"],
+  ) => Promise<MethodResult["linear.findRowByVa"]>;
 };

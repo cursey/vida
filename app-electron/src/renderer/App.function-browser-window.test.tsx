@@ -73,7 +73,7 @@ describe("App function browser bounded window virtualization", () => {
         moduleId: "m1",
         arch: "x64",
         imageBase: "0x140000000",
-        entryRva: functions[0]?.start ?? "0x1000",
+        entryVa: functions[0]?.start ?? "0x1000",
       }),
       getModuleInfo: vi.fn().mockResolvedValue({
         sections: [],
@@ -89,15 +89,15 @@ describe("App function browser bounded window virtualization", () => {
       }),
       getLinearViewInfo: vi.fn().mockResolvedValue({
         rowCount: 1024,
-        minRva: "0x0",
-        maxRva: "0x4000",
+        minVa: "0x0",
+        maxVa: "0x4000",
         rowHeight: 24,
         dataGroupSize: 16,
       }),
       getLinearRows: vi.fn().mockResolvedValue({
         rows: [],
       }),
-      findLinearRowByRva: vi.fn().mockResolvedValue({
+      findLinearRowByVa: vi.fn().mockResolvedValue({
         rowIndex: 0,
       }),
     };

@@ -81,7 +81,7 @@ describe("App function browser virtualization", () => {
         moduleId: "m1",
         arch: "x64",
         imageBase: "0x140000000",
-        entryRva: functions[0].start,
+        entryVa: functions[0].start,
       }),
       getModuleInfo: vi.fn().mockResolvedValue({
         sections: [],
@@ -97,15 +97,15 @@ describe("App function browser virtualization", () => {
       }),
       getLinearViewInfo: vi.fn().mockResolvedValue({
         rowCount: 0,
-        minRva: "0x0",
-        maxRva: "0x0",
+        minVa: "0x0",
+        maxVa: "0x0",
         rowHeight: 24,
         dataGroupSize: 16,
       }),
       getLinearRows: vi.fn().mockResolvedValue({
         rows: [],
       }),
-      findLinearRowByRva: vi.fn().mockResolvedValue({
+      findLinearRowByVa: vi.fn().mockResolvedValue({
         rowIndex: 0,
       }),
     };
