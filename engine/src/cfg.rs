@@ -68,6 +68,7 @@ pub(crate) fn analyze_function_cfg(
     section_lookup: &SectionLookup,
     image_base: u64,
     start_rva: u64,
+    mut is_canceled: impl FnMut() -> bool,
 ) -> Result<FunctionGraphAnalysis, EngineError> {
     if !section_lookup.is_executable_rva(start_rva) {
         return Err(EngineError::InvalidAddress);
@@ -85,6 +86,9 @@ pub(crate) fn analyze_function_cfg(
     let mut total_instructions = 0usize;
 
     while let Some(block_start) = queue.pop_front() {
+        if is_canceled() {
+            return Err(EngineError::Canceled);
+        }
         if blocks.contains_key(&block_start) {
             continue;
         }
@@ -99,6 +103,9 @@ pub(crate) fn analyze_function_cfg(
         let mut instructions = Vec::<BasicBlockInstructionAnalysis>::new();
 
         loop {
+            if is_canceled() {
+                return Err(EngineError::Canceled);
+            }
             if total_instructions >= MAX_CFG_INSTRUCTIONS
                 || !section_lookup.is_executable_rva(current_rva)
             {
@@ -296,4 +303,38 @@ fn decode_instruction_at_rva(
         branch_target_rva,
         call_target_rva,
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use std::fs;
+
+    use super::analyze_function_cfg;
+    use crate::EngineError;
+    use crate::fixture_path;
+    use crate::pe_utils::{build_section_lookup, parse_pe64};
+
+    #[test]
+    fn function_cfg_analysis_honors_cancellation() {
+        let fixture = fixture_path("minimal_x64.exe");
+        let bytes = fs::read(&fixture).expect("fixture bytes should load");
+        let pe = parse_pe64(bytes.as_slice()).expect("fixture should parse as PE64");
+        let section_lookup = build_section_lookup(&pe);
+        let image_base = pe.image_base as u64;
+        let start_rva = pe.entry as u64;
+        let mut poll_count = 0usize;
+
+        let result = analyze_function_cfg(
+            bytes.as_slice(),
+            &section_lookup,
+            image_base,
+            start_rva,
+            || {
+                poll_count += 1;
+                poll_count > 1
+            },
+        );
+
+        assert!(matches!(result, Err(EngineError::Canceled)));
+    }
 }

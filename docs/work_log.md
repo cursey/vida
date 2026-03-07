@@ -1,5 +1,20 @@
 # Work Log
 
+## 2026-03-07 - Improve Engine Analysis Cancellation Responsiveness
+
+Summary:
+- Threaded cancellation checks into per-function CFG traversal so in-flight workers can stop during basic-block and instruction walks instead of waiting for an entire function to finish.
+- Split worker-pool stop scheduling from user cancellation so real analysis errors still propagate correctly while cancel requests prevent new tasks and skip unnecessary merge work.
+- Added unit coverage for both CFG-level cancellation and module-level cancellation during parallel analysis.
+
+Validation commands executed:
+- `just engine-fmt`
+- `cargo fmt --manifest-path engine/Cargo.toml -- --check`
+- `just engine-test`
+
+Changed files index:
+- See `docs/change_files.md` for the detailed file list for this work item.
+
 ## 2026-03-07 - Parallelize Per-Function Engine Analysis
 
 Summary:

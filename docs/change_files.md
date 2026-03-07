@@ -1,5 +1,15 @@
 # Change Files
 
+## 2026-03-07 - Improve Engine Analysis Cancellation Responsiveness
+
+Engine:
+- `engine/src/analysis.rs`
+- `engine/src/cfg.rs`
+
+Docs:
+- `docs/work_log.md`
+- `docs/change_files.md`
+
 ## 2026-03-07 - Parallelize Per-Function Engine Analysis
 
 Engine:

@@ -147,7 +147,8 @@ where
     if !analysis_order.is_empty() {
         let worker_count = analysis_worker_count(analysis_order.len());
         let next_index = AtomicUsize::new(0);
-        let stop_requested = AtomicBool::new(false);
+        let cancel_requested = AtomicBool::new(false);
+        let stop_scheduling = AtomicBool::new(false);
         let (sender, receiver) = mpsc::channel::<(
             usize,
             Result<Option<CompletedFunctionAnalysis>, EngineError>,
@@ -162,12 +163,13 @@ where
                 let sender = sender.clone();
                 let analysis_order = &analysis_order;
                 let next_index = &next_index;
-                let stop_requested = &stop_requested;
+                let cancel_requested = &cancel_requested;
+                let stop_scheduling = &stop_scheduling;
                 let section_lookup = &section_lookup;
 
                 scope.spawn(move || {
                     loop {
-                        if stop_requested.load(Ordering::Relaxed) {
+                        if stop_scheduling.load(Ordering::Relaxed) {
                             break;
                         }
 
@@ -176,10 +178,18 @@ where
                             break;
                         }
 
-                        let result =
-                            analyze_seed(bytes, section_lookup, image_base, &analysis_order[index]);
-                        if result.is_err() {
-                            stop_requested.store(true, Ordering::Relaxed);
+                        let result = analyze_seed(
+                            bytes,
+                            section_lookup,
+                            image_base,
+                            &analysis_order[index],
+                            || cancel_requested.load(Ordering::Relaxed),
+                        );
+                        if result
+                            .as_ref()
+                            .is_err_and(|error| !matches!(error, EngineError::Canceled))
+                        {
+                            stop_scheduling.store(true, Ordering::Relaxed);
                         }
                         if sender.send((index, result)).is_err() {
                             break;
@@ -191,7 +201,8 @@ where
 
             loop {
                 if is_canceled() {
-                    stop_requested.store(true, Ordering::Relaxed);
+                    cancel_requested.store(true, Ordering::Relaxed);
+                    stop_scheduling.store(true, Ordering::Relaxed);
                 }
 
                 match receiver.recv_timeout(ANALYSIS_RESULT_POLL_INTERVAL) {
@@ -208,15 +219,17 @@ where
                             Ok(completed) => {
                                 pending_results.insert(index, completed);
                             }
+                            Err(EngineError::Canceled)
+                                if cancel_requested.load(Ordering::Relaxed) => {}
                             Err(error) => {
-                                stop_requested.store(true, Ordering::Relaxed);
+                                stop_scheduling.store(true, Ordering::Relaxed);
                                 if first_error.is_none() {
                                     first_error = Some(error);
                                 }
                             }
                         }
 
-                        if first_error.is_none() {
+                        if first_error.is_none() && !cancel_requested.load(Ordering::Relaxed) {
                             while let Some(completed) = pending_results.remove(&next_merge_index) {
                                 if let Some(completed) = completed {
                                     merge_completed_function_analysis(
@@ -237,7 +250,7 @@ where
             }
         });
 
-        if is_canceled() {
+        if cancel_requested.load(Ordering::Relaxed) || is_canceled() {
             return Err(EngineError::Canceled);
         }
 
@@ -347,15 +360,31 @@ fn analyze_seed(
     section_lookup: &SectionLookup,
     image_base: u64,
     seed: &FunctionSeedEntry,
+    mut is_canceled: impl FnMut() -> bool,
 ) -> Result<Option<CompletedFunctionAnalysis>, EngineError> {
-    let analysis = match analyze_function_cfg(bytes, section_lookup, image_base, seed.start_rva) {
+    let analysis = match analyze_function_cfg(
+        bytes,
+        section_lookup,
+        image_base,
+        seed.start_rva,
+        &mut is_canceled,
+    ) {
         Ok(analysis) => analysis,
         Err(EngineError::InvalidAddress) => return Ok(None),
         Err(error) => return Err(error),
     };
 
+    if is_canceled() {
+        return Err(EngineError::Canceled);
+    }
+
     let (cached_graph, function_rows) =
         build_cached_function_graph(analysis, image_base, seed.name.clone());
+
+    if is_canceled() {
+        return Err(EngineError::Canceled);
+    }
+
     Ok(Some(CompletedFunctionAnalysis {
         function_start_rva: seed.start_rva,
         cached_graph,
@@ -628,11 +657,15 @@ fn build_cached_function_graph(
 mod tests {
     use super::{
         CachedFunctionGraph, CompletedFunctionAnalysis, InstructionOwnerRange,
-        instruction_owner_for_rva, instruction_range_overlaps, merge_completed_function_analysis,
+        build_module_analysis_with_progress, instruction_owner_for_rva, instruction_range_overlaps,
+        merge_completed_function_analysis,
     };
     use crate::api::InstructionCategory;
     use crate::linear::AnalyzedInstructionRow;
+    use crate::{EngineError, fixture_path};
     use std::collections::{BTreeMap, HashMap};
+    use std::fs;
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
     fn instruction_row(start_rva: u64, len: u8) -> AnalyzedInstructionRow {
         AnalyzedInstructionRow {
@@ -761,5 +794,21 @@ mod tests {
                 .map(Vec::len),
             None
         );
+    }
+
+    #[test]
+    fn module_analysis_returns_canceled_when_requested_during_parallel_analysis() {
+        let module_path = fixture_path("minimal_x64.exe");
+        let bytes = fs::read(&module_path).expect("fixture bytes should load");
+        let cancel_checks = AtomicUsize::new(0);
+
+        let result = build_module_analysis_with_progress(
+            &module_path,
+            &bytes,
+            |_| {},
+            || cancel_checks.fetch_add(1, Ordering::Relaxed) >= 1,
+        );
+
+        assert!(matches!(result, Err(EngineError::Canceled)));
     }
 }
