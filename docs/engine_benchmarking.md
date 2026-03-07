@@ -14,7 +14,9 @@ This document tracks how to measure engine performance and records the latest kn
 - Active benchmarks today:
   - `engine/module_open_and_analyze/minimal_x64`
   - `engine/linear_rows/minimal_x64`
-- Fixture: `engine/tests/fixtures/minimal_x64.exe`
+  - `engine/function_graph_by_va/minimal_x64`
+  - `engine/linear_disassembly/minimal_x64`
+  - Fixture: `engine/tests/fixtures/minimal_x64.exe`
 
 ## Commands
 
@@ -53,6 +55,37 @@ When performance gains are observed, append a new row under this section:
 - Baseline vs current values for each relevant bench
 - The code changes that caused the change
 - Any caveats (CPU load, debug/release profile, warm cache effects)
+
+- 2026-03-07
+- Command: `just engine-bench`
+
+Bench: `engine/module_open_and_analyze/minimal_x64`
+- Baseline: ~76.54 ms
+- Current: ~70.27 ms
+- Delta: ~-8.2%
+- Change driver: `engine/src/analysis.rs` (range-based instruction ownership), `engine/src/state.rs` (range owner lookups)
+- Evidence: stash baseline -> re-apply edits -> re-run `just engine-bench`
+
+Bench: `engine/linear_rows/minimal_x64`
+- Baseline: ~26.41 µs
+- Current: ~24.63 µs
+- Delta: ~-6.8%
+- Change driver: `engine/src/analysis.rs` (instruction ownership range map removes per-byte ownership inserts)
+- Evidence: stash baseline -> re-apply edits -> re-run `just engine-bench`
+
+Bench: `engine/function_graph_by_va/minimal_x64`
+- Baseline: ~8.97 µs
+- Current: ~9.00 µs
+- Delta: ~+0.3%
+- Change driver: `engine/src/state.rs` (O(log n) lookup replaces hash-map probe); noise-level regression in this micro-benchmark
+- Evidence: stash baseline -> re-apply edits -> re-run `just engine-bench`
+
+Bench: `engine/linear_disassembly/minimal_x64`
+- Baseline: ~0.800 µs
+- Current: ~0.791 µs
+- Delta: ~-1.1%
+- Change driver: `engine/src/state.rs` + `engine/src/analysis.rs` (function-owner range lookup)
+- Evidence: stash baseline -> re-apply edits -> re-run `just engine-bench`
 
 ### Result update template
 
@@ -102,13 +135,19 @@ Notes: additional reruns converged around the ~24-27 µs range
 | --- | --- | --- | --- | --- | --- | --- |
 | 2026-03-07 | `engine/module_open_and_analyze/minimal_x64` | ~99.56 ms | ~76.54 ms | ~-23% | `engine/src/analysis.rs` (analysis claim pass allocation reductions), `engine/src/linear.rs` (linear row formatting path cleanup) | stash baseline → optimized |
 | 2026-03-07 | `engine/linear_rows/minimal_x64` | ~33.74 µs | ~26.03 µs | ~-23% | `engine/src/linear.rs` (row materialization no longer builds temporary row vectors) | stash baseline → optimized |
+| 2026-03-07 | `engine/module_open_and_analyze/minimal_x64` | ~76.54 ms | ~70.27 ms | ~-8.2% | `engine/src/analysis.rs` (instruction ownership moved to range map), `engine/src/state.rs` (range lookup) | stash baseline -> re-apply edits -> re-run |
+| 2026-03-07 | `engine/linear_rows/minimal_x64` | ~26.41 µs | ~24.63 µs | ~-6.8% | `engine/src/analysis.rs` (range ownership map skips per-byte bookkeeping) | stash baseline → re-apply edits → re-run |
+| 2026-03-07 | `engine/function_graph_by_va/minimal_x64` | ~8.97 µs | ~9.00 µs | ~+0.3% | `engine/src/state.rs` (function graph owner lookup path) | stash baseline → re-apply edits → re-run |
+| 2026-03-07 | `engine/linear_disassembly/minimal_x64` | ~0.800 µs | ~0.791 µs | ~-1.1% | `engine/src/analysis.rs` + `engine/src/state.rs` (range owner lookup) | stash baseline -> re-apply edits -> re-run |
 
 ### Most recent checkpoint
 
 - After the current optimized state stabilized, single-sequence reruns are typically:
-  - `engine/module_open_and_analyze/minimal_x64`: ~70.8 ms to ~76.8 ms (run-to-run fluctuation)
-  - `engine/linear_rows/minimal_x64`: ~24.2 µs to ~26.9 µs (within noise)
-- Use the A/B workflow above for future committed optimization sets.
+  - `engine/module_open_and_analyze/minimal_x64`: ~70.27 ms (recent run)
+  - `engine/linear_rows/minimal_x64`: ~24.63 µs (recent run)
+  - `engine/function_graph_by_va/minimal_x64`: ~9.00 µs (micro-benchmark noise band)
+  - `engine/linear_disassembly/minimal_x64`: ~0.791 µs (micro-benchmark noise band)
+  - Use the A/B workflow above for future committed optimization sets.
 
 ## Maintenance rule
 

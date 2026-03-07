@@ -8,6 +8,28 @@ Docs:
 Root:
 - `AGENTS.md`
 
+## 2026-03-07 - Expand Engine Benchmark Coverage
+
+Engine:
+- `engine/benches/analysis_bench.rs`
+
+Docs:
+- `docs/engine_benchmarking.md`
+- `docs/work_log.md`
+- `docs/change_files.md`
+
+## 2026-03-07 - Optimize Instruction Ownership Lookup with Ranges
+
+Engine:
+- `engine/src/analysis.rs`
+- `engine/src/state.rs`
+- `engine/tests/engine_integration.rs`
+
+Docs:
+- `docs/engine_benchmarking.md`
+- `docs/work_log.md`
+- `docs/change_files.md`
+
 ## 2026-03-07 - Add Example Filled Benchmark Entry
 
 Docs:

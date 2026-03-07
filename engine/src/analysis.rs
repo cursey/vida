@@ -1,4 +1,5 @@
 use std::collections::{BTreeMap, HashMap};
+use std::ops::Bound::{Excluded, Unbounded};
 use std::path::Path;
 use std::sync::Arc;
 
@@ -27,7 +28,7 @@ pub(crate) struct ModuleAnalysis {
     pub(crate) functions: Vec<FunctionSeedEntry>,
     pub(crate) linear_view: LinearView,
     pub(crate) graphs_by_start: HashMap<u64, CachedFunctionGraph>,
-    pub(crate) instruction_owner_by_rva: HashMap<u64, u64>,
+    pub(crate) instruction_owner_by_rva: BTreeMap<u64, InstructionOwnerRange>,
     pub(crate) claimed_instructions_by_function_start: HashMap<u64, Vec<AnalyzedInstructionRow>>,
 }
 
@@ -38,6 +39,12 @@ pub(crate) struct CachedFunctionGraph {
     pub(crate) blocks: Vec<FunctionGraphBlock>,
     pub(crate) edges: Vec<FunctionGraphEdge>,
     pub(crate) instruction_block_id_by_rva: HashMap<u64, String>,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct InstructionOwnerRange {
+    end_rva: u64,
+    function_start_rva: u64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -117,7 +124,7 @@ where
     });
 
     let mut graphs_by_start = HashMap::<u64, CachedFunctionGraph>::new();
-    let mut instruction_owner_by_rva = HashMap::<u64, u64>::new();
+    let mut instruction_owner_by_rva = BTreeMap::<u64, InstructionOwnerRange>::new();
     let mut claimed_instructions = BTreeMap::<u64, AnalyzedInstructionRow>::new();
     let mut claimed_instructions_by_function_start =
         HashMap::<u64, Vec<AnalyzedInstructionRow>>::new();
@@ -145,21 +152,18 @@ where
         let (cached_graph, function_rows) =
             build_cached_function_graph(analysis, image_base, seed.name.clone());
         for row in function_rows {
-            let mut has_overlap = false;
-            for offset in 0..u64::from(row.len) {
-                if instruction_owner_by_rva.contains_key(&(row.start_rva + offset)) {
-                    has_overlap = true;
-                    break;
-                }
-            }
-            if has_overlap {
+            let row_end_rva = row.start_rva.saturating_add(u64::from(row.len));
+            if instruction_range_overlaps(&instruction_owner_by_rva, row.start_rva, row_end_rva) {
                 continue;
             }
 
-            for offset in 0..u64::from(row.len) {
-                let covered_rva = row.start_rva + offset;
-                instruction_owner_by_rva.insert(covered_rva, seed.start_rva);
-            }
+            instruction_owner_by_rva.insert(
+                row.start_rva,
+                InstructionOwnerRange {
+                    end_rva: row_end_rva,
+                    function_start_rva: seed.start_rva,
+                },
+            );
             claimed_instructions
                 .entry(row.start_rva)
                 .or_insert_with(|| row.clone());
@@ -200,6 +204,47 @@ where
         instruction_owner_by_rva,
         claimed_instructions_by_function_start,
     })
+}
+
+pub(crate) fn instruction_owner_for_rva(
+    instruction_owner_by_rva: &BTreeMap<u64, InstructionOwnerRange>,
+    target_rva: u64,
+) -> Option<u64> {
+    let candidate = instruction_owner_by_rva.range(..=target_rva).next_back();
+    let (_, range) = candidate?;
+    if range.end_rva > target_rva {
+        Some(range.function_start_rva)
+    } else {
+        None
+    }
+}
+
+fn instruction_range_overlaps(
+    instruction_owner_by_rva: &BTreeMap<u64, InstructionOwnerRange>,
+    start_rva: u64,
+    end_rva: u64,
+) -> bool {
+    if start_rva >= end_rva {
+        return false;
+    }
+
+    if let Some((_, range)) = instruction_owner_by_rva.range(..=start_rva).next_back() {
+        if range.end_rva > start_rva {
+            return true;
+        }
+    }
+
+    if let Some((next_start, _next_range)) = instruction_owner_by_rva
+        .range((Excluded(start_rva), Unbounded))
+        .next()
+    {
+        let next_start = *next_start;
+        if next_start < end_rva {
+            return true;
+        }
+    }
+
+    false
 }
 
 fn discover_function_seeds_with_progress<F>(
@@ -429,4 +474,63 @@ fn build_cached_function_graph(
         },
         linear_rows,
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::InstructionOwnerRange;
+    use std::collections::BTreeMap;
+
+    use super::{instruction_owner_for_rva, instruction_range_overlaps};
+
+    #[test]
+    fn instruction_owner_lookup_uses_range_end_exclusive() {
+        let mut owners = BTreeMap::<u64, InstructionOwnerRange>::new();
+        owners.insert(
+            0x1000,
+            InstructionOwnerRange {
+                end_rva: 0x1002,
+                function_start_rva: 0x1000,
+            },
+        );
+        owners.insert(
+            0x1010,
+            InstructionOwnerRange {
+                end_rva: 0x1014,
+                function_start_rva: 0x1010,
+            },
+        );
+
+        assert_eq!(instruction_owner_for_rva(&owners, 0x1000), Some(0x1000));
+        assert_eq!(instruction_owner_for_rva(&owners, 0x1001), Some(0x1000));
+        assert_eq!(instruction_owner_for_rva(&owners, 0x1002), None);
+        assert_eq!(instruction_owner_for_rva(&owners, 0x100F), None);
+        assert_eq!(instruction_owner_for_rva(&owners, 0x1013), Some(0x1010));
+        assert_eq!(instruction_owner_for_rva(&owners, 0x1014), None);
+    }
+
+    #[test]
+    fn instruction_range_overlap_detection() {
+        let mut owners = BTreeMap::<u64, InstructionOwnerRange>::new();
+        owners.insert(
+            0x2000,
+            InstructionOwnerRange {
+                end_rva: 0x2004,
+                function_start_rva: 0x2000,
+            },
+        );
+        owners.insert(
+            0x3000,
+            InstructionOwnerRange {
+                end_rva: 0x3008,
+                function_start_rva: 0x3000,
+            },
+        );
+
+        assert!(instruction_range_overlaps(&owners, 0x2001, 0x2003));
+        assert!(!instruction_range_overlaps(&owners, 0x2004, 0x2020));
+        assert!(!instruction_range_overlaps(&owners, 0x2FFC, 0x3000));
+        assert!(instruction_range_overlaps(&owners, 0x3001, 0x3002));
+        assert!(!instruction_range_overlaps(&owners, 0x2020, 0x2FFC));
+    }
 }

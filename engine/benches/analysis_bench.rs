@@ -4,7 +4,8 @@ use std::time::Duration;
 use criterion::{Criterion, black_box, criterion_group, criterion_main};
 
 use engine::api::{
-    LinearFindRowByVaParams, LinearRowsParams, ModuleAnalysisStatusParams, ModuleOpenParams,
+    FunctionGraphByVaParams, LinearDisassemblyParams, LinearFindRowByVaParams, LinearRowsParams,
+    ModuleAnalysisStatusParams, ModuleOpenParams,
 };
 use engine::{EngineState, fixture_path};
 
@@ -82,9 +83,68 @@ fn bench_linear_rows_fetch(c: &mut Criterion) {
     });
 }
 
+fn bench_function_graph_by_va(c: &mut Criterion) {
+    let fixture_path = fixture_path("minimal_x64.exe");
+    let fixture = fixture_path.to_string_lossy().into_owned();
+
+    let mut state = EngineState::default();
+    let open_result = state
+        .open_module(ModuleOpenParams { path: fixture })
+        .expect("module should open");
+    let module_id = open_result.module_id;
+    let entry_va = open_result.entry_va;
+    wait_for_analysis_ready(&mut state, &module_id);
+
+    let params = FunctionGraphByVaParams {
+        module_id: module_id.clone(),
+        va: entry_va,
+    };
+
+    c.bench_function("engine/function_graph_by_va/minimal_x64", |bench| {
+        bench.iter(|| {
+            let graph = state
+                .get_function_graph_by_va(black_box(params.clone()))
+                .expect("graph should be available");
+
+            black_box(graph.blocks.len())
+        })
+    });
+}
+
+fn bench_linear_disassembly(c: &mut Criterion) {
+    let fixture_path = fixture_path("minimal_x64.exe");
+    let fixture = fixture_path.to_string_lossy().into_owned();
+
+    let mut state = EngineState::default();
+    let open_result = state
+        .open_module(ModuleOpenParams { path: fixture })
+        .expect("module should open");
+    let module_id = open_result.module_id;
+    let entry_va = open_result.entry_va;
+    wait_for_analysis_ready(&mut state, &module_id);
+
+    let params = LinearDisassemblyParams {
+        module_id: module_id.clone(),
+        start: entry_va,
+        max_instructions: Some(128),
+    };
+
+    c.bench_function("engine/linear_disassembly/minimal_x64", |bench| {
+        bench.iter(|| {
+            let rows = state
+                .disassemble_linear(black_box(params.clone()))
+                .expect("function should disassemble");
+
+            black_box(rows.instructions.len())
+        })
+    });
+}
+
 criterion_group!(
     analysis_benches,
     bench_module_open_and_analyze,
-    bench_linear_rows_fetch
+    bench_linear_rows_fetch,
+    bench_function_graph_by_va,
+    bench_linear_disassembly
 );
 criterion_main!(analysis_benches);

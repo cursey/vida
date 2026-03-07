@@ -12,6 +12,45 @@ Validation commands executed:
 Changed files index:
 - See `docs/change_files.md` for the detailed file list for this work item.
 
+## 2026-03-07 - Expand Engine Benchmark Coverage
+
+Summary:
+- Added new engine benchmarks for function graph and linear disassembly APIs so `engine/function_graph_by_va/minimal_x64` and `engine/linear_disassembly/minimal_x64` are tracked by the existing `analysis_bench` suite.
+- Kept benchmark setup consistent with existing modules by reusing the analysis-ready wait helper and stable fixture path.
+
+Validation commands executed:
+- `cargo fmt --manifest-path engine/Cargo.toml`
+- `cargo fmt --manifest-path engine/Cargo.toml -- --check`
+- `cargo bench --manifest-path engine/Cargo.toml --bench analysis_bench`
+
+Changed files index:
+- See `docs/change_files.md` for the detailed file list for this work item.
+
+## 2026-03-07 - Optimize Instruction Ownership Lookup with Ranges
+
+Summary:
+- Replaced byte-by-byte instruction ownership bookkeeping with function-ranged ownership entries in `engine/src/analysis.rs`.
+- Added O(log n) range lookup for `function.getGraphByVa` and `function.disassembleLinear` in `engine/src/state.rs`.
+- Kept functional behavior the same and added unit/integration coverage for range lookup semantics and in-range address handling.
+
+Validation commands executed:
+- `cargo fmt --manifest-path engine/Cargo.toml`
+- `cargo fmt --manifest-path engine/Cargo.toml -- --check`
+- `cargo test --manifest-path engine/Cargo.toml`
+- `git stash push -u -m "Baseline before owner range optimization" -- engine/src/analysis.rs engine/src/state.rs engine/tests/engine_integration.rs`
+- `cargo bench --manifest-path engine/Cargo.toml --bench analysis_bench` (baseline)
+- `git stash pop`
+- `cargo bench --manifest-path engine/Cargo.toml --bench analysis_bench` (post-change)
+
+Observed benchmark deltas:
+- `engine/module_open_and_analyze/minimal_x64`: ~76.54 ms -> ~70.27 ms
+- `engine/linear_rows/minimal_x64`: ~26.41 µs -> ~24.63 µs
+- `engine/function_graph_by_va/minimal_x64`: ~8.97 µs -> ~9.00 µs
+- `engine/linear_disassembly/minimal_x64`: ~0.800 µs -> ~0.791 µs
+
+Changed files index:
+- See `docs/change_files.md` for the detailed file list for this work item.
+
 ## 2026-03-07 - Add Example Filled Benchmark Entry
 
 Summary:

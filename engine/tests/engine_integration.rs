@@ -184,6 +184,32 @@ fn opens_module_lists_functions_and_disassembles() {
         "Graph result should include focusBlockId"
     );
 
+    let entry_u64 =
+        u64::from_str_radix(entry_va.trim_start_matches("0x"), 16).expect("valid hex entry VA");
+    let inside_entry_va = format!("0x{:x}", entry_u64 + 1);
+
+    let inside_graph = state
+        .get_function_graph_by_va(FunctionGraphByVaParams {
+            module_id: module_id.clone(),
+            va: inside_entry_va.clone(),
+        })
+        .expect("graph lookup should succeed for address inside first instruction bytes");
+
+    assert_eq!(
+        inside_graph.function_start_va,
+        graph_result.function_start_va
+    );
+
+    let linear_from_mid = state
+        .disassemble_linear(LinearDisassemblyParams {
+            module_id: module_id.clone(),
+            start: inside_entry_va.clone(),
+            max_instructions: Some(1),
+        })
+        .expect("linear disassembly should start inside instruction bytes");
+
+    assert!(!linear_from_mid.instructions.is_empty());
+
     let first_block = &graph_result.blocks[0];
     assert!(
         first_block.start_va.starts_with("0x"),

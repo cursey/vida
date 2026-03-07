@@ -9,7 +9,7 @@ use std::thread;
 
 use crate::analysis::{
     AnalysisProgressPhase, AnalysisProgressUpdate, FunctionSeedEntry, ModuleAnalysis,
-    build_module_analysis_with_progress,
+    build_module_analysis_with_progress, instruction_owner_for_rva,
 };
 use crate::api::{
     EnginePingParams, EnginePingResult, ExportInfo, FunctionGraphByVaParams,
@@ -308,11 +308,9 @@ impl EngineState {
             return Err(EngineError::InvalidAddress);
         }
         let target_rva = target_va - image_base;
-        let owner_start_rva = analysis
-            .instruction_owner_by_rva
-            .get(&target_rva)
-            .copied()
-            .ok_or(EngineError::InvalidAddress)?;
+        let owner_start_rva =
+            instruction_owner_for_rva(&analysis.instruction_owner_by_rva, target_rva)
+                .ok_or(EngineError::InvalidAddress)?;
         let graph = analysis
             .graphs_by_start
             .get(&owner_start_rva)
@@ -348,11 +346,9 @@ impl EngineState {
             return Err(EngineError::InvalidAddress);
         }
         let start_rva = start_va - image_base;
-        let owner_start_rva = analysis
-            .instruction_owner_by_rva
-            .get(&start_rva)
-            .copied()
-            .ok_or(EngineError::InvalidAddress)?;
+        let owner_start_rva =
+            instruction_owner_for_rva(&analysis.instruction_owner_by_rva, start_rva)
+                .ok_or(EngineError::InvalidAddress)?;
         let function_rows = analysis
             .claimed_instructions_by_function_start
             .get(&owner_start_rva)
