@@ -1,5 +1,38 @@
 # Work Log
 
+## 2026-03-07 - Record Full Hybrid Benchmark Baseline
+
+Summary:
+- Captured a named full-fixture Criterion baseline (`hybrid-full-2026-03-07`) for the new hybrid benchmark workflow.
+- Recorded the baseline measurements and artifact roots in `docs/engine_benchmarking.md` so future comparisons can cite an exact saved baseline instead of ad hoc local runs.
+
+Validation commands executed:
+- `just engine-bench-save hybrid-full-2026-03-07 all`
+
+Changed files index:
+- See `docs/change_files.md` for the detailed file list for this work item.
+
+## 2026-03-07 - Implement Hybrid Engine Benchmark Workflow
+
+Summary:
+- Refactored the Criterion harness into cold and warm API benchmark groups, expanded coverage to the missing public engine query APIs, and added fixture-set aware benchmark naming.
+- Added deterministic derived benchmark fixtures plus `just` commands for quick runs, full runs, filtered runs, and saved-baseline comparisons.
+- Rewrote `docs/engine_benchmarking.md` around the new hybrid workflow so quick local checks and higher-signal comparison runs share one canonical recording format.
+
+Validation commands executed:
+- `python engine/tests/fixtures/generate_bench_fixtures.py`
+- `cargo fmt --manifest-path engine/Cargo.toml`
+- `cargo fmt --manifest-path engine/Cargo.toml -- --check`
+- `cargo test --manifest-path engine/Cargo.toml`
+- `just engine-bench`
+- `just engine-bench-all`
+- `just engine-bench-filter engine/warm/function_list`
+- `just engine-bench-save hybrid-validation`
+- `just engine-bench-compare hybrid-validation`
+
+Changed files index:
+- See `docs/change_files.md` for the detailed file list for this work item.
+
 ## 2026-03-07 - Add Benchmark Reporting Template and AGENTS Instructions
 
 Summary:

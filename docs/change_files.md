@@ -1,5 +1,29 @@
 # Change Files
 
+## 2026-03-07 - Record Full Hybrid Benchmark Baseline
+
+Docs:
+- `docs/engine_benchmarking.md`
+- `docs/work_log.md`
+- `docs/change_files.md`
+
+## 2026-03-07 - Implement Hybrid Engine Benchmark Workflow
+
+Root:
+- `justfile`
+
+Engine:
+- `engine/benches/analysis_bench.rs`
+- `engine/tests/fixtures/README.md`
+- `engine/tests/fixtures/generate_bench_fixtures.py`
+- `engine/tests/fixtures/bench_no_pdb/minimal_x64.exe`
+- `engine/tests/fixtures/bench_overlay/minimal_x64_overlay_4mb.exe`
+
+Docs:
+- `docs/engine_benchmarking.md`
+- `docs/work_log.md`
+- `docs/change_files.md`
+
 ## 2026-03-07 - Add Benchmark Reporting Template and AGENTS Instructions
 
 Docs:

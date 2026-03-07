@@ -48,8 +48,29 @@ engine-fmt-check:
 engine-test:
   cargo test --manifest-path engine/Cargo.toml
 
-engine-bench:
+engine-bench-prepare-fixtures:
+  python "engine/tests/fixtures/generate_bench_fixtures.py"
+
+engine-bench-quick:
   cargo bench --manifest-path engine/Cargo.toml --bench analysis_bench
+
+engine-bench:
+  just engine-bench-quick
+
+engine-bench-all:
+  python "engine/tests/fixtures/generate_bench_fixtures.py"; $env:ENGINE_BENCH_FIXTURE_SET='all'; cargo bench --manifest-path engine/Cargo.toml --bench analysis_bench
+
+engine-bench-filter FILTER:
+  cargo bench --manifest-path engine/Cargo.toml --bench analysis_bench -- "{{FILTER}}"
+
+engine-bench-filter-all FILTER:
+  python "engine/tests/fixtures/generate_bench_fixtures.py"; $env:ENGINE_BENCH_FIXTURE_SET='all'; cargo bench --manifest-path engine/Cargo.toml --bench analysis_bench -- "{{FILTER}}"
+
+engine-bench-save BASELINE FIXTURE_SET="quick":
+  if ('{{FIXTURE_SET}}' -eq 'all') { python "engine/tests/fixtures/generate_bench_fixtures.py"; $env:ENGINE_BENCH_FIXTURE_SET='all' } elseif ('{{FIXTURE_SET}}' -eq 'quick') { $env:ENGINE_BENCH_FIXTURE_SET='quick' } else { throw "Unknown fixture set: {{FIXTURE_SET}}" }; cargo bench --manifest-path engine/Cargo.toml --bench analysis_bench -- --save-baseline "{{BASELINE}}"
+
+engine-bench-compare BASELINE FIXTURE_SET="quick":
+  if ('{{FIXTURE_SET}}' -eq 'all') { python "engine/tests/fixtures/generate_bench_fixtures.py"; $env:ENGINE_BENCH_FIXTURE_SET='all' } elseif ('{{FIXTURE_SET}}' -eq 'quick') { $env:ENGINE_BENCH_FIXTURE_SET='quick' } else { throw "Unknown fixture set: {{FIXTURE_SET}}" }; cargo bench --manifest-path engine/Cargo.toml --bench analysis_bench -- --baseline "{{BASELINE}}"
 
 bench: engine-bench
 
