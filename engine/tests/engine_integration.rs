@@ -6,7 +6,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use engine::api::{
     FunctionGraphByVaParams, FunctionListParams, LinearDisassemblyParams, LinearFindRowByVaParams,
-    LinearRowsParams, ModuleAnalysisStatusParams, ModuleOpenParams, ModuleUnloadParams,
+    LinearRowsParams, LinearViewInfoParams, ModuleAnalysisStatusParams, ModuleOpenParams,
+    ModuleUnloadParams,
 };
 use engine::{EngineError, EngineState, fixture_path};
 
@@ -308,6 +309,114 @@ fn discovers_pdb_functions_and_requires_strict_guid_age_match() {
     );
 
     let _ = fs::remove_dir_all(temp_dir);
+}
+
+#[test]
+fn repeated_analysis_runs_keep_function_and_graph_output_stable() {
+    let fixture = fixture_path("minimal_x64.exe");
+    let mut baseline_function_signature = None;
+    let mut baseline_graph_signature = None;
+    let mut baseline_linear_view_signature = None;
+
+    for _ in 0..5 {
+        let mut state = EngineState::default();
+        let open_result = state
+            .open_module(ModuleOpenParams {
+                path: fixture.to_string_lossy().into_owned(),
+            })
+            .expect("module should open");
+        let module_id = open_result.module_id.clone();
+        let entry_va = open_result.entry_va.clone();
+
+        let ready_status = wait_for_analysis_ready(&mut state, &module_id);
+        assert_eq!(ready_status.state, "ready");
+
+        let function_list = state
+            .list_functions(FunctionListParams {
+                module_id: module_id.clone(),
+            })
+            .expect("function list should load");
+        let function_signature = function_list
+            .functions
+            .iter()
+            .map(|seed| (seed.start.clone(), seed.name.clone(), seed.kind.to_owned()))
+            .collect::<Vec<_>>();
+
+        let linear_view = state
+            .get_linear_view_info(LinearViewInfoParams {
+                module_id: module_id.clone(),
+            })
+            .expect("linear view info should load");
+        let linear_view_signature = (
+            linear_view.row_count,
+            linear_view.min_va,
+            linear_view.max_va,
+            linear_view.row_height,
+            linear_view.data_group_size,
+        );
+
+        let graph = state
+            .get_function_graph_by_va(FunctionGraphByVaParams {
+                module_id,
+                va: entry_va,
+            })
+            .expect("graph should load");
+        let graph_signature = (
+            graph.function_start_va,
+            graph.function_name,
+            graph.focus_block_id,
+            graph
+                .blocks
+                .iter()
+                .map(|block| {
+                    (
+                        block.id.clone(),
+                        block.start_va.clone(),
+                        block
+                            .instructions
+                            .iter()
+                            .map(|instruction| {
+                                (
+                                    instruction.mnemonic.clone(),
+                                    instruction.operands.clone(),
+                                    instruction.instruction_category,
+                                )
+                            })
+                            .collect::<Vec<_>>(),
+                    )
+                })
+                .collect::<Vec<_>>(),
+            graph
+                .edges
+                .iter()
+                .map(|edge| {
+                    (
+                        edge.from_block_id.clone(),
+                        edge.to_block_id.clone(),
+                        edge.kind.to_owned(),
+                    )
+                })
+                .collect::<Vec<_>>(),
+        );
+
+        if let Some(expected) = baseline_function_signature.as_ref() {
+            assert_eq!(&function_signature, expected);
+        } else {
+            baseline_function_signature = Some(function_signature);
+        }
+
+        if let Some(expected) = baseline_linear_view_signature.as_ref() {
+            assert_eq!(&linear_view_signature, expected);
+        } else {
+            baseline_linear_view_signature = Some(linear_view_signature);
+        }
+
+        if let Some(expected) = baseline_graph_signature.as_ref() {
+            assert_eq!(&graph_signature, expected);
+        } else {
+            baseline_graph_signature = Some(graph_signature);
+        }
+    }
 }
 
 #[test]

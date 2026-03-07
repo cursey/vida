@@ -1,5 +1,16 @@
 # Change Files
 
+## 2026-03-07 - Parallelize Per-Function Engine Analysis
+
+Engine:
+- `engine/src/analysis.rs`
+- `engine/tests/engine_integration.rs`
+
+Docs:
+- `docs/engine_benchmarking.md`
+- `docs/work_log.md`
+- `docs/change_files.md`
+
 ## 2026-03-07 - Record Full Hybrid Benchmark Baseline
 
 Docs:

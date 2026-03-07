@@ -1,5 +1,22 @@
 # Work Log
 
+## 2026-03-07 - Parallelize Per-Function Engine Analysis
+
+Summary:
+- Replaced the serial function-analysis loop with a bounded worker pool so CFG/disassembly work runs in parallel while final ownership claiming still merges in canonical seed-priority order.
+- Kept overlap resolution deterministic by moving claim application into a single-threaded ordered merge pass and added regression coverage for canonical ownership plus repeated stable analysis output.
+- Captured an all-fixture saved baseline before the change and compared the new build against it, with large cold analysis wins on every fixture and warm micro-bench drift noted for follow-up profiling.
+
+Validation commands executed:
+- `just engine-bench-save parallel-analysis-baseline-2026-03-07 all`
+- `just engine-fmt`
+- `cargo fmt --manifest-path engine/Cargo.toml -- --check`
+- `just engine-test`
+- `just engine-bench-compare parallel-analysis-baseline-2026-03-07 all`
+
+Changed files index:
+- See `docs/change_files.md` for the detailed file list for this work item.
+
 ## 2026-03-07 - Record Full Hybrid Benchmark Baseline
 
 Summary:

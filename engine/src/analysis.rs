@@ -1,7 +1,13 @@
 use std::collections::{BTreeMap, HashMap};
 use std::ops::Bound::{Excluded, Unbounded};
 use std::path::Path;
-use std::sync::Arc;
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, AtomicUsize, Ordering},
+    mpsc::{self, RecvTimeoutError},
+};
+use std::thread;
+use std::time::Duration;
 
 use goblin::pe::PE;
 
@@ -89,6 +95,15 @@ struct FunctionSeedCandidate {
     priority: u8,
 }
 
+#[derive(Debug)]
+struct CompletedFunctionAnalysis {
+    function_start_rva: u64,
+    cached_graph: CachedFunctionGraph,
+    function_rows: Vec<AnalyzedInstructionRow>,
+}
+
+const ANALYSIS_RESULT_POLL_INTERVAL: Duration = Duration::from_millis(20);
+
 pub(crate) fn build_module_analysis_with_progress<F, C>(
     module_path: &Path,
     bytes: &[u8],
@@ -129,56 +144,125 @@ where
     let mut claimed_instructions_by_function_start =
         HashMap::<u64, Vec<AnalyzedInstructionRow>>::new();
 
-    for (index, seed) in analysis_order.iter().enumerate() {
+    if !analysis_order.is_empty() {
+        let worker_count = analysis_worker_count(analysis_order.len());
+        let next_index = AtomicUsize::new(0);
+        let stop_requested = AtomicBool::new(false);
+        let (sender, receiver) = mpsc::channel::<(
+            usize,
+            Result<Option<CompletedFunctionAnalysis>, EngineError>,
+        )>();
+        let mut pending_results = BTreeMap::<usize, Option<CompletedFunctionAnalysis>>::new();
+        let mut first_error = None;
+        let mut completed_count = 0usize;
+        let mut next_merge_index = 0usize;
+
+        thread::scope(|scope| {
+            for _ in 0..worker_count {
+                let sender = sender.clone();
+                let analysis_order = &analysis_order;
+                let next_index = &next_index;
+                let stop_requested = &stop_requested;
+                let section_lookup = &section_lookup;
+
+                scope.spawn(move || {
+                    loop {
+                        if stop_requested.load(Ordering::Relaxed) {
+                            break;
+                        }
+
+                        let index = next_index.fetch_add(1, Ordering::Relaxed);
+                        if index >= analysis_order.len() {
+                            break;
+                        }
+
+                        let result =
+                            analyze_seed(bytes, section_lookup, image_base, &analysis_order[index]);
+                        if result.is_err() {
+                            stop_requested.store(true, Ordering::Relaxed);
+                        }
+                        if sender.send((index, result)).is_err() {
+                            break;
+                        }
+                    }
+                });
+            }
+            drop(sender);
+
+            loop {
+                if is_canceled() {
+                    stop_requested.store(true, Ordering::Relaxed);
+                }
+
+                match receiver.recv_timeout(ANALYSIS_RESULT_POLL_INTERVAL) {
+                    Ok((index, result)) => {
+                        completed_count += 1;
+                        on_progress(AnalysisProgressUpdate {
+                            phase: AnalysisProgressPhase::AnalyzingFunctions,
+                            discovered_functions: Arc::clone(&functions),
+                            total_function_count: Some(functions.len()),
+                            analyzed_function_count: Some(completed_count),
+                        });
+
+                        match result {
+                            Ok(completed) => {
+                                pending_results.insert(index, completed);
+                            }
+                            Err(error) => {
+                                stop_requested.store(true, Ordering::Relaxed);
+                                if first_error.is_none() {
+                                    first_error = Some(error);
+                                }
+                            }
+                        }
+
+                        if first_error.is_none() {
+                            while let Some(completed) = pending_results.remove(&next_merge_index) {
+                                if let Some(completed) = completed {
+                                    merge_completed_function_analysis(
+                                        completed,
+                                        &mut graphs_by_start,
+                                        &mut instruction_owner_by_rva,
+                                        &mut claimed_instructions,
+                                        &mut claimed_instructions_by_function_start,
+                                    );
+                                }
+                                next_merge_index += 1;
+                            }
+                        }
+                    }
+                    Err(RecvTimeoutError::Timeout) => continue,
+                    Err(RecvTimeoutError::Disconnected) => break,
+                }
+            }
+        });
+
         if is_canceled() {
             return Err(EngineError::Canceled);
         }
 
-        let analysis =
-            match analyze_function_cfg(bytes, &section_lookup, image_base, seed.start_rva) {
-                Ok(analysis) => analysis,
-                Err(EngineError::InvalidAddress) => {
-                    on_progress(AnalysisProgressUpdate {
-                        phase: AnalysisProgressPhase::AnalyzingFunctions,
-                        discovered_functions: Arc::clone(&functions),
-                        total_function_count: Some(functions.len()),
-                        analyzed_function_count: Some(index + 1),
-                    });
-                    continue;
-                }
-                Err(error) => return Err(error),
-            };
-
-        let (cached_graph, function_rows) =
-            build_cached_function_graph(analysis, image_base, seed.name.clone());
-        for row in function_rows {
-            let row_end_rva = row.start_rva.saturating_add(u64::from(row.len));
-            if instruction_range_overlaps(&instruction_owner_by_rva, row.start_rva, row_end_rva) {
-                continue;
-            }
-
-            instruction_owner_by_rva.insert(
-                row.start_rva,
-                InstructionOwnerRange {
-                    end_rva: row_end_rva,
-                    function_start_rva: seed.start_rva,
-                },
-            );
-            claimed_instructions
-                .entry(row.start_rva)
-                .or_insert_with(|| row.clone());
-            claimed_instructions_by_function_start
-                .entry(seed.start_rva)
-                .or_default()
-                .push(row);
+        if let Some(error) = first_error {
+            return Err(error);
         }
-        graphs_by_start.insert(seed.start_rva, cached_graph);
-        on_progress(AnalysisProgressUpdate {
-            phase: AnalysisProgressPhase::AnalyzingFunctions,
-            discovered_functions: Arc::clone(&functions),
-            total_function_count: Some(functions.len()),
-            analyzed_function_count: Some(index + 1),
-        });
+
+        while let Some(completed) = pending_results.remove(&next_merge_index) {
+            if let Some(completed) = completed {
+                merge_completed_function_analysis(
+                    completed,
+                    &mut graphs_by_start,
+                    &mut instruction_owner_by_rva,
+                    &mut claimed_instructions,
+                    &mut claimed_instructions_by_function_start,
+                );
+            }
+            next_merge_index += 1;
+        }
+
+        if next_merge_index != analysis_order.len() {
+            return Err(EngineError::Internal(
+                "Parallel function analysis produced incomplete results".to_owned(),
+            ));
+        }
     }
 
     if is_canceled() {
@@ -245,6 +329,70 @@ fn instruction_range_overlaps(
     }
 
     false
+}
+
+fn analysis_worker_count(function_count: usize) -> usize {
+    if function_count == 0 {
+        return 0;
+    }
+
+    thread::available_parallelism()
+        .map(|value| value.get())
+        .unwrap_or(1)
+        .min(function_count)
+}
+
+fn analyze_seed(
+    bytes: &[u8],
+    section_lookup: &SectionLookup,
+    image_base: u64,
+    seed: &FunctionSeedEntry,
+) -> Result<Option<CompletedFunctionAnalysis>, EngineError> {
+    let analysis = match analyze_function_cfg(bytes, section_lookup, image_base, seed.start_rva) {
+        Ok(analysis) => analysis,
+        Err(EngineError::InvalidAddress) => return Ok(None),
+        Err(error) => return Err(error),
+    };
+
+    let (cached_graph, function_rows) =
+        build_cached_function_graph(analysis, image_base, seed.name.clone());
+    Ok(Some(CompletedFunctionAnalysis {
+        function_start_rva: seed.start_rva,
+        cached_graph,
+        function_rows,
+    }))
+}
+
+fn merge_completed_function_analysis(
+    completed: CompletedFunctionAnalysis,
+    graphs_by_start: &mut HashMap<u64, CachedFunctionGraph>,
+    instruction_owner_by_rva: &mut BTreeMap<u64, InstructionOwnerRange>,
+    claimed_instructions: &mut BTreeMap<u64, AnalyzedInstructionRow>,
+    claimed_instructions_by_function_start: &mut HashMap<u64, Vec<AnalyzedInstructionRow>>,
+) {
+    for row in completed.function_rows {
+        let row_end_rva = row.start_rva.saturating_add(u64::from(row.len));
+        if instruction_range_overlaps(instruction_owner_by_rva, row.start_rva, row_end_rva) {
+            continue;
+        }
+
+        instruction_owner_by_rva.insert(
+            row.start_rva,
+            InstructionOwnerRange {
+                end_rva: row_end_rva,
+                function_start_rva: completed.function_start_rva,
+            },
+        );
+        claimed_instructions
+            .entry(row.start_rva)
+            .or_insert_with(|| row.clone());
+        claimed_instructions_by_function_start
+            .entry(completed.function_start_rva)
+            .or_default()
+            .push(row);
+    }
+
+    graphs_by_start.insert(completed.function_start_rva, completed.cached_graph);
 }
 
 fn discover_function_seeds_with_progress<F>(
@@ -478,10 +626,43 @@ fn build_cached_function_graph(
 
 #[cfg(test)]
 mod tests {
-    use super::InstructionOwnerRange;
-    use std::collections::BTreeMap;
+    use super::{
+        CachedFunctionGraph, CompletedFunctionAnalysis, InstructionOwnerRange,
+        instruction_owner_for_rva, instruction_range_overlaps, merge_completed_function_analysis,
+    };
+    use crate::api::InstructionCategory;
+    use crate::linear::AnalyzedInstructionRow;
+    use std::collections::{BTreeMap, HashMap};
 
-    use super::{instruction_owner_for_rva, instruction_range_overlaps};
+    fn instruction_row(start_rva: u64, len: u8) -> AnalyzedInstructionRow {
+        AnalyzedInstructionRow {
+            start_rva,
+            len,
+            bytes: "90".to_owned(),
+            mnemonic: "nop".to_owned(),
+            operands: String::new(),
+            instruction_category: InstructionCategory::Other,
+            branch_target_rva: None,
+            call_target_rva: None,
+        }
+    }
+
+    fn completed_function_analysis(
+        function_start_rva: u64,
+        function_rows: Vec<AnalyzedInstructionRow>,
+    ) -> CompletedFunctionAnalysis {
+        CompletedFunctionAnalysis {
+            function_start_rva,
+            cached_graph: CachedFunctionGraph {
+                function_start_rva,
+                function_name: format!("sub_{function_start_rva:x}"),
+                blocks: Vec::new(),
+                edges: Vec::new(),
+                instruction_block_id_by_rva: HashMap::new(),
+            },
+            function_rows,
+        }
+    }
 
     #[test]
     fn instruction_owner_lookup_uses_range_end_exclusive() {
@@ -532,5 +713,53 @@ mod tests {
         assert!(!instruction_range_overlaps(&owners, 0x2FFC, 0x3000));
         assert!(instruction_range_overlaps(&owners, 0x3001, 0x3002));
         assert!(!instruction_range_overlaps(&owners, 0x2020, 0x2FFC));
+    }
+
+    #[test]
+    fn merge_completed_function_analysis_keeps_first_canonical_owner() {
+        let mut graphs_by_start = HashMap::new();
+        let mut instruction_owner_by_rva = BTreeMap::new();
+        let mut claimed_instructions = BTreeMap::new();
+        let mut claimed_instructions_by_function_start = HashMap::new();
+
+        merge_completed_function_analysis(
+            completed_function_analysis(0x1000, vec![instruction_row(0x2000, 2)]),
+            &mut graphs_by_start,
+            &mut instruction_owner_by_rva,
+            &mut claimed_instructions,
+            &mut claimed_instructions_by_function_start,
+        );
+        merge_completed_function_analysis(
+            completed_function_analysis(0x1010, vec![instruction_row(0x2001, 2)]),
+            &mut graphs_by_start,
+            &mut instruction_owner_by_rva,
+            &mut claimed_instructions,
+            &mut claimed_instructions_by_function_start,
+        );
+
+        assert_eq!(
+            instruction_owner_for_rva(&instruction_owner_by_rva, 0x2000),
+            Some(0x1000)
+        );
+        assert_eq!(
+            instruction_owner_for_rva(&instruction_owner_by_rva, 0x2001),
+            Some(0x1000)
+        );
+        assert_eq!(
+            instruction_owner_for_rva(&instruction_owner_by_rva, 0x2002),
+            None
+        );
+        assert_eq!(
+            claimed_instructions_by_function_start
+                .get(&0x1000)
+                .map(Vec::len),
+            Some(1)
+        );
+        assert_eq!(
+            claimed_instructions_by_function_start
+                .get(&0x1010)
+                .map(Vec::len),
+            None
+        );
     }
 }

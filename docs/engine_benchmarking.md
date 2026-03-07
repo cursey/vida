@@ -123,6 +123,9 @@ The repository's current recorded optimization checkpoints are:
 
 | Date | Fixture Set | Bench | Baseline | Current | Delta | Change driver |
 | --- | --- | --- | --- | --- | --- | --- |
+| 2026-03-07 | all | `engine/cold/module_open_and_analyze/minimal_with_pdb` | ~77.51 ms | ~30.90 ms | ~-60.6% | `engine/src/analysis.rs` |
+| 2026-03-07 | all | `engine/cold/module_open_and_analyze/minimal_without_pdb` | ~75.86 ms | ~30.19 ms | ~-60.1% | `engine/src/analysis.rs` |
+| 2026-03-07 | all | `engine/cold/module_open_and_analyze/overlay_4mb_without_pdb` | ~76.39 ms | ~31.89 ms | ~-58.0% | `engine/src/analysis.rs` |
 | 2026-03-07 | quick | `engine/cold/module_open_and_analyze/minimal_with_pdb` | ~99.56 ms | ~76.54 ms | ~-23% | `engine/src/analysis.rs`, `engine/src/linear.rs` |
 | 2026-03-07 | quick | `engine/warm/linear_rows/minimal_with_pdb` | ~33.74 us | ~26.03 us | ~-23% | `engine/src/linear.rs` |
 | 2026-03-07 | quick | `engine/cold/module_open_and_analyze/minimal_with_pdb` | ~76.54 ms | ~70.27 ms | ~-8.2% | `engine/src/analysis.rs`, `engine/src/state.rs` |
@@ -130,7 +133,49 @@ The repository's current recorded optimization checkpoints are:
 | 2026-03-07 | quick | `engine/warm/function_graph_by_va/minimal_with_pdb` | ~8.97 us | ~9.00 us | ~+0.3% | `engine/src/state.rs` |
 | 2026-03-07 | quick | `engine/warm/linear_disassembly/minimal_with_pdb` | ~0.800 us | ~0.791 us | ~-1.1% | `engine/src/analysis.rs`, `engine/src/state.rs` |
 
+## 2026-03-07 - Parallelize Per-Function Engine Analysis
+
+Date: 2026-03-07
+Commit: workspace state after implementing ordered parallel per-function analysis
+Command: `just engine-bench-compare parallel-analysis-baseline-2026-03-07 all`
+Fixture Set: `all`
+Machine/Profile: Windows, Criterion release bench profile
+Criterion Artifacts: `engine/target/criterion/engine_*/<fixture>/{parallel-analysis-baseline-2026-03-07,new,change}/`
+
+Bench: `engine/cold/module_open_and_analyze/minimal_with_pdb`
+Baseline: `[76.526 ms, 77.505 ms, 78.638 ms]`
+Current: `[30.432 ms, 30.901 ms, 31.442 ms]`
+Delta: `[-61.559%, -60.631%, -59.729%]`
+Change driver: bounded worker-pool CFG/disassembly execution plus canonical single-thread merge in `engine/src/analysis.rs`
+Evidence: `parallel-analysis-baseline-2026-03-07`; `engine/target/criterion/engine_cold_module_open_and_analyze/minimal_with_pdb/parallel-analysis-baseline-2026-03-07/`; `engine/target/criterion/engine_cold_module_open_and_analyze/minimal_with_pdb/new/`; `engine/target/criterion/engine_cold_module_open_and_analyze/minimal_with_pdb/change/`
+Notes: cold analysis throughput is the target metric for this change; repeated integration runs kept function lists, graphs, and linear view metadata stable
+
+Bench: `engine/cold/module_open_and_analyze/minimal_without_pdb`
+Baseline: `[74.987 ms, 75.859 ms, 76.807 ms]`
+Current: `[29.720 ms, 30.186 ms, 30.593 ms]`
+Delta: `[-61.010%, -60.081%, -59.241%]`
+Change driver: bounded worker-pool CFG/disassembly execution plus canonical single-thread merge in `engine/src/analysis.rs`
+Evidence: `parallel-analysis-baseline-2026-03-07`; `engine/target/criterion/engine_cold_module_open_and_analyze/minimal_without_pdb/parallel-analysis-baseline-2026-03-07/`; `engine/target/criterion/engine_cold_module_open_and_analyze/minimal_without_pdb/new/`; `engine/target/criterion/engine_cold_module_open_and_analyze/minimal_without_pdb/change/`
+Notes: no-PDB fixture keeps the same cold-path speedup pattern, which suggests the win comes from parallel CFG/disassembly work instead of symbol loading changes
+
+Bench: `engine/cold/module_open_and_analyze/overlay_4mb_without_pdb`
+Baseline: `[75.607 ms, 76.391 ms, 77.234 ms]`
+Current: `[31.459 ms, 31.887 ms, 32.274 ms]`
+Delta: `[-58.936%, -57.979%, -56.778%]`
+Change driver: bounded worker-pool CFG/disassembly execution plus canonical single-thread merge in `engine/src/analysis.rs`
+Evidence: `parallel-analysis-baseline-2026-03-07`; `engine/target/criterion/engine_cold_module_open_and_analyze/overlay_4mb_without_pdb/parallel-analysis-baseline-2026-03-07/`; `engine/target/criterion/engine_cold_module_open_and_analyze/overlay_4mb_without_pdb/new/`; `engine/target/criterion/engine_cold_module_open_and_analyze/overlay_4mb_without_pdb/change/`
+Notes: the same compare run also showed warm micro-bench drift on unaffected APIs (`engine/warm/module_info/*`, `engine/warm/function_list/*`, `engine/warm/linear_disassembly/*`), so those should be treated as follow-up profiling signals rather than hidden by the cold-path win
+
 ## Saved Baseline Checkpoints
+
+### 2026-03-07 - `parallel-analysis-baseline-2026-03-07`
+
+- Commit: workspace state before parallelizing per-function analysis
+- Command: `just engine-bench-save parallel-analysis-baseline-2026-03-07 all`
+- Fixture Set: `all`
+- Machine/Profile: Windows, Criterion release bench profile
+- Criterion Artifacts: `engine/target/criterion/engine_*/<fixture>/parallel-analysis-baseline-2026-03-07/`
+- Notes: captured immediately before replacing the serial function-analysis loop with the ordered parallel worker-pool path
 
 ### 2026-03-07 - `hybrid-full-2026-03-07`
 
