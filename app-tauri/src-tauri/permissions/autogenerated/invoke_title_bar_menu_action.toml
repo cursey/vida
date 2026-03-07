@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-invoke-title-bar-menu-action"
+description = "Enables the invoke_title_bar_menu_action command without any pre-configured scope."
+commands.allow = ["invoke_title_bar_menu_action"]
+
+[[permission]]
+identifier = "deny-invoke-title-bar-menu-action"
+description = "Denies the invoke_title_bar_menu_action command without any pre-configured scope."
+commands.deny = ["invoke_title_bar_menu_action"]

@@ -1,5 +1,40 @@
 # Work Log
 
+## 2026-03-07 - Remove Legacy Electron App Workspace
+
+Summary:
+- Deleted the legacy `app-electron` workspace now that `app-tauri` is the only supported desktop shell.
+- Removed the remaining Electron-specific root recipes and ignore rules so `just` and repo tooling are Tauri-only.
+- Renamed the shared protocol schema/type surface to neutral desktop-shell wording and refreshed the current instructions/scope docs to match the post-migration architecture.
+
+Validation commands executed:
+- `just check`
+- `just test`
+- `just build`
+
+Changed files index:
+- See `docs/change_files.md` for the detailed file list for this work item.
+
+## 2026-03-07 - Replace Electron Shell with Tauri 2 App Workspace
+
+Summary:
+- Added a new `app-tauri` workspace that ports the existing React/Vite renderer to a Tauri 2 desktop shell and replaces the Electron preload/global bridge with a Tauri-backed `desktopApi`.
+- Implemented a Tauri Rust host for custom window chrome state, native File menu + recent-files persistence, executable picking, and a persistent JSON-RPC child-process proxy to the existing Rust analysis engine.
+- Switched root `just` app workflows to `app-tauri`, kept explicit transitional `app-electron-*` recipes, and added a sidecar preparation step so debug builds bundle the external engine binary layout expected by Tauri.
+- Kept root validation green by formatting the engine crate and setting the default Tauri build command to `--no-bundle` until installer/icon branding assets are intentionally introduced.
+
+Validation commands executed:
+- `npm run test:renderer` (in `app-tauri`)
+- `npm run check` (in `app-tauri`)
+- `npm run test` (in `app-tauri`)
+- `cargo check --manifest-path app-tauri/src-tauri/Cargo.toml`
+- `just check`
+- `just test`
+- `just build`
+
+Changed files index:
+- See `docs/change_files.md` for the detailed file list for this work item.
+
 ## 2026-03-06 - Fix C++ PDB Name Extraction for Complex Template Signatures
 
 Summary:

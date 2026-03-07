@@ -1,12 +1,14 @@
-# Node / Electron
+# Node / desktop app
 node_modules/
-app-electron/node_modules/
-app-electron/dist/
-app-electron/.DS_Store
+app-tauri/node_modules/
+app-tauri/dist/
 
 # Rust
 target/
 engine/target/
+app-tauri/src-tauri/target/
+app-tauri/src-tauri/gen/
+app-tauri/src-tauri/binaries/
 engine/tests/fixture_builder/
 
 # Logs / temp

@@ -351,20 +351,29 @@ mod tests {
             "ns::widget::draw"
         );
         assert_eq!(
-            simplify_function_name("public: static void * __cdecl ns::widget::operator new(unsigned __int64)"),
+            simplify_function_name(
+                "public: static void * __cdecl ns::widget::operator new(unsigned __int64)"
+            ),
             "ns::widget::operator new"
         );
-        assert_eq!(simplify_function_name("unsigned int main(int, char const * *)"), "main");
+        assert_eq!(
+            simplify_function_name("unsigned int main(int, char const * *)"),
+            "main"
+        );
         assert_eq!(
             simplify_function_name("crate::module::run::h0123456789abcdef"),
             "crate::module::run"
         );
         assert_eq!(
-            simplify_function_name("public: class std::unique_ptr<class ns::value,struct std::default_delete<class ns::value> > __cdecl ns::widget<class std::vector<struct std::pair<int,float>,class std::allocator<struct std::pair<int,float> > > >::build<class foo::bar<int, class baz::qux<long> > >(void)"),
+            simplify_function_name(
+                "public: class std::unique_ptr<class ns::value,struct std::default_delete<class ns::value> > __cdecl ns::widget<class std::vector<struct std::pair<int,float>,class std::allocator<struct std::pair<int,float> > > >::build<class foo::bar<int, class baz::qux<long> > >(void)"
+            ),
             "ns::widget<class std::vector<struct std::pair<int,float>,class std::allocator<struct std::pair<int,float> > > >::build<class foo::bar<int, class baz::qux<long> > >"
         );
         assert_eq!(
-            simplify_function_name("public: __cdecl ns::widget<class std::vector<int,class std::allocator<int> > >::operator class std::basic_string<char,struct std::char_traits<char>,class std::allocator<char> >(void)"),
+            simplify_function_name(
+                "public: __cdecl ns::widget<class std::vector<int,class std::allocator<int> > >::operator class std::basic_string<char,struct std::char_traits<char>,class std::allocator<char> >(void)"
+            ),
             "ns::widget<class std::vector<int,class std::allocator<int> > >::operator class std::basic_string<char,struct std::char_traits<char>,class std::allocator<char> >"
         );
     }

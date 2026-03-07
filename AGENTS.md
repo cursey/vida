@@ -1,20 +1,20 @@
 # AGENTS.md
 
 ## Purpose
-This repository is for a minimal IDA-like Electron disassembler:
-- Electron UI (TypeScript/JavaScript) for navigation, disassembly views, and CFG visualization.
+This repository is for a minimal IDA-like desktop disassembler:
+- Tauri UI (TypeScript/JavaScript + Rust host) for navigation, disassembly views, and CFG visualization.
 - Rust analysis engine for PE parsing, disassembly, CFG, and xrefs.
 
 Scope reference: `docs/electron_disassembler_project_scope.md`.
 
 ## Current State
-The repository is initialized with:
-- Electron main/preload + React/Vite renderer skeleton.
-- Rust engine with JSON-RPC stdio server skeleton and MVP1 linear disassembly flow.
+The repository currently contains:
+- A Tauri 2 desktop shell with a React/Vite renderer and Rust host integration.
+- A Rust engine with JSON-RPC stdio transport, persistent app-session lifecycle, and MVP disassembly/CFG flows.
 - Shared protocol schemas in `shared/schemas`.
 
 ## Planned Repository Layout
-- `app-electron/` - Electron UI, renderer, graph UI
+- `app-tauri/` - Tauri UI, renderer, graph UI, and host shell
 - `engine/` - Rust analysis service
 - `shared/` - shared message contracts/schemas
 - `docs/` - architecture and algorithm notes
@@ -23,7 +23,7 @@ The repository is initialized with:
 - For every substantial implementation, append an entry to `docs/work_log.md`.
 - Keep `docs/change_files.md` updated with the files changed by each logged work item.
 - Work log entries must include: date, summary, and validation commands executed.
-- Change file entries should be grouped by subsystem (`app-electron`, `engine`, `shared`, `docs`, root).
+- Change file entries should be grouped by subsystem (`app-tauri`, `engine`, `shared`, `docs`, root).
 
 ## Architecture Defaults (Current)
 - Renderer stack: React + Vite + TypeScript.
@@ -79,7 +79,7 @@ Baseline expectations:
 When handling unknown binaries:
 - Never execute loaded binaries.
 - Keep parsing/disassembly in the Rust analysis process.
-- Electron defaults should remain hardened (`contextIsolation: true`, `nodeIntegration: false`, `sandbox: true`).
+- Tauri permissions and capabilities should stay minimal, with renderer access constrained to the audited host commands required by the app.
 
 ## MVP Direction
 Build in milestone order from the scope doc:

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-get-title-bar-menu-model"
+description = "Enables the get_title_bar_menu_model command without any pre-configured scope."
+commands.allow = ["get_title_bar_menu_model"]
+
+[[permission]]
+identifier = "deny-get-title-bar-menu-model"
+description = "Denies the get_title_bar_menu_model command without any pre-configured scope."
+commands.deny = ["get_title_bar_menu_model"]

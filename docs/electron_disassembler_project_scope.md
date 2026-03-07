@@ -1,4 +1,4 @@
-# Minimal IDA‑Like Disassembler Electron App --- Project Scope
+# Minimal IDA-Like Desktop Disassembler --- Project Scope
 
 ## Overview
 
@@ -14,7 +14,7 @@ The application will:
 -   Show **cross references (xrefs)** between code and data
 
 The goal is to produce a usable **interactive disassembler** with a
-modern UI built with **Electron**, while keeping the analysis engine
+modern UI built with **Tauri**, while keeping the analysis engine
 relatively simple and focused.
 
 ------------------------------------------------------------------------
@@ -103,7 +103,7 @@ Reasons:
 -   fast
 -   interactive
 -   designed for graph visualization
--   works well inside Electron.
+-   works well inside a desktop shell.
 
 ------------------------------------------------------------------------
 
@@ -120,7 +120,7 @@ Split responsibilities between **UI** and **analysis engine**.
 -   Protocol source of truth: **JSON Schema** in `/shared/schemas`
 -   Initial architecture support: **PE32+ x64 only**
 
-## Electron UI (TypeScript)
+## Desktop UI (Tauri + TypeScript)
 
 Responsibilities:
 
@@ -128,11 +128,11 @@ Responsibilities:
 -   navigation
 -   graph visualization
 -   displaying disassembly
--   IPC communication with analysis engine
+-   host command communication with analysis engine
 
 Technologies:
 
--   Electron
+-   Tauri
 -   React (optional but recommended)
 -   Cytoscape.js for graphs
 
@@ -158,9 +158,9 @@ Reasons for Rust:
 
 Communication model:
 
-    Electron UI
+    Desktop UI
          |
-         | IPC / stdio / HTTP
+         | Host commands / stdio
          v
     Rust Analysis Engine
 
@@ -192,7 +192,7 @@ Pros:
 
 Cons:
 
--   native bindings can complicate Electron builds
+-   native bindings can complicate desktop packaging
 
 ------------------------------------------------------------------------
 
@@ -403,11 +403,11 @@ Important when working with unknown binaries.
 
 Never execute the loaded binary.
 
-Recommended Electron settings:
+Recommended desktop-shell settings:
 
-    contextIsolation: true
-    nodeIntegration: false
-    sandbox: true
+    minimal command surface
+    least-privilege capabilities
+    no binary execution in renderer
 
 Perform all parsing and disassembly inside the **Rust analysis
 process**, not the renderer.
@@ -416,10 +416,10 @@ process**, not the renderer.
 
 # Repository Structure
 
-    /app-electron
-        Electron UI
+    /app-tauri
+        Tauri UI
         React components
-        graph rendering
+        graph rendering and host shell
 
     /engine
         Rust analysis service

@@ -1,0 +1,24 @@
+{
+  "$schema": "https://biomejs.dev/schemas/1.9.4/schema.json",
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "recommended": true
+    }
+  },
+  "files": {
+    "ignore": [
+      "dist",
+      "node_modules",
+      "src/shared/protocol.gen.ts",
+      "src-tauri/gen",
+      "src-tauri/target",
+      "src-tauri/binaries"
+    ]
+  }
+}

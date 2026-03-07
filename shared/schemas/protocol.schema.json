@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://electron-disassembler.dev/schemas/protocol.schema.json",
-  "title": "ElectronDisassemblerProtocol",
-  "description": "JSON-RPC protocol definitions for Electron <-> Rust engine",
+  "title": "DisassemblerProtocol",
+  "description": "JSON-RPC protocol definitions for desktop shell <-> Rust engine",
   "type": "object",
   "oneOf": [
     { "$ref": "#/$defs/Request" },

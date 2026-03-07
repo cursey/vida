@@ -4,28 +4,29 @@ default:
   just --list
 
 setup:
-  cd app-electron; npm install
+  cd app-tauri; npm install
 
 app-gen-protocol:
-  cd app-electron; npm run gen:protocol
+  cd app-tauri; npm run gen:protocol
 
 app-build:
-  cd app-electron; npm run build
+  cargo build --manifest-path engine/Cargo.toml
+  cd app-tauri; npm run build
 
 app-dev:
-  cd app-electron; npm run dev
+  cd app-tauri; npm run dev
 
 app-lint:
-  cd app-electron; npm run lint
+  cd app-tauri; npm run lint
 
 app-fmt:
-  cd app-electron; npm run fmt
+  cd app-tauri; npm run fmt
 
 app-check:
-  cd app-electron; npm run check
+  cd app-tauri; npm run check
 
 app-test:
-  cd app-electron; npm run test
+  cd app-tauri; npm run test
 
 engine-build:
   cargo build --manifest-path engine/Cargo.toml
@@ -39,7 +40,7 @@ engine-fmt-check:
 engine-test:
   cargo test --manifest-path engine/Cargo.toml
 
-build: app-build engine-build
+build: engine-build app-build
 
 lint: app-lint
 
