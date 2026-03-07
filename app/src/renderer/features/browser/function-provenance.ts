@@ -12,6 +12,8 @@ export function toFunctionProvenanceCode(kind: string): string {
       return "tls";
     case "entry":
       return "ent";
+    case "call":
+      return "jmp";
     default:
       return kind.slice(0, 3).toLowerCase();
   }

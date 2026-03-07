@@ -10,7 +10,6 @@ pub(crate) struct SectionSlice {
     pub(crate) start_rva: u64,
     pub(crate) end_rva: u64,
     pub(crate) executable: bool,
-    pub(crate) name: String,
     pub(crate) pointer_to_raw_data: usize,
     pub(crate) size_of_raw_data: u64,
 }
@@ -80,16 +79,11 @@ pub(crate) fn build_section_lookup(pe: &PE<'_>) -> SectionLookup {
             let end_rva = start_rva.saturating_add(section_len);
             let size_of_raw_data = section.size_of_raw_data as u64;
             let pointer_to_raw_data = section.pointer_to_raw_data as usize;
-            let name = section
-                .name()
-                .map(|value| value.trim_end_matches('\0').to_owned())
-                .unwrap_or_else(|_| "<invalid>".to_owned());
 
             SectionSlice {
                 start_rva,
                 end_rva,
                 executable: section.characteristics & IMAGE_SCN_MEM_EXECUTE != 0,
-                name,
                 pointer_to_raw_data,
                 size_of_raw_data,
             }
@@ -119,32 +113,6 @@ pub(crate) fn parse_pe64(bytes: &[u8]) -> Result<PE<'_>, EngineError> {
         return Err(EngineError::UnsupportedArch);
     }
     Ok(pe)
-}
-
-pub(crate) fn find_section_for_rva(pe: &PE<'_>, rva: u64) -> Option<SectionSlice> {
-    for section in &pe.sections {
-        let start_rva = section.virtual_address as u64;
-        let section_len = u64::from(section.virtual_size.max(section.size_of_raw_data));
-        let end_rva = start_rva.saturating_add(section_len);
-
-        if rva >= start_rva && rva < end_rva {
-            let name = section
-                .name()
-                .map(|value| value.trim_end_matches('\0').to_owned())
-                .unwrap_or_else(|_| "<invalid>".to_owned());
-
-            return Some(SectionSlice {
-                start_rva,
-                end_rva,
-                executable: section.characteristics & IMAGE_SCN_MEM_EXECUTE != 0,
-                name,
-                pointer_to_raw_data: section.pointer_to_raw_data as usize,
-                size_of_raw_data: section.size_of_raw_data as u64,
-            });
-        }
-    }
-
-    None
 }
 
 pub(crate) fn collect_exception_function_starts(pe: &PE<'_>) -> Vec<u64> {
@@ -231,35 +199,4 @@ pub(crate) fn is_executable_rva(pe: &PE<'_>, rva: u64) -> bool {
     }
 
     false
-}
-
-pub(crate) fn get_byte_at_rva(bytes: &[u8], pe: &PE<'_>, rva: u64) -> u8 {
-    let size_of_headers = pe
-        .header
-        .optional_header
-        .as_ref()
-        .map(|value| value.windows_fields.size_of_headers as u64)
-        .unwrap_or(0);
-    if rva < size_of_headers {
-        let offset = rva as usize;
-        return bytes.get(offset).copied().unwrap_or(0);
-    }
-
-    for section in &pe.sections {
-        let start = section.virtual_address as u64;
-        let len = u64::from(section.virtual_size.max(section.size_of_raw_data));
-        let end = start.saturating_add(len);
-        if rva < start || rva >= end {
-            continue;
-        }
-
-        let section_offset = rva.saturating_sub(start);
-        if section_offset < section.size_of_raw_data as u64 {
-            let file_offset = section.pointer_to_raw_data as u64 + section_offset;
-            return bytes.get(file_offset as usize).copied().unwrap_or(0);
-        }
-        return 0;
-    }
-
-    0
 }

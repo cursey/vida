@@ -1,5 +1,22 @@
 # Work Log
 
+## 2026-03-07 - Discover Functions from Direct Call Targets
+
+Summary:
+- Extended engine function discovery to analyze seeded functions in deterministic waves and register new `call` seeds when direct call instructions target executable RVAs without stronger existing provenance.
+- Reused the wave analyses for final graph/linear ownership merging so call-discovered functions stay stable, preserve static-provider precedence, and remain queryable through the existing APIs.
+- Added engine regression coverage for call-seed registration rules plus an integration test that verifies no-PDB analysis surfaces graphable call-derived functions, and updated app protocol/provenance handling for the new seed kind.
+
+Validation commands executed:
+- `cargo fmt --manifest-path engine/Cargo.toml`
+- `cargo test --manifest-path engine/Cargo.toml`
+- `cargo fmt --manifest-path engine/Cargo.toml -- --check`
+- `npm run check` (in `app`)
+- `npx vitest run src/renderer/App.function-provenance.test.ts` (in `app`)
+
+Changed files index:
+- See `docs/change_files.md` for the detailed file list for this work item.
+
 ## 2026-03-07 - Improve Engine Analysis Cancellation Responsiveness
 
 Summary:

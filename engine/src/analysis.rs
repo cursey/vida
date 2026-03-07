@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::ops::Bound::{Excluded, Unbounded};
 use std::path::Path;
 use std::sync::{
@@ -117,18 +117,76 @@ where
     let pe = parse_pe64(bytes)?;
     let section_lookup = build_section_lookup(&pe);
     let image_base = pe.image_base as u64;
-    let functions = Arc::new(discover_function_seeds_with_progress(
+    let mut ordered = discover_initial_function_seed_candidates_with_progress(
         module_path,
         &pe,
         image_base,
         &section_lookup,
         &mut on_progress,
-    )?);
+    )?;
 
     if is_canceled() {
         return Err(EngineError::Canceled);
     }
 
+    let mut analyzed_seed_starts = BTreeSet::<u64>::new();
+    let mut completed_by_start = HashMap::<u64, Option<CompletedFunctionAnalysis>>::new();
+    let mut non_call_instruction_owner_by_rva = BTreeMap::<u64, InstructionOwnerRange>::new();
+
+    loop {
+        let analysis_order = ordered
+            .values()
+            .filter(|candidate| !analyzed_seed_starts.contains(&candidate.seed.start_rva))
+            .map(|candidate| candidate.seed.clone())
+            .collect::<Vec<FunctionSeedEntry>>();
+        if analysis_order.is_empty() {
+            break;
+        }
+
+        let results = analyze_seed_batch(
+            bytes,
+            &section_lookup,
+            image_base,
+            &analysis_order,
+            &mut is_canceled,
+        )?;
+
+        let mut discovery_changed = false;
+        for (seed, completed) in results {
+            analyzed_seed_starts.insert(seed.start_rva);
+
+            if let Some(completed) = completed {
+                if seed.kind != "call" {
+                    claim_function_rows_for_owner(
+                        completed.function_start_rva,
+                        &completed.function_rows,
+                        &mut non_call_instruction_owner_by_rva,
+                    );
+                }
+
+                discovery_changed |= discover_call_target_seeds(
+                    &completed,
+                    image_base,
+                    &section_lookup,
+                    &mut ordered,
+                    &non_call_instruction_owner_by_rva,
+                );
+                completed_by_start.insert(seed.start_rva, Some(completed));
+            } else {
+                completed_by_start.insert(seed.start_rva, None);
+            }
+        }
+
+        if discovery_changed {
+            emit_discovery_progress(&ordered, &mut on_progress);
+        }
+
+        if is_canceled() {
+            return Err(EngineError::Canceled);
+        }
+    }
+
+    let functions = Arc::new(collect_discovered_function_entries(&ordered));
     let mut analysis_order = (*functions).clone();
     analysis_order.sort_by_key(|seed| (seed_priority(seed.kind), seed.start_rva));
     on_progress(AnalysisProgressUpdate {
@@ -145,136 +203,30 @@ where
         HashMap::<u64, Vec<AnalyzedInstructionRow>>::new();
 
     if !analysis_order.is_empty() {
-        let worker_count = analysis_worker_count(analysis_order.len());
-        let next_index = AtomicUsize::new(0);
-        let cancel_requested = AtomicBool::new(false);
-        let stop_scheduling = AtomicBool::new(false);
-        let (sender, receiver) = mpsc::channel::<(
-            usize,
-            Result<Option<CompletedFunctionAnalysis>, EngineError>,
-        )>();
-        let mut pending_results = BTreeMap::<usize, Option<CompletedFunctionAnalysis>>::new();
-        let mut first_error = None;
-        let mut completed_count = 0usize;
-        let mut next_merge_index = 0usize;
-
-        thread::scope(|scope| {
-            for _ in 0..worker_count {
-                let sender = sender.clone();
-                let analysis_order = &analysis_order;
-                let next_index = &next_index;
-                let cancel_requested = &cancel_requested;
-                let stop_scheduling = &stop_scheduling;
-                let section_lookup = &section_lookup;
-
-                scope.spawn(move || {
-                    loop {
-                        if stop_scheduling.load(Ordering::Relaxed) {
-                            break;
-                        }
-
-                        let index = next_index.fetch_add(1, Ordering::Relaxed);
-                        if index >= analysis_order.len() {
-                            break;
-                        }
-
-                        let result = analyze_seed(
-                            bytes,
-                            section_lookup,
-                            image_base,
-                            &analysis_order[index],
-                            || cancel_requested.load(Ordering::Relaxed),
-                        );
-                        if result
-                            .as_ref()
-                            .is_err_and(|error| !matches!(error, EngineError::Canceled))
-                        {
-                            stop_scheduling.store(true, Ordering::Relaxed);
-                        }
-                        if sender.send((index, result)).is_err() {
-                            break;
-                        }
-                    }
-                });
-            }
-            drop(sender);
-
-            loop {
-                if is_canceled() {
-                    cancel_requested.store(true, Ordering::Relaxed);
-                    stop_scheduling.store(true, Ordering::Relaxed);
+        for (index, seed) in analysis_order.iter().enumerate() {
+            if let Some(completed) = completed_by_start.remove(&seed.start_rva) {
+                if let Some(completed) = completed {
+                    merge_completed_function_analysis(
+                        completed,
+                        &mut graphs_by_start,
+                        &mut instruction_owner_by_rva,
+                        &mut claimed_instructions,
+                        &mut claimed_instructions_by_function_start,
+                    );
                 }
-
-                match receiver.recv_timeout(ANALYSIS_RESULT_POLL_INTERVAL) {
-                    Ok((index, result)) => {
-                        completed_count += 1;
-                        on_progress(AnalysisProgressUpdate {
-                            phase: AnalysisProgressPhase::AnalyzingFunctions,
-                            discovered_functions: Arc::clone(&functions),
-                            total_function_count: Some(functions.len()),
-                            analyzed_function_count: Some(completed_count),
-                        });
-
-                        match result {
-                            Ok(completed) => {
-                                pending_results.insert(index, completed);
-                            }
-                            Err(EngineError::Canceled)
-                                if cancel_requested.load(Ordering::Relaxed) => {}
-                            Err(error) => {
-                                stop_scheduling.store(true, Ordering::Relaxed);
-                                if first_error.is_none() {
-                                    first_error = Some(error);
-                                }
-                            }
-                        }
-
-                        if first_error.is_none() && !cancel_requested.load(Ordering::Relaxed) {
-                            while let Some(completed) = pending_results.remove(&next_merge_index) {
-                                if let Some(completed) = completed {
-                                    merge_completed_function_analysis(
-                                        completed,
-                                        &mut graphs_by_start,
-                                        &mut instruction_owner_by_rva,
-                                        &mut claimed_instructions,
-                                        &mut claimed_instructions_by_function_start,
-                                    );
-                                }
-                                next_merge_index += 1;
-                            }
-                        }
-                    }
-                    Err(RecvTimeoutError::Timeout) => continue,
-                    Err(RecvTimeoutError::Disconnected) => break,
-                }
+            } else {
+                return Err(EngineError::Internal(format!(
+                    "Missing analyzed function result for seed {:X}",
+                    seed.start_rva
+                )));
             }
-        });
 
-        if cancel_requested.load(Ordering::Relaxed) || is_canceled() {
-            return Err(EngineError::Canceled);
-        }
-
-        if let Some(error) = first_error {
-            return Err(error);
-        }
-
-        while let Some(completed) = pending_results.remove(&next_merge_index) {
-            if let Some(completed) = completed {
-                merge_completed_function_analysis(
-                    completed,
-                    &mut graphs_by_start,
-                    &mut instruction_owner_by_rva,
-                    &mut claimed_instructions,
-                    &mut claimed_instructions_by_function_start,
-                );
-            }
-            next_merge_index += 1;
-        }
-
-        if next_merge_index != analysis_order.len() {
-            return Err(EngineError::Internal(
-                "Parallel function analysis produced incomplete results".to_owned(),
-            ));
+            on_progress(AnalysisProgressUpdate {
+                phase: AnalysisProgressPhase::AnalyzingFunctions,
+                discovered_functions: Arc::clone(&functions),
+                total_function_count: Some(functions.len()),
+                analyzed_function_count: Some(index + 1),
+            });
         }
     }
 
@@ -355,6 +307,129 @@ fn analysis_worker_count(function_count: usize) -> usize {
         .min(function_count)
 }
 
+fn analyze_seed_batch(
+    bytes: &[u8],
+    section_lookup: &SectionLookup,
+    image_base: u64,
+    analysis_order: &[FunctionSeedEntry],
+    mut is_canceled: impl FnMut() -> bool,
+) -> Result<Vec<(FunctionSeedEntry, Option<CompletedFunctionAnalysis>)>, EngineError> {
+    if analysis_order.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let worker_count = analysis_worker_count(analysis_order.len());
+    let next_index = AtomicUsize::new(0);
+    let cancel_requested = AtomicBool::new(false);
+    let stop_scheduling = AtomicBool::new(false);
+    let (sender, receiver) = mpsc::channel::<(
+        usize,
+        Result<Option<CompletedFunctionAnalysis>, EngineError>,
+    )>();
+    let mut ordered_results = (0..analysis_order.len())
+        .map(|_| None)
+        .collect::<Vec<Option<Option<CompletedFunctionAnalysis>>>>();
+    let mut first_error = None;
+    let mut completed_count = 0usize;
+
+    thread::scope(|scope| {
+        for _ in 0..worker_count {
+            let sender = sender.clone();
+            let analysis_order = analysis_order;
+            let next_index = &next_index;
+            let cancel_requested = &cancel_requested;
+            let stop_scheduling = &stop_scheduling;
+            let section_lookup = section_lookup;
+
+            scope.spawn(move || {
+                loop {
+                    if stop_scheduling.load(Ordering::Relaxed) {
+                        break;
+                    }
+
+                    let index = next_index.fetch_add(1, Ordering::Relaxed);
+                    if index >= analysis_order.len() {
+                        break;
+                    }
+
+                    let result = analyze_seed(
+                        bytes,
+                        section_lookup,
+                        image_base,
+                        &analysis_order[index],
+                        || cancel_requested.load(Ordering::Relaxed),
+                    );
+                    if result
+                        .as_ref()
+                        .is_err_and(|error| !matches!(error, EngineError::Canceled))
+                    {
+                        stop_scheduling.store(true, Ordering::Relaxed);
+                    }
+                    if sender.send((index, result)).is_err() {
+                        break;
+                    }
+                }
+            });
+        }
+        drop(sender);
+
+        loop {
+            if is_canceled() {
+                cancel_requested.store(true, Ordering::Relaxed);
+                stop_scheduling.store(true, Ordering::Relaxed);
+            }
+
+            match receiver.recv_timeout(ANALYSIS_RESULT_POLL_INTERVAL) {
+                Ok((index, result)) => {
+                    completed_count += 1;
+                    match result {
+                        Ok(completed) => {
+                            ordered_results[index] = Some(completed);
+                        }
+                        Err(EngineError::Canceled) if cancel_requested.load(Ordering::Relaxed) => {}
+                        Err(error) => {
+                            stop_scheduling.store(true, Ordering::Relaxed);
+                            if first_error.is_none() {
+                                first_error = Some(error);
+                            }
+                        }
+                    }
+                }
+                Err(RecvTimeoutError::Timeout) => continue,
+                Err(RecvTimeoutError::Disconnected) => break,
+            }
+
+            if completed_count >= analysis_order.len() {
+                break;
+            }
+        }
+    });
+
+    if cancel_requested.load(Ordering::Relaxed) || is_canceled() {
+        return Err(EngineError::Canceled);
+    }
+
+    if let Some(error) = first_error {
+        return Err(error);
+    }
+
+    if ordered_results.iter().any(Option::is_none) {
+        return Err(EngineError::Internal(
+            "Parallel function analysis produced incomplete results".to_owned(),
+        ));
+    }
+
+    Ok(analysis_order
+        .iter()
+        .cloned()
+        .zip(
+            ordered_results
+                .into_iter()
+                .map(|result| result.unwrap_or(None)),
+        )
+        .collect())
+}
+
 fn analyze_seed(
     bytes: &[u8],
     section_lookup: &SectionLookup,
@@ -400,18 +475,11 @@ fn merge_completed_function_analysis(
     claimed_instructions_by_function_start: &mut HashMap<u64, Vec<AnalyzedInstructionRow>>,
 ) {
     for row in completed.function_rows {
-        let row_end_rva = row.start_rva.saturating_add(u64::from(row.len));
-        if instruction_range_overlaps(instruction_owner_by_rva, row.start_rva, row_end_rva) {
+        if !try_claim_instruction_row(instruction_owner_by_rva, completed.function_start_rva, &row)
+        {
             continue;
         }
 
-        instruction_owner_by_rva.insert(
-            row.start_rva,
-            InstructionOwnerRange {
-                end_rva: row_end_rva,
-                function_start_rva: completed.function_start_rva,
-            },
-        );
         claimed_instructions
             .entry(row.start_rva)
             .or_insert_with(|| row.clone());
@@ -424,13 +492,82 @@ fn merge_completed_function_analysis(
     graphs_by_start.insert(completed.function_start_rva, completed.cached_graph);
 }
 
-fn discover_function_seeds_with_progress<F>(
+fn claim_function_rows_for_owner(
+    function_start_rva: u64,
+    function_rows: &[AnalyzedInstructionRow],
+    instruction_owner_by_rva: &mut BTreeMap<u64, InstructionOwnerRange>,
+) {
+    for row in function_rows {
+        let _ = try_claim_instruction_row(instruction_owner_by_rva, function_start_rva, row);
+    }
+}
+
+fn try_claim_instruction_row(
+    instruction_owner_by_rva: &mut BTreeMap<u64, InstructionOwnerRange>,
+    function_start_rva: u64,
+    row: &AnalyzedInstructionRow,
+) -> bool {
+    let row_end_rva = row.start_rva.saturating_add(u64::from(row.len));
+    if instruction_range_overlaps(instruction_owner_by_rva, row.start_rva, row_end_rva) {
+        return false;
+    }
+
+    instruction_owner_by_rva.insert(
+        row.start_rva,
+        InstructionOwnerRange {
+            end_rva: row_end_rva,
+            function_start_rva,
+        },
+    );
+    true
+}
+
+fn discover_call_target_seeds(
+    completed: &CompletedFunctionAnalysis,
+    image_base: u64,
+    section_lookup: &SectionLookup,
+    ordered: &mut BTreeMap<u64, FunctionSeedCandidate>,
+    non_call_instruction_owner_by_rva: &BTreeMap<u64, InstructionOwnerRange>,
+) -> bool {
+    let mut changed = false;
+
+    for row in &completed.function_rows {
+        let Some(target_rva) = row.call_target_rva else {
+            continue;
+        };
+        if !section_lookup.is_executable_rva(target_rva) {
+            continue;
+        }
+        if ordered.contains_key(&target_rva) {
+            continue;
+        }
+        if instruction_owner_for_rva(non_call_instruction_owner_by_rva, target_rva).is_some() {
+            continue;
+        }
+
+        changed |= register_seed(
+            ordered,
+            FunctionSeedCandidate {
+                seed: FunctionSeedEntry {
+                    start_rva: target_rva,
+                    name: default_function_name(image_base + target_rva),
+                    kind: "call",
+                },
+                priority: seed_priority("call"),
+            },
+        );
+    }
+
+    changed
+}
+
+fn discover_initial_function_seed_candidates_with_progress<F>(
     module_path: &Path,
     pe: &PE<'_>,
     image_base: u64,
     section_lookup: &SectionLookup,
     on_progress: &mut F,
-) -> Result<Vec<FunctionSeedEntry>, EngineError>
+) -> Result<BTreeMap<u64, FunctionSeedCandidate>, EngineError>
 where
     F: FnMut(AnalysisProgressUpdate),
 {
@@ -524,10 +661,13 @@ where
     }
     emit_discovery_progress(&ordered, on_progress);
 
-    Ok(ordered
-        .into_values()
-        .map(|candidate| candidate.seed)
-        .collect())
+    Ok(ordered)
+}
+
+fn collect_discovered_function_entries(
+    ordered: &BTreeMap<u64, FunctionSeedCandidate>,
+) -> Vec<FunctionSeedEntry> {
+    ordered.values().cloned().map(|value| value.seed).collect()
 }
 
 fn emit_discovery_progress<F>(ordered: &BTreeMap<u64, FunctionSeedCandidate>, on_progress: &mut F)
@@ -536,7 +676,7 @@ where
 {
     on_progress(AnalysisProgressUpdate {
         phase: AnalysisProgressPhase::DiscoveringFunctions,
-        discovered_functions: Arc::new(ordered.values().cloned().map(|value| value.seed).collect()),
+        discovered_functions: Arc::new(collect_discovered_function_entries(ordered)),
         total_function_count: None,
         analyzed_function_count: None,
     });
@@ -545,11 +685,12 @@ where
 fn register_seed(
     ordered: &mut BTreeMap<u64, FunctionSeedCandidate>,
     candidate: FunctionSeedCandidate,
-) {
+) -> bool {
     match ordered.get(&candidate.seed.start_rva) {
-        Some(existing) if existing.priority <= candidate.priority => {}
+        Some(existing) if existing.priority <= candidate.priority => false,
         _ => {
             ordered.insert(candidate.seed.start_rva, candidate);
+            true
         }
     }
 }
@@ -561,6 +702,7 @@ fn seed_priority(kind: &str) -> u8 {
         "tls" => 2,
         "entry" => 3,
         "exception" => 4,
+        "call" => 5,
         _ => u8::MAX,
     }
 }
@@ -656,12 +798,14 @@ fn build_cached_function_graph(
 #[cfg(test)]
 mod tests {
     use super::{
-        CachedFunctionGraph, CompletedFunctionAnalysis, InstructionOwnerRange,
-        build_module_analysis_with_progress, instruction_owner_for_rva, instruction_range_overlaps,
-        merge_completed_function_analysis,
+        CachedFunctionGraph, CompletedFunctionAnalysis, FunctionSeedCandidate,
+        InstructionOwnerRange, build_module_analysis_with_progress, claim_function_rows_for_owner,
+        discover_call_target_seeds, instruction_owner_for_rva, instruction_range_overlaps,
+        merge_completed_function_analysis, register_seed, seed_priority,
     };
     use crate::api::InstructionCategory;
     use crate::linear::AnalyzedInstructionRow;
+    use crate::pe_utils::{build_section_lookup, parse_pe64};
     use crate::{EngineError, fixture_path};
     use std::collections::{BTreeMap, HashMap};
     use std::fs;
@@ -677,6 +821,18 @@ mod tests {
             instruction_category: InstructionCategory::Other,
             branch_target_rva: None,
             call_target_rva: None,
+        }
+    }
+
+    fn call_instruction_row(
+        start_rva: u64,
+        len: u8,
+        call_target_rva: u64,
+    ) -> AnalyzedInstructionRow {
+        AnalyzedInstructionRow {
+            instruction_category: InstructionCategory::Call,
+            call_target_rva: Some(call_target_rva),
+            ..instruction_row(start_rva, len)
         }
     }
 
@@ -794,6 +950,114 @@ mod tests {
                 .map(Vec::len),
             None
         );
+    }
+
+    #[test]
+    fn call_seed_priority_stays_below_static_provenance() {
+        assert!(seed_priority("call") > seed_priority("exception"));
+    }
+
+    #[test]
+    fn discover_call_target_seeds_registers_executable_targets() {
+        let module_path = fixture_path("minimal_x64.exe");
+        let bytes = fs::read(&module_path).expect("fixture bytes should load");
+        let pe = parse_pe64(&bytes).expect("fixture should parse as PE64");
+        let section_lookup = build_section_lookup(&pe);
+        let image_base = pe.image_base as u64;
+        let target_rva = section_lookup
+            .sections()
+            .iter()
+            .find(|section| section.executable)
+            .map(|section| section.start_rva)
+            .expect("fixture should have an executable section");
+        let completed =
+            completed_function_analysis(0x1000, vec![call_instruction_row(0x2000, 5, target_rva)]);
+        let mut ordered = BTreeMap::new();
+
+        let changed = discover_call_target_seeds(
+            &completed,
+            image_base,
+            &section_lookup,
+            &mut ordered,
+            &BTreeMap::new(),
+        );
+
+        assert!(changed);
+        let seed = ordered
+            .get(&target_rva)
+            .expect("call target seed should be registered");
+        assert_eq!(seed.seed.kind, "call");
+        assert_eq!(seed.seed.name, format!("sub_{:x}", image_base + target_rva));
+    }
+
+    #[test]
+    fn discover_call_target_seeds_skips_targets_owned_by_static_provenance() {
+        let module_path = fixture_path("minimal_x64.exe");
+        let bytes = fs::read(&module_path).expect("fixture bytes should load");
+        let pe = parse_pe64(&bytes).expect("fixture should parse as PE64");
+        let section_lookup = build_section_lookup(&pe);
+        let image_base = pe.image_base as u64;
+        let target_rva = section_lookup
+            .sections()
+            .iter()
+            .find(|section| section.executable)
+            .map(|section| section.start_rva)
+            .expect("fixture should have an executable section");
+        let completed =
+            completed_function_analysis(0x1000, vec![call_instruction_row(0x2000, 5, target_rva)]);
+        let mut ordered = BTreeMap::new();
+        let mut non_call_owners = BTreeMap::new();
+        claim_function_rows_for_owner(
+            0x3000,
+            &[instruction_row(target_rva, 4)],
+            &mut non_call_owners,
+        );
+
+        let changed = discover_call_target_seeds(
+            &completed,
+            image_base,
+            &section_lookup,
+            &mut ordered,
+            &non_call_owners,
+        );
+
+        assert!(!changed);
+        assert!(!ordered.contains_key(&target_rva));
+    }
+
+    #[test]
+    fn register_seed_keeps_stronger_existing_static_provenance() {
+        let target_rva = 0x2000;
+        let mut ordered = BTreeMap::new();
+
+        assert!(register_seed(
+            &mut ordered,
+            FunctionSeedCandidate {
+                seed: super::FunctionSeedEntry {
+                    start_rva: target_rva,
+                    name: "exported_name".to_owned(),
+                    kind: "export",
+                },
+                priority: seed_priority("export"),
+            },
+        ));
+        assert!(!register_seed(
+            &mut ordered,
+            FunctionSeedCandidate {
+                seed: super::FunctionSeedEntry {
+                    start_rva: target_rva,
+                    name: "sub_call".to_owned(),
+                    kind: "call",
+                },
+                priority: seed_priority("call"),
+            },
+        ));
+
+        let seed = ordered
+            .get(&target_rva)
+            .expect("stronger static seed should remain registered");
+        assert_eq!(seed.seed.kind, "export");
+        assert_eq!(seed.seed.name, "exported_name");
     }
 
     #[test]

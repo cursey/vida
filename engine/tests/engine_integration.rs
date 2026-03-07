@@ -94,7 +94,10 @@ fn opens_module_lists_functions_and_disassembles() {
 
     for seed in &list_result.functions {
         assert!(
-            matches!(seed.kind, "entry" | "export" | "tls" | "exception" | "pdb"),
+            matches!(
+                seed.kind,
+                "entry" | "export" | "tls" | "exception" | "pdb" | "call"
+            ),
             "Unexpected function seed kind: {}",
             seed.kind
         );
@@ -228,6 +231,49 @@ fn opens_module_lists_functions_and_disassembles() {
         }),
         Err(EngineError::InvalidAddress)
     ));
+}
+
+#[test]
+fn discovers_internal_functions_from_direct_call_targets_without_pdb() {
+    let fixture = fixture_path("bench_no_pdb/minimal_x64.exe");
+    assert!(
+        fixture.exists(),
+        "Fixture does not exist: {}",
+        fixture.display()
+    );
+
+    let mut state = EngineState::default();
+    let open_result = state
+        .open_module(ModuleOpenParams {
+            path: fixture.to_string_lossy().into_owned(),
+        })
+        .expect("module should open");
+    let module_id = open_result.module_id.clone();
+
+    let ready_status = wait_for_analysis_ready(&mut state, &module_id);
+    assert_eq!(ready_status.state, "ready");
+
+    let function_list = state
+        .list_functions(FunctionListParams {
+            module_id: module_id.clone(),
+        })
+        .expect("function list should load");
+    let call_seed = function_list
+        .functions
+        .iter()
+        .find(|seed| seed.kind == "call")
+        .expect("expected at least one call-discovered function seed");
+
+    let graph = state
+        .get_function_graph_by_va(FunctionGraphByVaParams {
+            module_id,
+            va: call_seed.start.clone(),
+        })
+        .expect("call-discovered function should resolve to a graph");
+
+    assert_eq!(graph.function_start_va, call_seed.start);
+    assert_eq!(graph.function_name, call_seed.name);
+    assert!(!graph.blocks.is_empty());
 }
 
 #[test]

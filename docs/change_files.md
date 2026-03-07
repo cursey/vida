@@ -1,5 +1,21 @@
 # Change Files
 
+## 2026-03-07 - Discover Functions from Direct Call Targets
+
+App:
+- `app/src/shared/protocol.ts`
+- `app/src/renderer/features/browser/function-provenance.ts`
+- `app/src/renderer/App.function-provenance.test.ts`
+
+Engine:
+- `engine/src/analysis.rs`
+- `engine/src/pe_utils.rs`
+- `engine/tests/engine_integration.rs`
+
+Docs:
+- `docs/work_log.md`
+- `docs/change_files.md`
+
 ## 2026-03-07 - Improve Engine Analysis Cancellation Responsiveness
 
 Engine:

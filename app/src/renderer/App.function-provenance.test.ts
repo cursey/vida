@@ -9,6 +9,7 @@ describe("function provenance shortcodes", () => {
     expect(toFunctionProvenanceCode("export")).toBe("exp");
     expect(toFunctionProvenanceCode("tls")).toBe("tls");
     expect(toFunctionProvenanceCode("entry")).toBe("ent");
+    expect(toFunctionProvenanceCode("call")).toBe("jmp");
   });
 
   it("falls back to the first three lowercase characters for unknown kinds", () => {
