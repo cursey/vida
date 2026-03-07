@@ -1,11 +1,10 @@
 use std::collections::BTreeMap;
-
-use goblin::pe::PE;
+use std::fmt::Write as FmtWrite;
 
 use crate::api::{InstructionCategory, LinearViewRow};
-use crate::disasm::to_hex;
+use crate::disasm::{bytes_to_hex, to_hex};
 use crate::error::EngineError;
-use crate::pe_utils::get_byte_at_rva;
+use crate::pe_utils::SectionLookup;
 
 pub(crate) const DATA_GROUP_SIZE: u64 = 16;
 pub(crate) const LINEAR_ROW_HEIGHT: u64 = 24;
@@ -65,10 +64,10 @@ struct RangeSpec {
 }
 
 pub(crate) fn build_linear_view(
-    pe: &PE<'_>,
+    section_lookup: &SectionLookup,
     instruction_rows: &BTreeMap<u64, AnalyzedInstructionRow>,
 ) -> Result<LinearView, EngineError> {
-    let mut ranges = collect_mapped_ranges(pe);
+    let mut ranges = collect_mapped_ranges(section_lookup);
     if ranges.is_empty() {
         return Err(EngineError::UnsupportedFormat);
     }
@@ -207,15 +206,10 @@ pub(crate) fn build_linear_view(
     })
 }
 
-fn collect_mapped_ranges(pe: &PE<'_>) -> Vec<RangeSpec> {
+fn collect_mapped_ranges(section_lookup: &SectionLookup) -> Vec<RangeSpec> {
     let mut ranges = Vec::new();
 
-    let size_of_headers = pe
-        .header
-        .optional_header
-        .as_ref()
-        .map(|value| value.windows_fields.size_of_headers as u64)
-        .unwrap_or(0);
+    let size_of_headers = section_lookup.size_of_headers();
     if size_of_headers > 0 {
         ranges.push(RangeSpec {
             start: 0,
@@ -223,14 +217,14 @@ fn collect_mapped_ranges(pe: &PE<'_>) -> Vec<RangeSpec> {
         });
     }
 
-    for section in &pe.sections {
-        let start = section.virtual_address as u64;
-        let len = u64::from(section.virtual_size.max(section.size_of_raw_data));
-        let end = start.saturating_add(len);
-        if end <= start {
+    for section in section_lookup.sections() {
+        if section.end_rva <= section.start_rva {
             continue;
         }
-        ranges.push(RangeSpec { start, end });
+        ranges.push(RangeSpec {
+            start: section.start_rva,
+            end: section.end_rva,
+        });
     }
 
     ranges
@@ -296,7 +290,7 @@ pub(crate) fn find_row_by_rva(view: &LinearView, rva: u64) -> Result<u64, Engine
 pub(crate) fn materialize_linear_row(
     view: &LinearView,
     bytes: &[u8],
-    pe: &PE<'_>,
+    section_lookup: &SectionLookup,
     image_base: u64,
     row_index: u64,
 ) -> Result<LinearViewRow, EngineError> {
@@ -325,21 +319,21 @@ pub(crate) fn materialize_linear_row(
         LinearSegmentKind::Data => {
             let rva = segment.start_rva + row_offset * DATA_GROUP_SIZE;
             let remaining = segment.end_rva.saturating_sub(rva);
-            let count = remaining.min(DATA_GROUP_SIZE);
-            let mut byte_values = Vec::new();
+            let count = remaining.min(DATA_GROUP_SIZE) as usize;
+            let mut row_bytes = [0u8; DATA_GROUP_SIZE as usize];
             for index in 0..count {
-                byte_values.push(get_byte_at_rva(bytes, pe, rva + index));
+                row_bytes[index] = section_lookup.get_byte_at(bytes, rva + index as u64);
             }
-            let bytes_text = byte_values
-                .iter()
-                .map(|value| format!("{value:02X}"))
-                .collect::<Vec<String>>()
-                .join(" ");
-            let operands = byte_values
-                .iter()
-                .map(|value| format!("0x{value:02X}"))
-                .collect::<Vec<String>>()
-                .join(", ");
+            let byte_values = &row_bytes[..count];
+            let bytes_text = bytes_to_hex(byte_values);
+
+            let mut operands = String::with_capacity(count.saturating_mul(6).saturating_sub(1));
+            for (index, value) in byte_values.iter().enumerate() {
+                if index > 0 {
+                    operands.push_str(", ");
+                }
+                let _ = write!(&mut operands, "0x{value:02X}");
+            }
 
             Ok(LinearViewRow {
                 kind: "data",

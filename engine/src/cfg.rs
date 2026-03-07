@@ -1,6 +1,5 @@
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
-use goblin::pe::PE;
 use iced_x86::{
     Decoder, DecoderOptions, FlowControl, Formatter, Instruction, IntelFormatter, Mnemonic,
 };
@@ -8,7 +7,7 @@ use iced_x86::{
 use crate::api::InstructionCategory;
 use crate::disasm::{bytes_to_hex, categorize_instruction, split_instruction_text};
 use crate::error::EngineError;
-use crate::pe_utils::{find_section_for_rva, get_byte_at_rva, is_executable_rva};
+use crate::pe_utils::SectionLookup;
 
 pub(crate) const MAX_CFG_BLOCKS: usize = 2048;
 pub(crate) const MAX_CFG_INSTRUCTIONS: usize = 65_536;
@@ -66,12 +65,15 @@ struct DecodedInstruction {
 
 pub(crate) fn analyze_function_cfg(
     bytes: &[u8],
-    pe: &PE<'_>,
+    section_lookup: &SectionLookup,
+    image_base: u64,
     start_rva: u64,
 ) -> Result<FunctionGraphAnalysis, EngineError> {
-    if !is_executable_rva(pe, start_rva) {
+    if !section_lookup.is_executable_rva(start_rva) {
         return Err(EngineError::InvalidAddress);
     }
+
+    let mut formatter = IntelFormatter::new();
 
     let mut queue = VecDeque::new();
     let mut enqueued = BTreeSet::new();
@@ -86,7 +88,7 @@ pub(crate) fn analyze_function_cfg(
         if blocks.contains_key(&block_start) {
             continue;
         }
-        if !is_executable_rva(pe, block_start) {
+        if !section_lookup.is_executable_rva(block_start) {
             continue;
         }
         if blocks.len() >= MAX_CFG_BLOCKS || total_instructions >= MAX_CFG_INSTRUCTIONS {
@@ -97,7 +99,9 @@ pub(crate) fn analyze_function_cfg(
         let mut instructions = Vec::<BasicBlockInstructionAnalysis>::new();
 
         loop {
-            if total_instructions >= MAX_CFG_INSTRUCTIONS || !is_executable_rva(pe, current_rva) {
+            if total_instructions >= MAX_CFG_INSTRUCTIONS
+                || !section_lookup.is_executable_rva(current_rva)
+            {
                 break;
             }
 
@@ -106,7 +110,14 @@ pub(crate) fn analyze_function_cfg(
                 break;
             }
 
-            let Some(decoded) = decode_instruction_at_rva(bytes, pe, current_rva)? else {
+            let Some(decoded) = decode_instruction_at_rva(
+                bytes,
+                section_lookup,
+                image_base,
+                current_rva,
+                &mut formatter,
+            )?
+            else {
                 break;
             };
 
@@ -128,7 +139,7 @@ pub(crate) fn analyze_function_cfg(
                 FlowControl::UnconditionalBranch | FlowControl::IndirectBranch => {
                     if let Some(target_rva) = decoded
                         .branch_target_rva
-                        .filter(|value| is_executable_rva(pe, *value))
+                        .filter(|value| section_lookup.is_executable_rva(*value))
                     {
                         edge_set.insert((
                             block_start,
@@ -144,14 +155,14 @@ pub(crate) fn analyze_function_cfg(
                 FlowControl::ConditionalBranch => {
                     if let Some(target_rva) = decoded
                         .branch_target_rva
-                        .filter(|value| is_executable_rva(pe, *value))
+                        .filter(|value| section_lookup.is_executable_rva(*value))
                     {
                         edge_set.insert((block_start, target_rva, BasicBlockEdgeKind::Conditional));
                         if enqueued.insert(target_rva) {
                             queue.push_back(target_rva);
                         }
                     }
-                    if is_executable_rva(pe, next_rva) {
+                    if section_lookup.is_executable_rva(next_rva) {
                         edge_set.insert((block_start, next_rva, BasicBlockEdgeKind::Fallthrough));
                         if enqueued.insert(next_rva) {
                             queue.push_back(next_rva);
@@ -160,7 +171,7 @@ pub(crate) fn analyze_function_cfg(
                     break;
                 }
                 _ => {
-                    if !is_executable_rva(pe, next_rva) {
+                    if !section_lookup.is_executable_rva(next_rva) {
                         break;
                     }
                     current_rva = next_rva;
@@ -205,15 +216,18 @@ pub(crate) fn analyze_function_cfg(
 
 fn decode_instruction_at_rva(
     bytes: &[u8],
-    pe: &PE<'_>,
+    section_lookup: &SectionLookup,
+    image_base: u64,
     rva: u64,
+    formatter: &mut IntelFormatter,
 ) -> Result<Option<DecodedInstruction>, EngineError> {
-    let section = find_section_for_rva(pe, rva).ok_or(EngineError::InvalidAddress)?;
-    if !is_executable_rva(pe, rva) || rva >= section.end_rva {
+    let Some(section) = section_lookup.section_for_rva(rva) else {
+        return Err(EngineError::InvalidAddress);
+    };
+    if !section.executable || rva >= section.end_rva {
         return Ok(None);
     }
 
-    let image_base = pe.image_base as u64;
     let section_end_rva = section.end_rva;
     let window_len = usize::try_from((section_end_rva - rva).min(15))
         .map_err(|error| EngineError::Internal(error.to_string()))?;
@@ -221,12 +235,17 @@ fn decode_instruction_at_rva(
         return Ok(None);
     }
 
-    let mut decode_window = Vec::with_capacity(window_len);
+    let mut decode_window = [0u8; 15];
     for offset in 0..window_len {
-        decode_window.push(get_byte_at_rva(bytes, pe, rva + offset as u64));
+        decode_window[offset] = section_lookup.get_byte_at(bytes, rva + offset as u64);
     }
 
-    let mut decoder = Decoder::with_ip(64, &decode_window, image_base + rva, DecoderOptions::NONE);
+    let mut decoder = Decoder::with_ip(
+        64,
+        &decode_window[..window_len],
+        image_base + rva,
+        DecoderOptions::NONE,
+    );
     let mut instruction = Instruction::default();
     decoder.decode_out(&mut instruction);
 
@@ -237,12 +256,12 @@ fn decode_instruction_at_rva(
         return Ok(None);
     }
 
-    let mut formatter = IntelFormatter::new();
+    let instruction_len = usize::from(instruction.len());
     let mut instruction_text = String::new();
     formatter.format(&instruction, &mut instruction_text);
     let (mnemonic, operands) = split_instruction_text(&instruction_text);
     let instruction_category = categorize_instruction(&instruction, &mnemonic);
-    let bytes_text = bytes_to_hex(&decode_window[0..instruction.len()]);
+    let bytes_text = bytes_to_hex(&decode_window[0..instruction_len]);
 
     let branch_target_rva = match instruction.flow_control() {
         FlowControl::ConditionalBranch | FlowControl::UnconditionalBranch => {

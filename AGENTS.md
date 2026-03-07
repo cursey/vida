@@ -22,6 +22,10 @@ The repository currently contains:
 - Keep `docs/change_files.md` updated with the files changed by each logged work item.
 - Work log entries must include: date, summary, and validation commands executed.
 - Change file entries should be grouped by subsystem (`app`, `engine`, `docs`, root).
+- For any performance-related engine changes, append a benchmark update in `docs/engine_benchmarking.md` using the project template:
+  - Record command, baseline/current/Delta per benchmark, and the specific code changes that drove the delta.
+  - Include enough evidence to reproduce the comparison later (ideally same benchmark command and baseline workflow).
+- New benchmark entries should remain consistent with the corresponding `docs/work_log.md` and `docs/change_files.md` entries.
 
 ## Architecture Defaults (Current)
 - Renderer stack: React + Vite + TypeScript.

@@ -3,6 +3,8 @@ use iced_x86::{FlowControl, Instruction};
 use crate::api::InstructionCategory;
 use crate::error::EngineError;
 
+use std::fmt::Write as FmtWrite;
+
 pub(crate) fn split_instruction_text(text: &str) -> (String, String) {
     let trimmed = text.trim();
     if let Some((mnemonic, operands)) = trimmed.split_once(' ') {
@@ -95,11 +97,16 @@ fn matches_mnemonic_prefix(value: &str, prefixes: &[&str]) -> bool {
 }
 
 pub(crate) fn bytes_to_hex(bytes: &[u8]) -> String {
-    bytes
-        .iter()
-        .map(|byte| format!("{byte:02X}"))
-        .collect::<Vec<String>>()
-        .join(" ")
+    let mut output = String::with_capacity(bytes.len().saturating_mul(3).saturating_sub(1));
+
+    for (index, byte) in bytes.iter().enumerate() {
+        if index > 0 {
+            output.push(' ');
+        }
+        let _ = write!(&mut output, "{byte:02X}");
+    }
+
+    output
 }
 
 pub(crate) fn parse_hex_u64(value: &str) -> Result<u64, EngineError> {

@@ -1,5 +1,91 @@
 # Work Log
 
+## 2026-03-07 - Add Benchmark Reporting Template and AGENTS Instructions
+
+Summary:
+- Added a reusable result-entry template to `docs/engine_benchmarking.md` to standardize future benchmark updates.
+- Extended `AGENTS.md` benchmarking instructions so performance updates must stay in sync across `docs/engine_benchmarking.md`, `docs/work_log.md`, and `docs/change_files.md`.
+
+Validation commands executed:
+- `just engine-bench`
+
+Changed files index:
+- See `docs/change_files.md` for the detailed file list for this work item.
+
+## 2026-03-07 - Add Example Filled Benchmark Entry
+
+Summary:
+- Added a concrete sample block to `docs/engine_benchmarking.md` showing how to record a multi-benchmark gain update after an optimization pass.
+
+Validation commands executed:
+- `just engine-bench` (kept current doc aligned to an actually run benchmark command)
+
+Changed files index:
+- See `docs/change_files.md` for the detailed file list for this work item.
+
+## 2026-03-07 - Add Engine Benchmarking Documentation
+
+Summary:
+- Added `docs/engine_benchmarking.md` describing the engine benchmark harness, A/B workflow, and how to run reproducible speed checks.
+- Added the current known measurement history and a maintenance rule that requires updating results whenever gains are observed.
+- Linked the new benchmarking guide from `docs/README.md`.
+
+Validation commands executed:
+- `just engine-bench` (to ensure the documented command works in practice)
+
+Changed files index:
+- See `docs/change_files.md` for the detailed file list for this work item.
+
+## 2026-03-07 - Add Shared Bench Command to Justfile
+
+Summary:
+- Added `just` recipes to standardize engine benchmark execution (`engine-bench` for the engine target and `bench` as a project alias).
+- Kept the new recipes narrowly scoped to the existing `analysis_bench` target for reproducible performance checks.
+
+Validation commands executed:
+- `just engine-bench`
+- `just bench`
+
+Changed files index:
+- See `docs/change_files.md` for the detailed file list for this work item.
+
+## 2026-03-07 - Add Criterion Benchmark Harness and Validate Speedup
+
+Summary:
+- Added a `criterion`-based benchmark harness for module analysis and linear-row materialization.
+- Measured baseline and current code-path timings by stashing changes, benchmarking on clean code, restoring changes, and re-running the same benches.
+- Current changes improved both measured paths (~23% speedup) in local runs on `minimal_x64.exe`.
+
+Validation commands executed:
+- `git stash push -u -m "Temporary stash for benchmark baseline"`
+- `cargo bench --manifest-path engine/Cargo.toml --bench analysis_bench`
+- `git stash pop`
+- `cargo fmt --manifest-path engine/Cargo.toml`
+- `cargo bench --manifest-path engine/Cargo.toml --bench analysis_bench`
+- `cargo test --manifest-path engine/Cargo.toml`
+
+Observed baseline vs current results:
+- `engine/module_open_and_analyze/minimal_x64`: ~99.56 ms -> ~76.54 ms
+- `engine/linear_rows/minimal_x64`: ~33.74 µs -> ~26.03 µs
+
+Changed files index:
+- See `docs/change_files.md` for the detailed file list for this work item.
+
+## 2026-03-07 - Continue Low-Risk Engine Profiling Optimizations
+
+Summary:
+- Reduced avoidable heap allocation in the analysis-claiming pass by checking/setting `instruction_owner_by_rva` using direct offset loops instead of temporary vector collections.
+- Streamlined linear data-row materialization by replacing per-row temporary `Vec<String>` formatting with a fixed-size byte buffer and shared hex encoder.
+- Kept analysis behavior unchanged while keeping the same incremental progress semantics and background workflow.
+
+Validation commands executed:
+- `cargo fmt --manifest-path engine/Cargo.toml`
+- `cargo fmt --manifest-path engine/Cargo.toml -- --check`
+- `cargo test --manifest-path engine/Cargo.toml`
+
+Changed files index:
+- See `docs/change_files.md` for the detailed file list for this work item.
+
 ## 2026-03-07 - Rename Tauri Workspace from `app-tauri` to `app`
 
 Summary:

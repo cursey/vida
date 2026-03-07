@@ -16,3 +16,8 @@ thiserror = "2.0.12"
 
 [dev-dependencies]
 jsonschema = "0.30.0"
+criterion = "0.5"
+
+[[bench]]
+name = "analysis_bench"
+harness = false

@@ -48,6 +48,11 @@ engine-fmt-check:
 engine-test:
   cargo test --manifest-path engine/Cargo.toml
 
+engine-bench:
+  cargo bench --manifest-path engine/Cargo.toml --bench analysis_bench
+
+bench: engine-bench
+
 build: engine-build app-build
 
 build-release: app-build-release

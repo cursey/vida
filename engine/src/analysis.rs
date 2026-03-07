@@ -1,5 +1,6 @@
 use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
+use std::sync::Arc;
 
 use goblin::pe::PE;
 
@@ -10,7 +11,8 @@ use crate::error::EngineError;
 use crate::linear::{AnalyzedInstructionRow, LinearView, build_linear_view};
 use crate::pdb_symbols::discover_pdb_function_seeds;
 use crate::pe_utils::{
-    collect_exception_function_starts, collect_tls_callback_starts, is_executable_rva, parse_pe64,
+    SectionLookup, build_section_lookup, collect_exception_function_starts,
+    collect_tls_callback_starts, parse_pe64,
 };
 
 #[derive(Debug, Clone)]
@@ -69,7 +71,7 @@ impl AnalysisProgressPhase {
 #[derive(Debug, Clone)]
 pub(crate) struct AnalysisProgressUpdate {
     pub(crate) phase: AnalysisProgressPhase,
-    pub(crate) discovered_functions: Vec<FunctionSeedEntry>,
+    pub(crate) discovered_functions: Arc<Vec<FunctionSeedEntry>>,
     pub(crate) total_function_count: Option<usize>,
     pub(crate) analyzed_function_count: Option<usize>,
 }
@@ -91,19 +93,25 @@ where
     C: FnMut() -> bool,
 {
     let pe = parse_pe64(bytes)?;
+    let section_lookup = build_section_lookup(&pe);
     let image_base = pe.image_base as u64;
-    let functions =
-        discover_function_seeds_with_progress(module_path, &pe, image_base, &mut on_progress)?;
+    let functions = Arc::new(discover_function_seeds_with_progress(
+        module_path,
+        &pe,
+        image_base,
+        &section_lookup,
+        &mut on_progress,
+    )?);
 
     if is_canceled() {
         return Err(EngineError::Canceled);
     }
 
-    let mut analysis_order = functions.clone();
+    let mut analysis_order = (*functions).clone();
     analysis_order.sort_by_key(|seed| (seed_priority(seed.kind), seed.start_rva));
     on_progress(AnalysisProgressUpdate {
         phase: AnalysisProgressPhase::AnalyzingFunctions,
-        discovered_functions: functions.clone(),
+        discovered_functions: Arc::clone(&functions),
         total_function_count: Some(functions.len()),
         analyzed_function_count: Some(0),
     });
@@ -119,34 +127,37 @@ where
             return Err(EngineError::Canceled);
         }
 
-        let analysis = match analyze_function_cfg(bytes, &pe, seed.start_rva) {
-            Ok(analysis) => analysis,
-            Err(EngineError::InvalidAddress) => {
-                on_progress(AnalysisProgressUpdate {
-                    phase: AnalysisProgressPhase::AnalyzingFunctions,
-                    discovered_functions: functions.clone(),
-                    total_function_count: Some(functions.len()),
-                    analyzed_function_count: Some(index + 1),
-                });
-                continue;
-            }
-            Err(error) => return Err(error),
-        };
+        let analysis =
+            match analyze_function_cfg(bytes, &section_lookup, image_base, seed.start_rva) {
+                Ok(analysis) => analysis,
+                Err(EngineError::InvalidAddress) => {
+                    on_progress(AnalysisProgressUpdate {
+                        phase: AnalysisProgressPhase::AnalyzingFunctions,
+                        discovered_functions: Arc::clone(&functions),
+                        total_function_count: Some(functions.len()),
+                        analyzed_function_count: Some(index + 1),
+                    });
+                    continue;
+                }
+                Err(error) => return Err(error),
+            };
 
         let (cached_graph, function_rows) =
             build_cached_function_graph(analysis, image_base, seed.name.clone());
         for row in function_rows {
-            let covered_rvas = (0..u64::from(row.len))
-                .map(|offset| row.start_rva + offset)
-                .collect::<Vec<u64>>();
-            if covered_rvas
-                .iter()
-                .any(|rva| instruction_owner_by_rva.contains_key(rva))
-            {
+            let mut has_overlap = false;
+            for offset in 0..u64::from(row.len) {
+                if instruction_owner_by_rva.contains_key(&(row.start_rva + offset)) {
+                    has_overlap = true;
+                    break;
+                }
+            }
+            if has_overlap {
                 continue;
             }
 
-            for covered_rva in covered_rvas {
+            for offset in 0..u64::from(row.len) {
+                let covered_rva = row.start_rva + offset;
                 instruction_owner_by_rva.insert(covered_rva, seed.start_rva);
             }
             claimed_instructions
@@ -160,7 +171,7 @@ where
         graphs_by_start.insert(seed.start_rva, cached_graph);
         on_progress(AnalysisProgressUpdate {
             phase: AnalysisProgressPhase::AnalyzingFunctions,
-            discovered_functions: functions.clone(),
+            discovered_functions: Arc::clone(&functions),
             total_function_count: Some(functions.len()),
             analyzed_function_count: Some(index + 1),
         });
@@ -176,14 +187,14 @@ where
 
     on_progress(AnalysisProgressUpdate {
         phase: AnalysisProgressPhase::FinalizingLinearView,
-        discovered_functions: functions.clone(),
+        discovered_functions: Arc::clone(&functions),
         total_function_count: Some(functions.len()),
         analyzed_function_count: Some(functions.len()),
     });
-    let linear_view = build_linear_view(&pe, &claimed_instructions)?;
+    let linear_view = build_linear_view(&section_lookup, &claimed_instructions)?;
 
     Ok(ModuleAnalysis {
-        functions,
+        functions: (*functions).clone(),
         linear_view,
         graphs_by_start,
         instruction_owner_by_rva,
@@ -195,6 +206,7 @@ fn discover_function_seeds_with_progress<F>(
     module_path: &Path,
     pe: &PE<'_>,
     image_base: u64,
+    section_lookup: &SectionLookup,
     on_progress: &mut F,
 ) -> Result<Vec<FunctionSeedEntry>, EngineError>
 where
@@ -202,7 +214,7 @@ where
 {
     let mut ordered = BTreeMap::<u64, FunctionSeedCandidate>::new();
     let entry_rva = pe.entry as u64;
-    if is_executable_rva(pe, entry_rva) {
+    if section_lookup.is_executable_rva(entry_rva) {
         register_seed(
             &mut ordered,
             FunctionSeedCandidate {
@@ -219,7 +231,7 @@ where
 
     for export in &pe.exports {
         let rva = export.rva as u64;
-        if !is_executable_rva(pe, rva) {
+        if !section_lookup.is_executable_rva(rva) {
             continue;
         }
 
@@ -272,7 +284,7 @@ where
     emit_discovery_progress(&ordered, on_progress);
 
     for pdb_function in discover_pdb_function_seeds(module_path, pe) {
-        if !is_executable_rva(pe, pdb_function.start_rva) {
+        if !section_lookup.is_executable_rva(pdb_function.start_rva) {
             continue;
         }
 
@@ -302,7 +314,7 @@ where
 {
     on_progress(AnalysisProgressUpdate {
         phase: AnalysisProgressPhase::DiscoveringFunctions,
-        discovered_functions: ordered.values().cloned().map(|value| value.seed).collect(),
+        discovered_functions: Arc::new(ordered.values().cloned().map(|value| value.seed).collect()),
         total_function_count: None,
         analyzed_function_count: None,
     });

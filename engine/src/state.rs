@@ -26,14 +26,15 @@ use crate::linear::{
     DATA_GROUP_SIZE, LINEAR_ROW_HEIGHT, MAX_LINEAR_PAGE_ROWS, find_row_by_rva,
     materialize_linear_row,
 };
-use crate::pe_utils::parse_pe64;
-
+use crate::pe_utils::{SectionLookup, build_section_lookup, parse_pe64};
 const DEFAULT_MAX_INSTRUCTIONS: usize = 512;
 const MAX_MAX_INSTRUCTIONS: usize = 4096;
 
 #[derive(Debug)]
 struct ModuleState {
     bytes: Arc<Vec<u8>>,
+    image_base: u64,
+    section_lookup: SectionLookup,
     analysis_task: BackgroundAnalysisHandle,
 }
 
@@ -47,7 +48,7 @@ struct BackgroundAnalysisHandle {
 struct BackgroundAnalysisState {
     lifecycle_state: AnalysisLifecycleState,
     message: String,
-    discovered_functions: Vec<FunctionSeedEntry>,
+    discovered_functions: Arc<Vec<FunctionSeedEntry>>,
     total_function_count: Option<usize>,
     analyzed_function_count: Option<usize>,
     analysis: Option<ModuleAnalysis>,
@@ -84,7 +85,7 @@ impl BackgroundAnalysisState {
         Self {
             lifecycle_state: AnalysisLifecycleState::Queued,
             message: "Queued analysis...".to_owned(),
-            discovered_functions: Vec::new(),
+            discovered_functions: Arc::new(Vec::new()),
             total_function_count: None,
             analyzed_function_count: None,
             analysis: None,
@@ -118,7 +119,7 @@ impl BackgroundAnalysisState {
         self.message = "Analysis ready.".to_owned();
         self.total_function_count = Some(analysis.functions.len());
         self.analyzed_function_count = Some(analysis.functions.len());
-        self.discovered_functions = analysis.functions.clone();
+        self.discovered_functions = Arc::new(analysis.functions.clone());
         self.analysis = Some(analysis);
         self.failure_message = None;
     }
@@ -158,6 +159,7 @@ impl EngineState {
         let path = PathBuf::from(params.path);
         let bytes = Arc::new(fs::read(&path).map_err(|error| EngineError::Io(error.to_string()))?);
         let pe = parse_pe64(bytes.as_slice())?;
+        let section_lookup = build_section_lookup(&pe);
         let image_base = pe.image_base as u64;
         let entry_rva = pe.entry as u64;
         let entry_va = image_base + entry_rva;
@@ -170,6 +172,8 @@ impl EngineState {
             module_id.clone(),
             ModuleState {
                 bytes,
+                image_base,
+                section_lookup,
                 analysis_task,
             },
         );
@@ -273,7 +277,7 @@ impl EngineState {
             .get(&params.module_id)
             .ok_or(EngineError::ModuleNotFound)?;
         let snapshot = module.analysis_task.lock_state()?;
-        let image_base = parse_pe64(module.bytes.as_slice())?.image_base as u64;
+        let image_base = module.image_base;
 
         Ok(FunctionListResult {
             functions: snapshot
@@ -298,7 +302,7 @@ impl EngineState {
             .ok_or(EngineError::ModuleNotFound)?;
         let snapshot = module.analysis_task.lock_state()?;
         let analysis = ready_analysis(&snapshot)?;
-        let image_base = parse_pe64(module.bytes.as_slice())?.image_base as u64;
+        let image_base = module.image_base;
         let target_va = parse_hex_u64(&params.va)?;
         if target_va < image_base {
             return Err(EngineError::InvalidAddress);
@@ -338,7 +342,7 @@ impl EngineState {
             .ok_or(EngineError::ModuleNotFound)?;
         let snapshot = module.analysis_task.lock_state()?;
         let analysis = ready_analysis(&snapshot)?;
-        let image_base = parse_pe64(module.bytes.as_slice())?.image_base as u64;
+        let image_base = module.image_base;
         let start_va = parse_hex_u64(&params.start)?;
         if start_va < image_base {
             return Err(EngineError::InvalidAddress);
@@ -408,7 +412,7 @@ impl EngineState {
             .ok_or(EngineError::ModuleNotFound)?;
         let snapshot = module.analysis_task.lock_state()?;
         let analysis = ready_analysis(&snapshot)?;
-        let image_base = parse_pe64(module.bytes.as_slice())?.image_base as u64;
+        let image_base = module.image_base;
 
         Ok(LinearViewInfoResult {
             row_count: analysis.linear_view.row_count,
@@ -429,8 +433,7 @@ impl EngineState {
             .ok_or(EngineError::ModuleNotFound)?;
         let snapshot = module.analysis_task.lock_state()?;
         let analysis = ready_analysis(&snapshot)?;
-        let pe = parse_pe64(module.bytes.as_slice())?;
-        let image_base = pe.image_base as u64;
+        let image_base = module.image_base;
 
         let requested = params.row_count.min(MAX_LINEAR_PAGE_ROWS as u64) as usize;
         let start_row = params.start_row.min(analysis.linear_view.row_count);
@@ -441,7 +444,7 @@ impl EngineState {
             rows.push(materialize_linear_row(
                 &analysis.linear_view,
                 module.bytes.as_slice(),
-                &pe,
+                &module.section_lookup,
                 image_base,
                 row_index,
             )?);
@@ -460,7 +463,7 @@ impl EngineState {
             .ok_or(EngineError::ModuleNotFound)?;
         let snapshot = module.analysis_task.lock_state()?;
         let analysis = ready_analysis(&snapshot)?;
-        let image_base = parse_pe64(module.bytes.as_slice())?.image_base as u64;
+        let image_base = module.image_base;
         let target_va = parse_hex_u64(&params.va)?;
         if target_va < image_base {
             return Err(EngineError::InvalidAddress);

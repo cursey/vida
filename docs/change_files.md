@@ -1,5 +1,56 @@
 # Change Files
 
+## 2026-03-07 - Add Benchmark Reporting Template and AGENTS Instructions
+
+Docs:
+- `docs/engine_benchmarking.md`
+
+Root:
+- `AGENTS.md`
+
+## 2026-03-07 - Add Example Filled Benchmark Entry
+
+Docs:
+- `docs/engine_benchmarking.md`
+
+## 2026-03-07 - Add Engine Benchmarking Documentation
+
+Docs:
+- `docs/engine_benchmarking.md`
+- `docs/README.md`
+- `docs/work_log.md`
+- `docs/change_files.md`
+
+## 2026-03-07 - Add Shared Bench Command to Justfile
+
+Root:
+- `justfile`
+
+Docs:
+- `docs/work_log.md`
+- `docs/change_files.md`
+
+## 2026-03-07 - Add Criterion Benchmark Harness and Validate Speedup
+
+Engine:
+- `engine/Cargo.toml`
+- `engine/Cargo.lock`
+- `engine/benches/analysis_bench.rs`
+
+Docs:
+- `docs/work_log.md`
+- `docs/change_files.md`
+
+## 2026-03-07 - Continue Low-Risk Engine Profiling Optimizations
+
+Engine:
+- `engine/src/analysis.rs`
+- `engine/src/linear.rs`
+
+Docs:
+- `docs/work_log.md`
+- `docs/change_files.md`
+
 ## 2026-03-07 - Rename Tauri Workspace from `app-tauri` to `app`
 
 Root:
