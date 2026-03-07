@@ -5,15 +5,20 @@ const COMMANDS: &[&str] = &[
     "window_control",
     "get_title_bar_menu_model",
     "invoke_title_bar_menu_action",
-    "engine_request",
+    "ping_engine",
+    "open_module",
+    "unload_module",
+    "get_module_analysis_status",
+    "get_module_info",
+    "list_functions",
+    "get_function_graph_by_va",
+    "disassemble_linear",
+    "get_linear_view_info",
+    "get_linear_rows",
+    "find_linear_row_by_va",
 ];
 
 fn main() {
-    println!(
-        "cargo:rustc-env=APP_TAURI_TARGET_TRIPLE={}",
-        std::env::var("TARGET").expect("TARGET env var should be set during build"),
-    );
-
     tauri_build::try_build(
         tauri_build::Attributes::new()
             .app_manifest(tauri_build::AppManifest::new().commands(COMMANDS)),

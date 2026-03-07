@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-disassemble-linear"
+description = "Enables the disassemble_linear command without any pre-configured scope."
+commands.allow = ["disassemble_linear"]
+
+[[permission]]
+identifier = "deny-disassemble-linear"
+description = "Denies the disassemble_linear command without any pre-configured scope."
+commands.deny = ["disassemble_linear"]

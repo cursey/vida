@@ -1,5 +1,23 @@
 # Work Log
 
+## 2026-03-07 - Merge Tauri Host and Engine into One Rust Backend
+
+Summary:
+- Replaced the Tauri host's JSON-RPC child-process bridge with direct in-process calls into the reusable `engine` library crate.
+- Promoted the engine request/result structs into a public typed API, removed the stdio/server transport layer, and rewired the Tauri backend to expose explicit engine commands instead of a generic `engine_request` entrypoint.
+- Deleted the schema/codegen and sidecar packaging pipeline, removed the now-unused `shared/` protocol workspace, and simplified app tooling, permissions, and tests around the unified Rust backend.
+
+Validation commands executed:
+- `npm run check` (in `app-tauri`)
+- `npm run test` (in `app-tauri`)
+- `cargo test --manifest-path engine/Cargo.toml`
+- `just check`
+- `just test`
+- `just build`
+
+Changed files index:
+- See `docs/change_files.md` for the detailed file list for this work item.
+
 ## 2026-03-07 - Remove Legacy Electron App Workspace
 
 Summary:

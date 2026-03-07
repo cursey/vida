@@ -2,8 +2,6 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type {
   DesktopApi,
-  EngineMethod,
-  MethodParams,
   MethodResult,
   TitleBarMenuModel,
   WindowChromeState,
@@ -54,13 +52,6 @@ function invokeApp<T>(
   return invoke<T>(command, args);
 }
 
-function requestEngine<M extends EngineMethod>(
-  method: M,
-  params: MethodParams[M],
-): Promise<MethodResult[M]> {
-  return invokeApp<MethodResult[M]>("engine_request", { method, params });
-}
-
 export const desktopApi: DesktopApi = {
   pickExecutable: () => invokeApp<string | null>("pick_executable"),
   addRecentExecutable: (path: string) =>
@@ -87,22 +78,38 @@ export const desktopApi: DesktopApi = {
     subscribe<null>(MENU_UNLOAD_MODULE_EVENT, () => {
       callback();
     }),
-  pingEngine: () => requestEngine("engine.ping", {}),
-  openModule: (path: string) => requestEngine("module.open", { path }),
+  pingEngine: () => invokeApp<MethodResult["engine.ping"]>("ping_engine"),
+  openModule: (path: string) =>
+    invokeApp<MethodResult["module.open"]>("open_module", { path }),
   unloadModule: (moduleId: string) =>
-    requestEngine("module.unload", { moduleId }),
+    invokeApp<MethodResult["module.unload"]>("unload_module", { moduleId }),
   getModuleAnalysisStatus: (moduleId: string) =>
-    requestEngine("module.getAnalysisStatus", { moduleId }),
+    invokeApp<MethodResult["module.getAnalysisStatus"]>(
+      "get_module_analysis_status",
+      { moduleId },
+    ),
   getModuleInfo: (moduleId: string) =>
-    requestEngine("module.info", { moduleId }),
+    invokeApp<MethodResult["module.info"]>("get_module_info", { moduleId }),
   listFunctions: (moduleId: string) =>
-    requestEngine("function.list", { moduleId }),
+    invokeApp<MethodResult["function.list"]>("list_functions", { moduleId }),
   getFunctionGraphByVa: (payload) =>
-    requestEngine("function.getGraphByVa", payload),
+    invokeApp<MethodResult["function.getGraphByVa"]>(
+      "get_function_graph_by_va",
+      { payload },
+    ),
   disassembleLinear: (payload) =>
-    requestEngine("function.disassembleLinear", payload),
+    invokeApp<MethodResult["function.disassembleLinear"]>(
+      "disassemble_linear",
+      { payload },
+    ),
   getLinearViewInfo: (moduleId: string) =>
-    requestEngine("linear.getViewInfo", { moduleId }),
-  getLinearRows: (payload) => requestEngine("linear.getRows", payload),
-  findLinearRowByVa: (payload) => requestEngine("linear.findRowByVa", payload),
+    invokeApp<MethodResult["linear.getViewInfo"]>("get_linear_view_info", {
+      moduleId,
+    }),
+  getLinearRows: (payload) =>
+    invokeApp<MethodResult["linear.getRows"]>("get_linear_rows", { payload }),
+  findLinearRowByVa: (payload) =>
+    invokeApp<MethodResult["linear.findRowByVa"]>("find_linear_row_by_va", {
+      payload,
+    }),
 };

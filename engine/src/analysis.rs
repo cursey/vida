@@ -3,6 +3,7 @@ use std::path::Path;
 
 use goblin::pe::PE;
 
+use crate::api::{FunctionGraphBlock, FunctionGraphEdge, FunctionGraphInstruction};
 use crate::cfg::{BasicBlockEdgeKind, FunctionGraphAnalysis, analyze_function_cfg};
 use crate::disasm::{default_function_name, to_hex};
 use crate::error::EngineError;
@@ -11,7 +12,6 @@ use crate::pdb_symbols::discover_pdb_function_seeds;
 use crate::pe_utils::{
     collect_exception_function_starts, collect_tls_callback_starts, is_executable_rva, parse_pe64,
 };
-use crate::protocol::{FunctionGraphBlock, FunctionGraphEdge, FunctionGraphInstruction};
 
 #[derive(Debug, Clone)]
 pub(crate) struct FunctionSeedEntry {

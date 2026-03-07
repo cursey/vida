@@ -7,12 +7,18 @@ use std::sync::{
 };
 use std::thread;
 
-use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
-
 use crate::analysis::{
     AnalysisProgressPhase, AnalysisProgressUpdate, FunctionSeedEntry, ModuleAnalysis,
     build_module_analysis_with_progress,
+};
+use crate::api::{
+    EnginePingParams, EnginePingResult, ExportInfo, FunctionGraphByVaParams,
+    FunctionGraphByVaResult, FunctionListParams, FunctionListResult, FunctionSeed, ImportInfo,
+    InstructionCategory, InstructionRow, LinearDisassemblyParams, LinearDisassemblyResult,
+    LinearFindRowByVaParams, LinearFindRowByVaResult, LinearRowsParams, LinearRowsResult,
+    LinearViewInfoParams, LinearViewInfoResult, ModuleAnalysisStatusParams,
+    ModuleAnalysisStatusResult, ModuleInfoParams, ModuleInfoResult, ModuleOpenParams,
+    ModuleOpenResult, ModuleUnloadParams, ModuleUnloadResult, SectionInfo,
 };
 use crate::disasm::{parse_hex_u64, to_hex};
 use crate::error::EngineError;
@@ -21,16 +27,6 @@ use crate::linear::{
     materialize_linear_row,
 };
 use crate::pe_utils::parse_pe64;
-use crate::protocol::{
-    EnginePingParams, EnginePingResult, ExportInfo, FunctionGraphByVaParams,
-    FunctionGraphByVaResult, FunctionListParams, FunctionListResult, FunctionSeed, ImportInfo,
-    InstructionRow, LinearDisassemblyParams, LinearDisassemblyResult, LinearFindRowByVaParams,
-    LinearFindRowByVaResult, LinearRowsParams, LinearRowsResult, LinearViewInfoParams,
-    LinearViewInfoResult, ModuleAnalysisStatusParams, ModuleAnalysisStatusResult, ModuleInfoParams,
-    ModuleInfoResult, ModuleOpenParams, ModuleOpenResult, ModuleUnloadParams, ModuleUnloadResult,
-    SectionInfo,
-};
-use crate::rpc::{RpcRequest, RpcResponse, is_valid_request_id, rpc_error};
 
 const DEFAULT_MAX_INSTRUCTIONS: usize = 512;
 const MAX_MAX_INSTRUCTIONS: usize = 4096;
@@ -142,89 +138,23 @@ impl BackgroundAnalysisState {
     }
 }
 
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct EngineState {
     next_module_id: usize,
     modules: HashMap<String, ModuleState>,
 }
 
 impl EngineState {
-    pub fn handle_request(&mut self, request: RpcRequest) -> RpcResponse {
-        if request.jsonrpc != "2.0" || !is_valid_request_id(&request.id) {
-            return rpc_error(
-                request.id,
-                EngineError::InvalidRequest,
-                Some(json!({ "reason": "jsonrpc must be 2.0 and id must be string/integer" })),
-            );
-        }
-
-        let response = match request.method.as_str() {
-            "engine.ping" => self
-                .method_ping(parse_params::<EnginePingParams>(request.params))
-                .and_then(to_json_value),
-            "module.open" => self
-                .method_module_open(parse_params::<ModuleOpenParams>(request.params))
-                .and_then(to_json_value),
-            "module.unload" => self
-                .method_module_unload(parse_params::<ModuleUnloadParams>(request.params))
-                .and_then(to_json_value),
-            "module.getAnalysisStatus" => self
-                .method_module_get_analysis_status(parse_params::<ModuleAnalysisStatusParams>(
-                    request.params,
-                ))
-                .and_then(to_json_value),
-            "module.info" => self
-                .method_module_info(parse_params::<ModuleInfoParams>(request.params))
-                .and_then(to_json_value),
-            "function.list" => self
-                .method_function_list(parse_params::<FunctionListParams>(request.params))
-                .and_then(to_json_value),
-            "function.getGraphByVa" => self
-                .method_function_get_graph_by_va(parse_params::<FunctionGraphByVaParams>(
-                    request.params,
-                ))
-                .and_then(to_json_value),
-            "function.disassembleLinear" => self
-                .method_disassemble_linear(parse_params::<LinearDisassemblyParams>(request.params))
-                .and_then(to_json_value),
-            "linear.getViewInfo" => self
-                .method_linear_get_view_info(parse_params::<LinearViewInfoParams>(request.params))
-                .and_then(to_json_value),
-            "linear.getRows" => self
-                .method_linear_get_rows(parse_params::<LinearRowsParams>(request.params))
-                .and_then(to_json_value),
-            "linear.findRowByVa" => self
-                .method_linear_find_row_by_va(parse_params::<LinearFindRowByVaParams>(
-                    request.params,
-                ))
-                .and_then(to_json_value),
-            _ => Err(EngineError::MethodNotFound),
-        };
-
-        match response {
-            Ok(result) => RpcResponse::Success {
-                jsonrpc: "2.0",
-                id: request.id,
-                result,
-            },
-            Err(error) => rpc_error(request.id, error, None),
-        }
-    }
-
-    fn method_ping(
-        &mut self,
-        _params: Result<EnginePingParams, EngineError>,
-    ) -> Result<EnginePingResult, EngineError> {
+    pub fn ping(&mut self, _params: EnginePingParams) -> Result<EnginePingResult, EngineError> {
         Ok(EnginePingResult {
             version: env!("CARGO_PKG_VERSION").to_owned(),
         })
     }
 
-    fn method_module_open(
+    pub fn open_module(
         &mut self,
-        params: Result<ModuleOpenParams, EngineError>,
+        params: ModuleOpenParams,
     ) -> Result<ModuleOpenResult, EngineError> {
-        let params = params?;
         let path = PathBuf::from(params.path);
         let bytes = Arc::new(fs::read(&path).map_err(|error| EngineError::Io(error.to_string()))?);
         let pe = parse_pe64(bytes.as_slice())?;
@@ -252,11 +182,10 @@ impl EngineState {
         })
     }
 
-    fn method_module_unload(
+    pub fn unload_module(
         &mut self,
-        params: Result<ModuleUnloadParams, EngineError>,
+        params: ModuleUnloadParams,
     ) -> Result<ModuleUnloadResult, EngineError> {
-        let params = params?;
         let module = self
             .modules
             .remove(&params.module_id)
@@ -265,11 +194,10 @@ impl EngineState {
         Ok(ModuleUnloadResult {})
     }
 
-    fn method_module_get_analysis_status(
+    pub fn get_module_analysis_status(
         &mut self,
-        params: Result<ModuleAnalysisStatusParams, EngineError>,
+        params: ModuleAnalysisStatusParams,
     ) -> Result<ModuleAnalysisStatusResult, EngineError> {
-        let params = params?;
         let module = self
             .modules
             .get(&params.module_id)
@@ -284,11 +212,10 @@ impl EngineState {
         })
     }
 
-    fn method_module_info(
+    pub fn get_module_info(
         &mut self,
-        params: Result<ModuleInfoParams, EngineError>,
+        params: ModuleInfoParams,
     ) -> Result<ModuleInfoResult, EngineError> {
-        let params = params?;
         let module = self
             .modules
             .get(&params.module_id)
@@ -337,11 +264,10 @@ impl EngineState {
         })
     }
 
-    fn method_function_list(
+    pub fn list_functions(
         &mut self,
-        params: Result<FunctionListParams, EngineError>,
+        params: FunctionListParams,
     ) -> Result<FunctionListResult, EngineError> {
-        let params = params?;
         let module = self
             .modules
             .get(&params.module_id)
@@ -362,11 +288,10 @@ impl EngineState {
         })
     }
 
-    fn method_function_get_graph_by_va(
+    pub fn get_function_graph_by_va(
         &mut self,
-        params: Result<FunctionGraphByVaParams, EngineError>,
+        params: FunctionGraphByVaParams,
     ) -> Result<FunctionGraphByVaResult, EngineError> {
-        let params = params?;
         let module = self
             .modules
             .get(&params.module_id)
@@ -403,11 +328,10 @@ impl EngineState {
         })
     }
 
-    fn method_disassemble_linear(
+    pub fn disassemble_linear(
         &mut self,
-        params: Result<LinearDisassemblyParams, EngineError>,
+        params: LinearDisassemblyParams,
     ) -> Result<LinearDisassemblyResult, EngineError> {
-        let params = params?;
         let module = self
             .modules
             .get(&params.module_id)
@@ -459,9 +383,10 @@ impl EngineState {
 
         let stop_reason = if instructions.len() >= max_instructions {
             "max_instructions"
-        } else if function_rows.last().is_some_and(|row| {
-            row.instruction_category == crate::protocol::InstructionCategory::Return
-        }) {
+        } else if function_rows
+            .last()
+            .is_some_and(|row| row.instruction_category == InstructionCategory::Return)
+        {
             "ret"
         } else {
             "end_of_data"
@@ -473,11 +398,10 @@ impl EngineState {
         })
     }
 
-    fn method_linear_get_view_info(
+    pub fn get_linear_view_info(
         &mut self,
-        params: Result<LinearViewInfoParams, EngineError>,
+        params: LinearViewInfoParams,
     ) -> Result<LinearViewInfoResult, EngineError> {
-        let params = params?;
         let module = self
             .modules
             .get(&params.module_id)
@@ -495,11 +419,10 @@ impl EngineState {
         })
     }
 
-    fn method_linear_get_rows(
+    pub fn get_linear_rows(
         &mut self,
-        params: Result<LinearRowsParams, EngineError>,
+        params: LinearRowsParams,
     ) -> Result<LinearRowsResult, EngineError> {
-        let params = params?;
         let module = self
             .modules
             .get(&params.module_id)
@@ -527,11 +450,10 @@ impl EngineState {
         Ok(LinearRowsResult { rows })
     }
 
-    fn method_linear_find_row_by_va(
+    pub fn find_linear_row_by_va(
         &mut self,
-        params: Result<LinearFindRowByVaParams, EngineError>,
+        params: LinearFindRowByVaParams,
     ) -> Result<LinearFindRowByVaResult, EngineError> {
-        let params = params?;
         let module = self
             .modules
             .get(&params.module_id)
@@ -620,18 +542,4 @@ fn find_instruction_index(
         return Ok(index - 1);
     }
     Err(EngineError::InvalidAddress)
-}
-
-fn parse_params<T>(params: Value) -> Result<T, EngineError>
-where
-    T: for<'de> Deserialize<'de>,
-{
-    serde_json::from_value(params).map_err(|error| EngineError::InvalidParams(error.to_string()))
-}
-
-fn to_json_value<T>(value: T) -> Result<Value, EngineError>
-where
-    T: Serialize,
-{
-    serde_json::to_value(value).map_err(|error| EngineError::Internal(error.to_string()))
 }

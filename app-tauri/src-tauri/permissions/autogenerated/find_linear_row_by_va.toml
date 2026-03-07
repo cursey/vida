@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-find-linear-row-by-va"
+description = "Enables the find_linear_row_by_va command without any pre-configured scope."
+commands.allow = ["find_linear_row_by_va"]
+
+[[permission]]
+identifier = "deny-find-linear-row-by-va"
+description = "Denies the find_linear_row_by_va command without any pre-configured scope."
+commands.deny = ["find_linear_row_by_va"]

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-get-linear-rows"
+description = "Enables the get_linear_rows command without any pre-configured scope."
+commands.allow = ["get_linear_rows"]
+
+[[permission]]
+identifier = "deny-get-linear-rows"
+description = "Denies the get_linear_rows command without any pre-configured scope."
+commands.deny = ["get_linear_rows"]

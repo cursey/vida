@@ -1,7 +1,7 @@
 use iced_x86::{FlowControl, Instruction};
 
+use crate::api::InstructionCategory;
 use crate::error::EngineError;
-use crate::protocol::InstructionCategory;
 
 pub(crate) fn split_instruction_text(text: &str) -> (String, String) {
     let trimmed = text.trim();

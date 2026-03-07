@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-list-functions"
+description = "Enables the list_functions command without any pre-configured scope."
+commands.allow = ["list_functions"]
+
+[[permission]]
+identifier = "deny-list-functions"
+description = "Denies the list_functions command without any pre-configured scope."
+commands.deny = ["list_functions"]

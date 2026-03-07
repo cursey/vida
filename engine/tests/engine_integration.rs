@@ -4,49 +4,25 @@ use std::thread;
 use std::time::Duration;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use engine::{EngineState, RpcRequest, RpcResponse, fixture_path};
-use serde_json::{Value, json};
+use engine::api::{
+    FunctionGraphByVaParams, FunctionListParams, LinearDisassemblyParams, LinearFindRowByVaParams,
+    LinearRowsParams, ModuleAnalysisStatusParams, ModuleOpenParams, ModuleUnloadParams,
+};
+use engine::{EngineError, EngineState, fixture_path};
 
-fn success_result(response: RpcResponse) -> Value {
-    match response {
-        RpcResponse::Success { result, .. } => result,
-        RpcResponse::Error { error, .. } => {
-            panic!("Expected success, got error: {}", error.message)
-        }
-    }
-}
-
-fn error_engine_code(response: RpcResponse) -> String {
-    match response {
-        RpcResponse::Error { error, .. } => error
-            .data
-            .map(|value| value.code)
-            .unwrap_or_else(|| "<missing>".to_owned()),
-        RpcResponse::Success { .. } => panic!("Expected error, got success"),
-    }
-}
-
-fn wait_for_analysis_ready(state: &mut EngineState, module_id: &str) -> Value {
+fn wait_for_analysis_ready(
+    state: &mut EngineState,
+    module_id: &str,
+) -> engine::api::ModuleAnalysisStatusResult {
     for _ in 0..200 {
-        let status = success_result(state.handle_request(RpcRequest {
-            jsonrpc: "2.0".to_owned(),
-            id: json!(9_000),
-            method: "module.getAnalysisStatus".to_owned(),
-            params: json!({ "moduleId": module_id }),
-        }));
-        let state_name = status
-            .get("state")
-            .and_then(Value::as_str)
-            .expect("analysis status should include state");
-        match state_name {
+        let status = state
+            .get_module_analysis_status(ModuleAnalysisStatusParams {
+                module_id: module_id.to_owned(),
+            })
+            .expect("analysis status should load");
+        match status.state {
             "ready" => return status,
-            "failed" => panic!(
-                "Analysis failed: {}",
-                status
-                    .get("message")
-                    .and_then(Value::as_str)
-                    .unwrap_or("<missing message>")
-            ),
+            "failed" => panic!("Analysis failed: {}", status.message),
             "canceled" => panic!("Analysis unexpectedly canceled"),
             _ => thread::sleep(Duration::from_millis(10)),
         }
@@ -65,59 +41,41 @@ fn opens_module_lists_functions_and_disassembles() {
     );
 
     let mut state = EngineState::default();
+    let open_result = state
+        .open_module(ModuleOpenParams {
+            path: fixture.to_string_lossy().into_owned(),
+        })
+        .expect("module should open");
 
-    let open_result = success_result(state.handle_request(RpcRequest {
-        jsonrpc: "2.0".to_owned(),
-        id: json!(1),
-        method: "module.open".to_owned(),
-        params: json!({ "path": fixture.to_string_lossy() }),
-    }));
-
-    let module_id = open_result
-        .get("moduleId")
-        .and_then(Value::as_str)
-        .expect("moduleId should be string")
-        .to_owned();
-    let entry_va = open_result
-        .get("entryVa")
-        .and_then(Value::as_str)
-        .expect("entryVa should be string")
-        .to_owned();
+    let module_id = open_result.module_id.clone();
+    let entry_va = open_result.entry_va.clone();
 
     let ready_status = wait_for_analysis_ready(&mut state, &module_id);
-    assert_eq!(
-        ready_status.get("state").and_then(Value::as_str),
-        Some("ready")
-    );
+    assert_eq!(ready_status.state, "ready");
 
-    let list_result = success_result(state.handle_request(RpcRequest {
-        jsonrpc: "2.0".to_owned(),
-        id: json!(2),
-        method: "function.list".to_owned(),
-        params: json!({ "moduleId": module_id }),
-    }));
+    let list_result = state
+        .list_functions(FunctionListParams {
+            module_id: module_id.clone(),
+        })
+        .expect("function list should load");
 
-    let functions = list_result
-        .get("functions")
-        .and_then(Value::as_array)
-        .expect("functions array should exist");
-
-    assert!(!functions.is_empty(), "Expected at least one seed function");
     assert!(
-        functions
+        !list_result.functions.is_empty(),
+        "Expected at least one seed function"
+    );
+    assert!(
+        list_result
+            .functions
             .iter()
-            .any(|seed| seed.get("start").and_then(Value::as_str) == Some(entry_va.as_str())),
+            .any(|seed| seed.start == entry_va),
         "Expected at least one function seed at entry VA"
     );
 
-    let starts = functions
+    let starts = list_result
+        .functions
         .iter()
         .map(|seed| {
-            let raw = seed
-                .get("start")
-                .and_then(Value::as_str)
-                .expect("function start should be string");
-            u64::from_str_radix(raw.trim_start_matches("0x"), 16).expect("valid hex VA")
+            u64::from_str_radix(seed.start.trim_start_matches("0x"), 16).expect("valid hex VA")
         })
         .collect::<Vec<u64>>();
     let mut sorted_starts = starts.clone();
@@ -130,191 +88,119 @@ fn opens_module_lists_functions_and_disassembles() {
     assert_eq!(
         starts.len(),
         sorted_starts.len(),
-        "Function seed VAs should be unique",
+        "Function seed VAs should be unique"
     );
 
-    for seed in functions {
-        let kind = seed
-            .get("kind")
-            .and_then(Value::as_str)
-            .expect("function kind should be string");
+    for seed in &list_result.functions {
         assert!(
-            matches!(kind, "entry" | "export" | "tls" | "exception" | "pdb"),
-            "Unexpected function seed kind: {kind}"
+            matches!(seed.kind, "entry" | "export" | "tls" | "exception" | "pdb"),
+            "Unexpected function seed kind: {}",
+            seed.kind
         );
 
-        let name = seed
-            .get("name")
-            .and_then(Value::as_str)
-            .expect("function name should be string");
-        if kind == "pdb" {
-            assert!(!name.is_empty(), "PDB function names should not be empty");
-        } else if kind == "export" && !name.starts_with("sub_") {
+        if seed.kind == "pdb" {
             assert!(
-                !name.is_empty(),
+                !seed.name.is_empty(),
+                "PDB function names should not be empty"
+            );
+        } else if seed.kind == "export" && !seed.name.starts_with("sub_") {
+            assert!(
+                !seed.name.is_empty(),
                 "Named export seeds should preserve a non-empty export name"
             );
         } else {
-            let start = seed
-                .get("start")
-                .and_then(Value::as_str)
-                .expect("function start should be string");
-            let expected_name = format!("sub_{}", start.trim_start_matches("0x").to_lowercase());
+            let expected_name =
+                format!("sub_{}", seed.start.trim_start_matches("0x").to_lowercase());
             assert!(
-                name.starts_with("sub_"),
-                "Function name should start with sub_: {name}"
+                seed.name.starts_with("sub_"),
+                "Function name should start with sub_: {}",
+                seed.name
             );
-            assert_eq!(
-                name, expected_name,
-                "Function name should be sub_<va>: {name}"
-            );
+            assert_eq!(seed.name, expected_name, "Function name should be sub_<va>");
         }
     }
 
-    let disassembly_result = success_result(state.handle_request(RpcRequest {
-        jsonrpc: "2.0".to_owned(),
-        id: json!(3),
-        method: "function.disassembleLinear".to_owned(),
-        params: json!({
-            "moduleId": module_id,
-            "start": entry_va,
-            "maxInstructions": 64
-        }),
-    }));
+    let disassembly_result = state
+        .disassemble_linear(LinearDisassemblyParams {
+            module_id: module_id.clone(),
+            start: entry_va.clone(),
+            max_instructions: Some(64),
+        })
+        .expect("linear disassembly should succeed");
 
-    let instructions = disassembly_result
-        .get("instructions")
-        .and_then(Value::as_array)
-        .expect("instructions array should exist");
-
-    assert!(!instructions.is_empty(), "Expected non-empty disassembly");
-    for instruction in instructions {
-        let category = instruction
-            .get("instructionCategory")
-            .and_then(Value::as_str)
-            .expect("instructionCategory should be a string");
+    assert!(
+        !disassembly_result.instructions.is_empty(),
+        "Expected non-empty disassembly"
+    );
+    for instruction in &disassembly_result.instructions {
+        let category = format!("{:?}", instruction.instruction_category);
         assert!(
             !category.is_empty(),
             "instructionCategory should not be empty"
         );
     }
 
-    let row_lookup_result = success_result(state.handle_request(RpcRequest {
-        jsonrpc: "2.0".to_owned(),
-        id: json!(4),
-        method: "linear.findRowByVa".to_owned(),
-        params: json!({
-            "moduleId": module_id,
-            "va": entry_va
-        }),
-    }));
-    let row_index = row_lookup_result
-        .get("rowIndex")
-        .and_then(Value::as_u64)
-        .expect("rowIndex should be integer");
+    let row_lookup_result = state
+        .find_linear_row_by_va(LinearFindRowByVaParams {
+            module_id: module_id.clone(),
+            va: entry_va.clone(),
+        })
+        .expect("row lookup should succeed");
 
-    let linear_rows_result = success_result(state.handle_request(RpcRequest {
-        jsonrpc: "2.0".to_owned(),
-        id: json!(5),
-        method: "linear.getRows".to_owned(),
-        params: json!({
-            "moduleId": module_id,
-            "startRow": row_index,
-            "rowCount": 1
-        }),
-    }));
+    let linear_rows_result = state
+        .get_linear_rows(LinearRowsParams {
+            module_id: module_id.clone(),
+            start_row: row_lookup_result.row_index,
+            row_count: 1,
+        })
+        .expect("linear rows should load");
     let row = linear_rows_result
-        .get("rows")
-        .and_then(Value::as_array)
-        .and_then(|rows| rows.first())
+        .rows
+        .first()
         .expect("expected one linear row");
 
     assert_eq!(
-        row.get("kind").and_then(Value::as_str),
-        Some("instruction"),
+        row.kind, "instruction",
         "entry row should decode to an instruction"
     );
     assert!(
-        row.get("instructionCategory")
-            .and_then(Value::as_str)
-            .is_some(),
+        row.instruction_category.is_some(),
         "instruction rows should include instructionCategory"
     );
 
-    let graph_result = success_result(state.handle_request(RpcRequest {
-        jsonrpc: "2.0".to_owned(),
-        id: json!(6),
-        method: "function.getGraphByVa".to_owned(),
-        params: json!({
-            "moduleId": module_id,
-            "va": entry_va
-        }),
-    }));
+    let graph_result = state
+        .get_function_graph_by_va(FunctionGraphByVaParams {
+            module_id: module_id.clone(),
+            va: entry_va.clone(),
+        })
+        .expect("graph should load");
 
-    let blocks = graph_result
-        .get("blocks")
-        .and_then(Value::as_array)
-        .expect("graph blocks should be present");
-    assert!(!blocks.is_empty(), "Expected at least one graph block");
     assert!(
-        graph_result
-            .get("focusBlockId")
-            .and_then(Value::as_str)
-            .is_some_and(|value| !value.is_empty()),
+        !graph_result.blocks.is_empty(),
+        "Expected at least one graph block"
+    );
+    assert!(
+        !graph_result.focus_block_id.is_empty(),
         "Graph result should include focusBlockId"
     );
 
-    let first_block = &blocks[0];
+    let first_block = &graph_result.blocks[0];
     assert!(
-        first_block
-            .get("startVa")
-            .and_then(Value::as_str)
-            .is_some_and(|value| value.starts_with("0x")),
-        "Graph blocks should include a startVa label",
+        first_block.start_va.starts_with("0x"),
+        "Graph blocks should include a startVa label"
     );
     let first_instruction = first_block
-        .get("instructions")
-        .and_then(Value::as_array)
-        .and_then(|value| value.first())
+        .instructions
+        .first()
         .expect("graph blocks should include instruction rows");
-    assert!(
-        first_instruction
-            .get("mnemonic")
-            .and_then(Value::as_str)
-            .is_some(),
-        "Graph instruction rows should include mnemonic",
-    );
-    assert!(
-        first_instruction
-            .get("operands")
-            .and_then(Value::as_str)
-            .is_some(),
-        "Graph instruction rows should include operands",
-    );
-    assert!(
-        first_instruction
-            .get("instructionCategory")
-            .and_then(Value::as_str)
-            .is_some(),
-        "Graph instruction rows should include instructionCategory",
-    );
-    assert!(
-        first_instruction.get("address").is_none()
-            && first_instruction.get("comment").is_none()
-            && first_instruction.get("section").is_none(),
-        "Graph instruction rows should not include disassembly-only fields",
-    );
-
-    let invalid_graph_error_code = error_engine_code(state.handle_request(RpcRequest {
-        jsonrpc: "2.0".to_owned(),
-        id: json!(7),
-        method: "function.getGraphByVa".to_owned(),
-        params: json!({
-            "moduleId": module_id,
-            "va": "0x1"
+    assert!(!first_instruction.mnemonic.is_empty());
+    assert!(matches!(
+        state.get_function_graph_by_va(FunctionGraphByVaParams {
+            module_id,
+            va: "0x1".to_owned(),
         }),
-    }));
-    assert_eq!(invalid_graph_error_code, "INVALID_ADDRESS");
+        Err(EngineError::InvalidAddress)
+    ));
 }
 
 #[test]
@@ -333,57 +219,37 @@ fn discovers_pdb_functions_and_requires_strict_guid_age_match() {
     );
 
     let mut state = EngineState::default();
-    let open_result = success_result(state.handle_request(RpcRequest {
-        jsonrpc: "2.0".to_owned(),
-        id: json!(100),
-        method: "module.open".to_owned(),
-        params: json!({ "path": fixture_exe.to_string_lossy() }),
-    }));
-    let module_id = open_result
-        .get("moduleId")
-        .and_then(Value::as_str)
-        .expect("moduleId should be string")
-        .to_owned();
+    let open_result = state
+        .open_module(ModuleOpenParams {
+            path: fixture_exe.to_string_lossy().into_owned(),
+        })
+        .expect("module should open");
+    let module_id = open_result.module_id;
 
     let ready_status = wait_for_analysis_ready(&mut state, &module_id);
-    assert_eq!(
-        ready_status.get("state").and_then(Value::as_str),
-        Some("ready")
-    );
+    assert_eq!(ready_status.state, "ready");
 
-    let list_result = success_result(state.handle_request(RpcRequest {
-        jsonrpc: "2.0".to_owned(),
-        id: json!(101),
-        method: "function.list".to_owned(),
-        params: json!({ "moduleId": module_id }),
-    }));
-    let functions = list_result
-        .get("functions")
-        .and_then(Value::as_array)
-        .expect("functions array should exist");
+    let list_result = state
+        .list_functions(FunctionListParams {
+            module_id: module_id.clone(),
+        })
+        .expect("function list should load");
 
-    let pdb_seeds = functions
+    let pdb_seeds = list_result
+        .functions
         .iter()
-        .filter(|seed| seed.get("kind").and_then(Value::as_str) == Some("pdb"))
+        .filter(|seed| seed.kind == "pdb")
         .collect::<Vec<_>>();
     assert!(
         !pdb_seeds.is_empty(),
         "Expected at least one function seed from matching PDB"
     );
     assert!(
-        pdb_seeds.iter().any(|seed| {
-            seed.get("name")
-                .and_then(Value::as_str)
-                .is_some_and(|name| !name.starts_with("sub_"))
-        }),
+        pdb_seeds.iter().any(|seed| !seed.name.starts_with("sub_")),
         "Expected demangled/raw symbol names from PDB seed output"
     );
     assert!(
-        pdb_seeds.iter().all(|seed| {
-            seed.get("name")
-                .and_then(Value::as_str)
-                .is_some_and(|name| !name.contains('('))
-        }),
+        pdb_seeds.iter().all(|seed| !seed.name.contains('(')),
         "PDB seed names should be reduced to function names without parameter lists"
     );
 
@@ -396,32 +262,22 @@ fn discovers_pdb_functions_and_requires_strict_guid_age_match() {
     increment_rsds_age(&mismatch_exe);
 
     let mut mismatch_state = EngineState::default();
-    let mismatch_open = success_result(mismatch_state.handle_request(RpcRequest {
-        jsonrpc: "2.0".to_owned(),
-        id: json!(102),
-        method: "module.open".to_owned(),
-        params: json!({ "path": mismatch_exe.to_string_lossy() }),
-    }));
-    let mismatch_module_id = mismatch_open
-        .get("moduleId")
-        .and_then(Value::as_str)
-        .expect("moduleId should be string")
-        .to_owned();
-    let mismatch_list = success_result(mismatch_state.handle_request(RpcRequest {
-        jsonrpc: "2.0".to_owned(),
-        id: json!(103),
-        method: "function.list".to_owned(),
-        params: json!({ "moduleId": mismatch_module_id }),
-    }));
-    let mismatch_functions = mismatch_list
-        .get("functions")
-        .and_then(Value::as_array)
-        .expect("functions array should exist");
+    let mismatch_open = mismatch_state
+        .open_module(ModuleOpenParams {
+            path: mismatch_exe.to_string_lossy().into_owned(),
+        })
+        .expect("mismatch module should open");
+    let mismatch_list = mismatch_state
+        .list_functions(FunctionListParams {
+            module_id: mismatch_open.module_id,
+        })
+        .expect("mismatch function list should load");
 
     assert!(
-        mismatch_functions
+        mismatch_list
+            .functions
             .iter()
-            .all(|seed| seed.get("kind").and_then(Value::as_str) != Some("pdb")),
+            .all(|seed| seed.kind != "pdb"),
         "Strict GUID+age mismatch should reject PDB symbols"
     );
 
@@ -433,32 +289,23 @@ fn unload_removes_module_from_engine_state() {
     let fixture = fixture_path("minimal_x64.exe");
     let mut state = EngineState::default();
 
-    let open_result = success_result(state.handle_request(RpcRequest {
-        jsonrpc: "2.0".to_owned(),
-        id: json!(200),
-        method: "module.open".to_owned(),
-        params: json!({ "path": fixture.to_string_lossy() }),
-    }));
-    let module_id = open_result
-        .get("moduleId")
-        .and_then(Value::as_str)
-        .expect("moduleId should be string")
-        .to_owned();
+    let open_result = state
+        .open_module(ModuleOpenParams {
+            path: fixture.to_string_lossy().into_owned(),
+        })
+        .expect("module should open");
+    let module_id = open_result.module_id;
 
-    success_result(state.handle_request(RpcRequest {
-        jsonrpc: "2.0".to_owned(),
-        id: json!(201),
-        method: "module.unload".to_owned(),
-        params: json!({ "moduleId": module_id }),
-    }));
+    state
+        .unload_module(ModuleUnloadParams {
+            module_id: module_id.clone(),
+        })
+        .expect("module should unload");
 
-    let status_error = error_engine_code(state.handle_request(RpcRequest {
-        jsonrpc: "2.0".to_owned(),
-        id: json!(202),
-        method: "module.getAnalysisStatus".to_owned(),
-        params: json!({ "moduleId": module_id }),
-    }));
-    assert_eq!(status_error, "MODULE_NOT_FOUND");
+    assert!(matches!(
+        state.get_module_analysis_status(ModuleAnalysisStatusParams { module_id }),
+        Err(EngineError::ModuleNotFound)
+    ));
 }
 
 fn unique_temp_dir(prefix: &str) -> PathBuf {

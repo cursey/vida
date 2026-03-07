@@ -1,17 +1,25 @@
-mod engine;
-
 use std::{
     collections::{HashMap, HashSet},
     fs,
     path::{Path, PathBuf},
-    sync::Mutex,
+    sync::{Arc, Mutex},
 };
 
-use engine::EngineProxy;
+use engine::{
+    EngineError, EngineState,
+    api::{
+        EnginePingParams, EnginePingResult, FunctionGraphByVaParams, FunctionGraphByVaResult,
+        FunctionListParams, FunctionListResult, LinearDisassemblyParams, LinearDisassemblyResult,
+        LinearFindRowByVaParams, LinearFindRowByVaResult, LinearRowsParams, LinearRowsResult,
+        LinearViewInfoParams, LinearViewInfoResult, ModuleAnalysisStatusParams,
+        ModuleAnalysisStatusResult, ModuleInfoParams, ModuleInfoResult, ModuleOpenParams,
+        ModuleOpenResult, ModuleUnloadParams, ModuleUnloadResult,
+    },
+};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use tauri::{
     AppHandle, Emitter, Manager, State, WebviewWindow, Window, WindowEvent,
+    async_runtime::spawn_blocking,
     menu::{MenuBuilder, MenuItem, SubmenuBuilder},
 };
 use tauri_plugin_dialog::DialogExt;
@@ -34,7 +42,7 @@ struct AppState {
     recent_executables: Mutex<Vec<String>>,
     menu_model: Mutex<TitleBarMenuModel>,
     recent_commands: Mutex<HashMap<String, String>>,
-    engine: EngineProxy,
+    engine: Arc<Mutex<EngineState>>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -96,7 +104,7 @@ impl AppState {
             recent_executables: Mutex::new(Vec::new()),
             menu_model: Mutex::new(TitleBarMenuModel { menus: Vec::new() }),
             recent_commands: Mutex::new(HashMap::new()),
-            engine: EngineProxy::new(),
+            engine: Arc::new(Mutex::new(EngineState::default())),
         }
     }
 }
@@ -173,13 +181,130 @@ async fn invoke_title_bar_menu_action(
 }
 
 #[tauri::command]
-async fn engine_request(
-    app: AppHandle,
+async fn ping_engine(state: State<'_, AppState>) -> Result<EnginePingResult, String> {
+    let engine = Arc::clone(&state.engine);
+    run_engine(engine, |engine| engine.ping(EnginePingParams::default())).await
+}
+
+#[tauri::command]
+async fn open_module(state: State<'_, AppState>, path: String) -> Result<ModuleOpenResult, String> {
+    let engine = Arc::clone(&state.engine);
+    run_engine(engine, move |engine| {
+        engine.open_module(ModuleOpenParams { path })
+    })
+    .await
+}
+
+#[tauri::command]
+async fn unload_module(
     state: State<'_, AppState>,
-    method: String,
-    params: Value,
-) -> Result<Value, String> {
-    state.engine.request(&app, &method, params)
+    module_id: String,
+) -> Result<ModuleUnloadResult, String> {
+    let engine = Arc::clone(&state.engine);
+    run_engine(engine, move |engine| {
+        engine.unload_module(ModuleUnloadParams { module_id })
+    })
+    .await
+}
+
+#[tauri::command]
+async fn get_module_analysis_status(
+    state: State<'_, AppState>,
+    module_id: String,
+) -> Result<ModuleAnalysisStatusResult, String> {
+    let engine = Arc::clone(&state.engine);
+    run_engine(engine, move |engine| {
+        engine.get_module_analysis_status(ModuleAnalysisStatusParams { module_id })
+    })
+    .await
+}
+
+#[tauri::command]
+async fn get_module_info(
+    state: State<'_, AppState>,
+    module_id: String,
+) -> Result<ModuleInfoResult, String> {
+    let engine = Arc::clone(&state.engine);
+    run_engine(engine, move |engine| {
+        engine.get_module_info(ModuleInfoParams { module_id })
+    })
+    .await
+}
+
+#[tauri::command]
+async fn list_functions(
+    state: State<'_, AppState>,
+    module_id: String,
+) -> Result<FunctionListResult, String> {
+    let engine = Arc::clone(&state.engine);
+    run_engine(engine, move |engine| {
+        engine.list_functions(FunctionListParams { module_id })
+    })
+    .await
+}
+
+#[tauri::command]
+async fn get_function_graph_by_va(
+    state: State<'_, AppState>,
+    payload: FunctionGraphByVaParams,
+) -> Result<FunctionGraphByVaResult, String> {
+    let engine = Arc::clone(&state.engine);
+    run_engine(engine, move |engine| {
+        engine.get_function_graph_by_va(payload)
+    })
+    .await
+}
+
+#[tauri::command]
+async fn disassemble_linear(
+    state: State<'_, AppState>,
+    payload: LinearDisassemblyParams,
+) -> Result<LinearDisassemblyResult, String> {
+    let engine = Arc::clone(&state.engine);
+    run_engine(engine, move |engine| engine.disassemble_linear(payload)).await
+}
+
+#[tauri::command]
+async fn get_linear_view_info(
+    state: State<'_, AppState>,
+    module_id: String,
+) -> Result<LinearViewInfoResult, String> {
+    let engine = Arc::clone(&state.engine);
+    run_engine(engine, move |engine| {
+        engine.get_linear_view_info(LinearViewInfoParams { module_id })
+    })
+    .await
+}
+
+#[tauri::command]
+async fn get_linear_rows(
+    state: State<'_, AppState>,
+    payload: LinearRowsParams,
+) -> Result<LinearRowsResult, String> {
+    let engine = Arc::clone(&state.engine);
+    run_engine(engine, move |engine| engine.get_linear_rows(payload)).await
+}
+
+#[tauri::command]
+async fn find_linear_row_by_va(
+    state: State<'_, AppState>,
+    payload: LinearFindRowByVaParams,
+) -> Result<LinearFindRowByVaResult, String> {
+    let engine = Arc::clone(&state.engine);
+    run_engine(engine, move |engine| engine.find_linear_row_by_va(payload)).await
+}
+
+async fn run_engine<T, F>(engine: Arc<Mutex<EngineState>>, operation: F) -> Result<T, String>
+where
+    T: Send + 'static,
+    F: FnOnce(&mut EngineState) -> Result<T, EngineError> + Send + 'static,
+{
+    spawn_blocking(move || {
+        let mut engine = engine.lock().map_err(|error| error.to_string())?;
+        operation(&mut engine).map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| error.to_string())?
 }
 
 fn main() {
@@ -222,15 +347,21 @@ fn main() {
             window_control,
             get_title_bar_menu_model,
             invoke_title_bar_menu_action,
-            engine_request
+            ping_engine,
+            open_module,
+            unload_module,
+            get_module_analysis_status,
+            get_module_info,
+            list_functions,
+            get_function_graph_by_va,
+            disassemble_linear,
+            get_linear_view_info,
+            get_linear_rows,
+            find_linear_row_by_va
         ])
         .build(tauri::generate_context!())
         .expect("failed to build Tauri application")
-        .run(|app, event| {
-            if let tauri::RunEvent::ExitRequested { .. } = event {
-                app.state::<AppState>().engine.stop();
-            }
-        });
+        .run(|_, _| {});
 }
 
 fn handle_menu_action(

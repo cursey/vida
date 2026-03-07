@@ -2,10 +2,10 @@ use std::collections::BTreeMap;
 
 use goblin::pe::PE;
 
+use crate::api::{InstructionCategory, LinearViewRow};
 use crate::disasm::to_hex;
 use crate::error::EngineError;
 use crate::pe_utils::get_byte_at_rva;
-use crate::protocol::{InstructionCategory, LinearViewRow};
 
 pub(crate) const DATA_GROUP_SIZE: u64 = 16;
 pub(crate) const LINEAR_ROW_HEIGHT: u64 = 24;

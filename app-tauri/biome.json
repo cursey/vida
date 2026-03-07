@@ -12,13 +12,6 @@
     }
   },
   "files": {
-    "ignore": [
-      "dist",
-      "node_modules",
-      "src/shared/protocol.gen.ts",
-      "src-tauri/gen",
-      "src-tauri/target",
-      "src-tauri/binaries"
-    ]
+    "ignore": ["dist", "node_modules", "src-tauri/gen", "src-tauri/target"]
   }
 }

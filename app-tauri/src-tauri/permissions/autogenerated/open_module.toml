@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-open-module"
+description = "Enables the open_module command without any pre-configured scope."
+commands.allow = ["open_module"]
+
+[[permission]]
+identifier = "deny-open-module"
+description = "Denies the open_module command without any pre-configured scope."
+commands.deny = ["open_module"]

@@ -5,10 +5,10 @@ use iced_x86::{
     Decoder, DecoderOptions, FlowControl, Formatter, Instruction, IntelFormatter, Mnemonic,
 };
 
+use crate::api::InstructionCategory;
 use crate::disasm::{bytes_to_hex, categorize_instruction, split_instruction_text};
 use crate::error::EngineError;
 use crate::pe_utils::{find_section_for_rva, get_byte_at_rva, is_executable_rva};
-use crate::protocol::InstructionCategory;
 
 pub(crate) const MAX_CFG_BLOCKS: usize = 2048;
 pub(crate) const MAX_CFG_INSTRUCTIONS: usize = 65_536;

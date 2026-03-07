@@ -6,11 +6,7 @@ default:
 setup:
   cd app-tauri; npm install
 
-app-gen-protocol:
-  cd app-tauri; npm run gen:protocol
-
 app-build:
-  cargo build --manifest-path engine/Cargo.toml
   cd app-tauri; npm run build
 
 app-dev:

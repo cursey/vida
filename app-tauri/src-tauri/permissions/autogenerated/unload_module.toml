@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-unload-module"
+description = "Enables the unload_module command without any pre-configured scope."
+commands.allow = ["unload_module"]
+
+[[permission]]
+identifier = "deny-unload-module"
+description = "Denies the unload_module command without any pre-configured scope."
+commands.deny = ["unload_module"]

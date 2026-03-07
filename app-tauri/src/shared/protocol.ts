@@ -1,13 +1,23 @@
-import type {
-  EnginePingParams,
-  FunctionGraphByVaParams,
-  FunctionListParams,
-  LinearDisassemblyParams,
-  ModuleInfoParams,
-  ModuleOpenParams,
-} from "./protocol.gen";
-
 export type HexAddress = string;
+export type EnginePingParams = Record<string, never>;
+export type ModuleOpenParams = {
+  path: string;
+};
+export type ModuleInfoParams = {
+  moduleId: string;
+};
+export type FunctionListParams = {
+  moduleId: string;
+};
+export type FunctionGraphByVaParams = {
+  moduleId: string;
+  va: HexAddress;
+};
+export type LinearDisassemblyParams = {
+  moduleId: string;
+  start: HexAddress;
+  maxInstructions?: number;
+};
 
 export type EngineMethod =
   | "engine.ping"

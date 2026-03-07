@@ -7,6 +7,7 @@ build = "build.rs"
 [package.metadata]
 
 [dependencies]
+engine = { path = "../../engine" }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"
 tauri = { version = "2.10.3", features = [] }

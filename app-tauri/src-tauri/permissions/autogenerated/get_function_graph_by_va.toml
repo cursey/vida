@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-get-function-graph-by-va"
+description = "Enables the get_function_graph_by_va command without any pre-configured scope."
+commands.allow = ["get_function_graph_by_va"]
+
+[[permission]]
+identifier = "deny-get-function-graph-by-va"
+description = "Denies the get_function_graph_by_va command without any pre-configured scope."
+commands.deny = ["get_function_graph_by_va"]

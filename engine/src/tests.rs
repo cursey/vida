@@ -1,14 +1,12 @@
-use goblin::pe::exception::RuntimeFunction;
-use iced_x86::{Decoder, DecoderOptions, Instruction};
-use serde_json::{Value, json};
-
+use crate::api::{EnginePingParams, InstructionCategory};
 use crate::disasm::{categorize_instruction, parse_hex_u64};
 use crate::pe_utils::{
     collect_exception_function_starts_from_entries, collect_tls_callback_starts_from_vas,
     is_valid_exception_function_range,
 };
-use crate::protocol::InstructionCategory;
-use crate::{EngineState, RpcRequest, RpcResponse};
+use crate::{EngineError, EngineState};
+use goblin::pe::exception::RuntimeFunction;
+use iced_x86::{Decoder, DecoderOptions, Instruction};
 
 fn decode_instruction(bytes: &[u8]) -> Instruction {
     let mut decoder = Decoder::with_ip(64, bytes, 0x140001000, DecoderOptions::NONE);
@@ -24,16 +22,22 @@ fn parses_hex_addresses() {
 }
 
 #[test]
-fn rejects_invalid_request_id_type() {
+fn ping_returns_engine_version() {
     let mut state = EngineState::default();
-    let response = state.handle_request(RpcRequest {
-        jsonrpc: "2.0".to_owned(),
-        id: Value::Bool(true),
-        method: "engine.ping".to_owned(),
-        params: json!({}),
+    let result = state
+        .ping(EnginePingParams::default())
+        .expect("ping should succeed");
+    assert!(!result.version.is_empty());
+}
+
+#[test]
+fn missing_module_reports_not_found() {
+    let mut state = EngineState::default();
+    let result = state.get_module_info(crate::api::ModuleInfoParams {
+        module_id: "m404".to_owned(),
     });
 
-    assert!(matches!(response, RpcResponse::Error { .. }));
+    assert!(matches!(result, Err(EngineError::ModuleNotFound)));
 }
 
 #[test]

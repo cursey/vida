@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-get-module-info"
+description = "Enables the get_module_info command without any pre-configured scope."
+commands.allow = ["get_module_info"]
+
+[[permission]]
+identifier = "deny-get-module-info"
+description = "Denies the get_module_info command without any pre-configured scope."
+commands.deny = ["get_module_info"]

@@ -19,6 +19,16 @@
     "allow-window-control",
     "allow-get-title-bar-menu-model",
     "allow-invoke-title-bar-menu-action",
-    "allow-engine-request"
+    "allow-ping-engine",
+    "allow-open-module",
+    "allow-unload-module",
+    "allow-get-module-analysis-status",
+    "allow-get-module-info",
+    "allow-list-functions",
+    "allow-get-function-graph-by-va",
+    "allow-disassemble-linear",
+    "allow-get-linear-view-info",
+    "allow-get-linear-rows",
+    "allow-find-linear-row-by-va"
   ]
 }

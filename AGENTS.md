@@ -10,13 +10,11 @@ Scope reference: `docs/electron_disassembler_project_scope.md`.
 ## Current State
 The repository currently contains:
 - A Tauri 2 desktop shell with a React/Vite renderer and Rust host integration.
-- A Rust engine with JSON-RPC stdio transport, persistent app-session lifecycle, and MVP disassembly/CFG flows.
-- Shared protocol schemas in `shared/schemas`.
+- A Rust engine crate used directly by the Tauri host, with typed library APIs and MVP disassembly/CFG flows.
 
 ## Planned Repository Layout
 - `app-tauri/` - Tauri UI, renderer, graph UI, and host shell
-- `engine/` - Rust analysis service
-- `shared/` - shared message contracts/schemas
+- `engine/` - Rust analysis library
 - `docs/` - architecture and algorithm notes
 
 ## Change Tracking
@@ -27,10 +25,10 @@ The repository currently contains:
 
 ## Architecture Defaults (Current)
 - Renderer stack: React + Vite + TypeScript.
-- Engine transport: JSON-RPC over stdio.
-- Engine lifecycle: single persistent Rust child process for app session.
+- Engine integration: direct in-process Rust library calls from the Tauri host.
+- Engine lifecycle: one shared `EngineState` instance owned by the app session.
 - MVP1 binary scope: PE32+ x64 only.
-- Protocol source of truth: JSON Schema files in `shared/schemas`, with generated TypeScript types in app code.
+- Type source of truth: public Rust engine API plus handwritten TypeScript renderer contracts in `app-tauri`.
 
 ## Command Runner Policy
 Use `just` and a root `justfile` as the primary command interface.
