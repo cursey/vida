@@ -1,5 +1,39 @@
 # Work Log
 
+## 2026-03-07 - Rename Tauri Workspace from `app-tauri` to `app`
+
+Summary:
+- Renamed the desktop workspace directory from `app-tauri` to `app` and updated the live repo command surface to use the new path consistently.
+- Renamed the app package/crate identifiers to `app` so the Node metadata, Cargo metadata, and build artifact naming match the simplified workspace name.
+- Refreshed the active repo instructions and scope docs to describe the desktop workspace as `app`, and updated the portable-build recipe to stage the renamed `app.exe` artifact.
+
+Validation commands executed:
+- `just check`
+- `just test`
+- `just build`
+- `just build-portable`
+
+Changed files index:
+- See `docs/change_files.md` for the detailed file list for this work item.
+
+## 2026-03-07 - Remove Vite Dev Server from Tauri Runtime Flow
+
+Summary:
+- Removed the Tauri `devUrl` and `beforeDevCommand` wiring so the desktop shell no longer depends on a Node-hosted Vite dev server to load the UI.
+- Changed app development to build the renderer once and let Tauri load static assets from `dist`, matching the production asset-loading model.
+- Dropped the unused Vite dev-server script and server config so the frontend toolchain is only used for bundling, not for serving the desktop UI.
+
+Validation commands executed:
+- `npm run check` (in `app-tauri`)
+- `npm run test` (in `app-tauri`)
+- `npm run build` (in `app-tauri`)
+- `just check`
+- `just test`
+- `just build`
+
+Changed files index:
+- See `docs/change_files.md` for the detailed file list for this work item.
+
 ## 2026-03-07 - Merge Tauri Host and Engine into One Rust Backend
 
 Summary:

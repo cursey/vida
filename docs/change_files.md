@@ -1,5 +1,35 @@
 # Change Files
 
+## 2026-03-07 - Rename Tauri Workspace from `app-tauri` to `app`
+
+Root:
+- `.gitignore`
+- `AGENTS.md`
+- `justfile`
+
+Docs:
+- `docs/work_log.md`
+- `docs/change_files.md`
+- `docs/electron_disassembler_project_scope.md`
+
+app:
+- `app/` (renamed from `app-tauri/`)
+- `app/package.json`
+- `app/package-lock.json`
+- `app/src-tauri/Cargo.toml`
+- `app/src-tauri/Cargo.lock`
+
+## 2026-03-07 - Remove Vite Dev Server from Tauri Runtime Flow
+
+Docs:
+- `docs/work_log.md`
+- `docs/change_files.md`
+
+app-tauri:
+- `app-tauri/package.json`
+- `app-tauri/vite.config.ts`
+- `app-tauri/src-tauri/tauri.conf.json`
+
 ## 2026-03-07 - Merge Tauri Host and Engine into One Rust Backend
 
 Root:

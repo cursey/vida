@@ -1,5 +1,5 @@
 {
-  "name": "app-tauri",
+  "name": "app",
   "version": "0.1.0",
   "private": true,
   "description": "Tauri UI for electron-disassembler",
@@ -7,13 +7,12 @@
   "scripts": {
     "build:renderer": "vite build",
     "build": "tauri build --debug --no-bundle",
-    "dev:renderer": "vite",
-    "dev": "tauri dev",
+    "dev": "npm run build:renderer && tauri dev",
     "lint": "biome lint .",
     "fmt": "biome check --write . && cargo fmt --manifest-path src-tauri/Cargo.toml",
-    "check": "biome check . && tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.renderer.json --noEmit && cargo fmt --manifest-path src-tauri/Cargo.toml -- --check && cargo check --manifest-path src-tauri/Cargo.toml",
+    "check": "npm run build:renderer && biome check . && tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.renderer.json --noEmit && cargo fmt --manifest-path src-tauri/Cargo.toml -- --check && cargo check --manifest-path src-tauri/Cargo.toml",
     "test:renderer": "vitest run",
-    "test:backend": "cargo test --manifest-path src-tauri/Cargo.toml",
+    "test:backend": "npm run build:renderer && cargo test --manifest-path src-tauri/Cargo.toml",
     "test": "node --test test/**/*.test.js && npm run test:renderer && npm run test:backend",
     "tauri": "tauri"
   },

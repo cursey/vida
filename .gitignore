@@ -1,14 +1,14 @@
 # Node / desktop app
 node_modules/
-app-tauri/node_modules/
-app-tauri/dist/
+app/node_modules/
+app/dist/
 
 # Rust
 target/
 engine/target/
-app-tauri/src-tauri/target/
-app-tauri/src-tauri/gen/
-app-tauri/src-tauri/binaries/
+app/src-tauri/target/
+app/src-tauri/gen/
+app/src-tauri/binaries/
 engine/tests/fixture_builder/
 
 # Logs / temp

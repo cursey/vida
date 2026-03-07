@@ -415,7 +415,7 @@ process**, not the renderer.
 
 # Repository Structure
 
-    /app-tauri
+    /app
         Tauri UI
         React components
         graph rendering and host shell

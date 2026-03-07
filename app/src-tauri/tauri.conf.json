@@ -1,19 +1,17 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "V.ıDA Pro",
+  "productName": "ViDA Pro",
   "version": "0.1.0",
   "identifier": "com.electrondisassembler.vida-pro",
   "build": {
-    "beforeDevCommand": "npm run dev:renderer",
     "beforeBuildCommand": "npm run build:renderer",
-    "devUrl": "http://127.0.0.1:5173",
     "frontendDist": "../dist"
   },
   "app": {
     "windows": [
       {
         "label": "main",
-        "title": "V.ıDA Pro",
+        "title": "ViDA Pro",
         "width": 1500,
         "height": 950,
         "minWidth": 1200,
@@ -28,6 +26,7 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all"
+    "targets": "all",
+    "icon": ["icons/icon.ico"]
   }
 }

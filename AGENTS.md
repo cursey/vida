@@ -13,7 +13,7 @@ The repository currently contains:
 - A Rust engine crate used directly by the Tauri host, with typed library APIs and MVP disassembly/CFG flows.
 
 ## Planned Repository Layout
-- `app-tauri/` - Tauri UI, renderer, graph UI, and host shell
+- `app/` - Tauri UI, renderer, graph UI, and host shell
 - `engine/` - Rust analysis library
 - `docs/` - architecture and algorithm notes
 
@@ -21,14 +21,14 @@ The repository currently contains:
 - For every substantial implementation, append an entry to `docs/work_log.md`.
 - Keep `docs/change_files.md` updated with the files changed by each logged work item.
 - Work log entries must include: date, summary, and validation commands executed.
-- Change file entries should be grouped by subsystem (`app-tauri`, `engine`, `shared`, `docs`, root).
+- Change file entries should be grouped by subsystem (`app`, `engine`, `docs`, root).
 
 ## Architecture Defaults (Current)
 - Renderer stack: React + Vite + TypeScript.
 - Engine integration: direct in-process Rust library calls from the Tauri host.
 - Engine lifecycle: one shared `EngineState` instance owned by the app session.
 - MVP1 binary scope: PE32+ x64 only.
-- Type source of truth: public Rust engine API plus handwritten TypeScript renderer contracts in `app-tauri`.
+- Type source of truth: public Rust engine API plus handwritten TypeScript renderer contracts in `app`.
 
 ## Command Runner Policy
 Use `just` and a root `justfile` as the primary command interface.
