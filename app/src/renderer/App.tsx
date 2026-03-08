@@ -1,10 +1,6 @@
 import { WindowChrome } from "@/components/window-chrome";
 import { desktopApi } from "@/desktop-api";
-import {
-  GoToDialog,
-  LoadingDialog,
-  XrefsDialog,
-} from "@/features/app/app-dialogs";
+import { GoToDialog, XrefsDialog } from "@/features/app/app-dialogs";
 import { AppStatusBar } from "@/features/app/status-bar";
 import { BrowserPanel } from "@/features/browser/browser-panel";
 import { DisassemblyPanel } from "@/features/disassembly/disassembly-panel";
@@ -136,7 +132,6 @@ export function App() {
   const [errorText, setErrorText] = useState<string>("");
   const [transientStatusMessage, setTransientStatusMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [loadingPath, setLoadingPath] = useState<string>("");
   const [isResizing, setIsResizing] = useState(false);
   const [isColumnResizing, setIsColumnResizing] = useState(false);
   const [cacheEpoch, setCacheEpoch] = useState(0);
@@ -351,7 +346,6 @@ export function App() {
     activeModuleIdRef.current = "";
     setTransientStatusMessage("");
     setIsLoading(false);
-    setLoadingPath("");
     setIsGoToModalOpen(false);
     setIsXrefsModalOpen(false);
     setXrefsTargetVa("");
@@ -1192,7 +1186,6 @@ export function App() {
     setErrorText("");
     clearModuleState();
     setIsLoading(true);
-    setLoadingPath(chosenPath);
 
     try {
       if (previousModuleId) {
@@ -1236,7 +1229,6 @@ export function App() {
       );
     } finally {
       setIsLoading(false);
-      setLoadingPath("");
     }
   }
 
@@ -1608,6 +1600,10 @@ export function App() {
       });
   }, []);
 
+  const hasLoadedModule = moduleId.length > 0;
+  const hasCompletedAnalysis =
+    hasLoadedModule && analysisStatus?.state === "ready";
+
   return (
     <div
       className={cn(
@@ -1629,11 +1625,13 @@ export function App() {
           {errorText}
         </div>
       ) : null}
-      <MemoryOverviewBar
-        overview={memoryOverview}
-        markerVa={visibleViewportMarkerVa}
-        onNavigate={handleMemoryOverviewNavigate}
-      />
+      {hasCompletedAnalysis ? (
+        <MemoryOverviewBar
+          overview={memoryOverview}
+          markerVa={visibleViewportMarkerVa}
+          onNavigate={handleMemoryOverviewNavigate}
+        />
+      ) : null}
 
       <main
         className="-mx-2 grid flex-1 min-h-0 overflow-hidden"
@@ -1644,70 +1642,92 @@ export function App() {
             "var(--left-panel-width, 268px) var(--splitter-width) minmax(420px, 1fr)",
         }}
       >
-        <BrowserPanel
-          isActive={activePanel === "browser"}
-          moduleId={moduleId}
-          showFunctionCount={
-            analysisStatus?.state === "ready" && functions.length > 0
-          }
-          appliedFunctionSearchQuery={appliedFunctionSearchQuery}
-          functionCount={functionCount}
-          totalFunctionCount={discoveredFunctionCount}
-          functionScrollRef={functionScrollRef}
-          functionListTotalSize={functionRowVirtualizer.getTotalSize()}
-          functionVirtualItems={functionVirtualItems}
-          boundedFunctionWindowStart={boundedFunctionWindowStart}
-          displayedFunctionIndexes={displayedFunctionIndexes}
-          functions={functions}
-          goToAddress={goToAddress}
-          onNavigateToVa={navigateToVa}
-          isBrowserSearchVisible={isBrowserSearchVisible}
-          browserSearchInputRef={browserSearchInputRef}
-          functionSearchQuery={functionSearchQuery}
-          onFunctionSearchQueryChange={setFunctionSearchQuery}
-          onActivate={() => setActivePanel("browser")}
-        />
+        {hasCompletedAnalysis ? (
+          <>
+            <BrowserPanel
+              isActive={activePanel === "browser"}
+              moduleId={moduleId}
+              showFunctionCount={
+                analysisStatus?.state === "ready" && functions.length > 0
+              }
+              appliedFunctionSearchQuery={appliedFunctionSearchQuery}
+              functionCount={functionCount}
+              totalFunctionCount={discoveredFunctionCount}
+              functionScrollRef={functionScrollRef}
+              functionListTotalSize={functionRowVirtualizer.getTotalSize()}
+              functionVirtualItems={functionVirtualItems}
+              boundedFunctionWindowStart={boundedFunctionWindowStart}
+              displayedFunctionIndexes={displayedFunctionIndexes}
+              functions={functions}
+              goToAddress={goToAddress}
+              onNavigateToVa={navigateToVa}
+              isBrowserSearchVisible={isBrowserSearchVisible}
+              browserSearchInputRef={browserSearchInputRef}
+              functionSearchQuery={functionSearchQuery}
+              onFunctionSearchQueryChange={setFunctionSearchQuery}
+              onActivate={() => setActivePanel("browser")}
+            />
 
-        <div
-          className="col-[2] z-[2] mx-[-4px] min-h-0 min-w-2 w-2 justify-self-center border-0 bg-transparent cursor-col-resize"
-          role="separator"
-          aria-label="Resize browser panel"
-          aria-orientation="vertical"
-          tabIndex={0}
-          onPointerDown={startResizing}
-        />
+            <div
+              className="col-[2] z-[2] mx-[-4px] min-h-0 min-w-2 w-2 justify-self-center border-0 bg-transparent cursor-col-resize"
+              role="separator"
+              aria-label="Resize browser panel"
+              aria-orientation="vertical"
+              tabIndex={0}
+              onPointerDown={startResizing}
+            />
 
-        {centerView === "disassembly" ? (
-          <DisassemblyPanel
-            isActive={activePanel === "disassembly"}
-            moduleId={moduleId}
-            isReady={Boolean(linearInfo)}
-            rowCount={linearInfo?.rowCount ?? 0}
-            disassemblyColumnStyle={disassemblyColumnStyle}
-            onActivate={() => setActivePanel("disassembly")}
-            onStartColumnResizing={startColumnResizing}
-            disassemblyScrollRef={disassemblyScrollRef}
-            disassemblyListTotalSize={rowVirtualizer.getTotalSize()}
-            virtualItems={virtualItems}
-            boundedDisassemblyWindowStart={boundedDisassemblyWindowStart}
-            readRow={readRow}
-            cacheEpoch={cacheEpoch}
-            selectedRowIndex={selectedRowIndex}
-            onSelectRow={(rowIndex, address) => {
-              setSelectedRowIndex(rowIndex);
-              setGoToAddress(address);
-              pushSelectionHistory(address);
-            }}
-            findSectionName={findSectionName}
-            onNavigateToVa={navigateToVa}
-          />
+            {centerView === "disassembly" ? (
+              <DisassemblyPanel
+                isActive={activePanel === "disassembly"}
+                moduleId={moduleId}
+                isReady={Boolean(linearInfo)}
+                rowCount={linearInfo?.rowCount ?? 0}
+                disassemblyColumnStyle={disassemblyColumnStyle}
+                onActivate={() => setActivePanel("disassembly")}
+                onStartColumnResizing={startColumnResizing}
+                disassemblyScrollRef={disassemblyScrollRef}
+                disassemblyListTotalSize={rowVirtualizer.getTotalSize()}
+                virtualItems={virtualItems}
+                boundedDisassemblyWindowStart={boundedDisassemblyWindowStart}
+                readRow={readRow}
+                cacheEpoch={cacheEpoch}
+                selectedRowIndex={selectedRowIndex}
+                onSelectRow={(rowIndex, address) => {
+                  setSelectedRowIndex(rowIndex);
+                  setGoToAddress(address);
+                  pushSelectionHistory(address);
+                }}
+                findSectionName={findSectionName}
+                onNavigateToVa={navigateToVa}
+              />
+            ) : (
+              <GraphPanel
+                isActive={activePanel === "disassembly"}
+                moduleId={moduleId}
+                graph={graphData}
+                onActivate={() => setActivePanel("disassembly")}
+              />
+            )}
+          </>
+        ) : hasLoadedModule || isLoading ? (
+          <div className="col-[1/4] flex items-center justify-center">
+            <div
+              aria-label="Loading workspace"
+              className="size-8 rounded-full border-2 border-border border-t-primary animate-[loading-spin_700ms_linear_infinite]"
+              data-testid="workspace-loading-spinner"
+              role="status"
+            />
+          </div>
         ) : (
-          <GraphPanel
-            isActive={activePanel === "disassembly"}
-            moduleId={moduleId}
-            graph={graphData}
-            onActivate={() => setActivePanel("disassembly")}
-          />
+          <div className="col-[1/4] flex items-center justify-center px-6 text-center">
+            <p
+              className="max-w-md text-sm text-muted-foreground"
+              data-testid="workspace-idle-message"
+            >
+              Load a file to begin exploring.
+            </p>
+          </div>
         )}
       </main>
 
@@ -1717,8 +1737,6 @@ export function App() {
         analysisMessage={moduleAnalysisMessage}
         transientMessage={transientStatusMessage}
       />
-
-      <LoadingDialog isLoading={isLoading} loadingPath={loadingPath} />
 
       <GoToDialog
         isOpen={isGoToModalOpen}

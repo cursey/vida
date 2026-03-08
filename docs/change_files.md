@@ -1,5 +1,37 @@
 # Change Files
 
+## 2026-03-08 - Add Idle Workspace Prompt
+
+App:
+- `app/src/renderer/App.tsx`
+- `app/src/renderer/App.window-chrome.test.tsx`
+
+Docs:
+- `docs/work_log.md`
+- `docs/change_files.md`
+
+## 2026-03-08 - Replace Loading Modal With Workspace Spinner
+
+App:
+- `app/src/renderer/App.loading-modal.test.tsx`
+- `app/src/renderer/App.tsx`
+
+Docs:
+- `docs/work_log.md`
+- `docs/change_files.md`
+
+## 2026-03-08 - Hide Empty Analysis Views Until Analysis Is Ready
+
+App:
+- `app/src/renderer/App.disassembly-window.test.tsx`
+- `app/src/renderer/App.tsx`
+- `app/src/renderer/App.window-chrome.test.tsx`
+- `app/src/renderer/features/disassembly/memory-overview-bar.tsx`
+
+Docs:
+- `docs/work_log.md`
+- `docs/change_files.md`
+
 ## 2026-03-08 - Simplify Window Chrome Style Reuse
 
 App:

@@ -1,5 +1,46 @@
 # Work Log
 
+## 2026-03-08 - Add Idle Workspace Prompt
+
+Summary:
+- Added a centered idle-state message in the main workspace so the shell gives a clear starting instruction before any file is loaded.
+- Kept the spinner-only loading flow and hidden analysis panes unchanged while tightening the prompt copy to a short onboarding line.
+
+Validation commands executed:
+- `npm run test:renderer -- App.window-chrome.test.tsx` (in `app`)
+- `npm run test:renderer -- App.loading-modal.test.tsx App.window-chrome.test.tsx App.disassembly-window.test.tsx` (in `app`)
+- `npm run check` (in `app`)
+
+Changed files index:
+- See `docs/change_files.md` for the detailed file list for this work item.
+
+## 2026-03-08 - Replace Loading Modal With Workspace Spinner
+
+Summary:
+- Removed the blocking file-loading modal and switched the renderer to a spinner-only loading experience in the main workspace.
+- Kept the analysis panes hidden until readiness and showed the centered workspace spinner for the full loading/analysis period until the renderer reaches the `ready` state.
+- Updated the loading renderer test to cover the spinner lifecycle instead of modal content.
+
+Validation commands executed:
+- `npm run test:renderer -- App.loading-modal.test.tsx App.window-chrome.test.tsx App.disassembly-window.test.tsx` (in `app`)
+- `npm run check` (in `app`)
+
+Changed files index:
+- See `docs/change_files.md` for the detailed file list for this work item.
+
+## 2026-03-08 - Hide Empty Analysis Views Until Analysis Is Ready
+
+Summary:
+- Hid the memory overview, browser panel, splitter, and center analysis view until analysis reaches the `ready` state so the shell stays clean both before loading and while analysis is still running.
+- Simplified the memory overview empty state back to a plain empty bar and updated renderer tests to assert that the analysis panes stay hidden before readiness and only appear once analysis completes.
+
+Validation commands executed:
+- `npm run test:renderer -- App.window-chrome.test.tsx App.disassembly-window.test.tsx App.loading-modal.test.tsx` (in `app`)
+- `npm run check` (in `app`)
+
+Changed files index:
+- See `docs/change_files.md` for the detailed file list for this work item.
+
 ## 2026-03-08 - Simplify Window Chrome Style Reuse
 
 Summary:

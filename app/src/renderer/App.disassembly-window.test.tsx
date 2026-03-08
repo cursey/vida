@@ -125,8 +125,8 @@ describe("App disassembly window virtualization", () => {
   it("keeps the disassembly canvas bounded for very large row counts", async () => {
     const { container } = render(<App />);
 
-    expect(screen.getByTestId("memory-overview-empty-bar")).toBeInTheDocument();
-    expect(screen.getByTestId("memory-overview-empty")).toBeInTheDocument();
+    expect(screen.queryByTestId("memory-overview-empty-bar")).toBeNull();
+    expect(screen.queryByTestId("memory-overview-empty")).toBeNull();
 
     await waitFor(() => {
       expect(menuOpenHandler).toBeTypeOf("function");
@@ -176,7 +176,7 @@ describe("App disassembly window virtualization", () => {
     });
   });
 
-  it("shows disassembly before the ready memory overview finishes loading", async () => {
+  it("shows analysis panes once ready even if memory overview is still loading", async () => {
     let resolveReadyOverview:
       | ((value: ReturnType<typeof buildMemoryOverview>) => void)
       | null = null;
@@ -262,7 +262,7 @@ describe("App disassembly window virtualization", () => {
     });
   });
 
-  it("keeps the browser list and memory bar empty until analysis is ready", async () => {
+  it("keeps the browser and analysis panes hidden until analysis is ready", async () => {
     let resolveStatus:
       | ((value: MethodResult["module.getAnalysisStatus"]) => void)
       | null = null;
@@ -344,7 +344,9 @@ describe("App disassembly window virtualization", () => {
     expect(listFunctionsMock).not.toHaveBeenCalled();
     expect(getModuleMemoryOverviewMock).not.toHaveBeenCalled();
     expect(screen.queryAllByTestId("function-row")).toHaveLength(0);
-    expect(screen.getByTestId("memory-overview-empty")).toBeInTheDocument();
+    expect(screen.queryByTestId("memory-overview")).toBeNull();
+    expect(screen.queryByTestId("browser-panel")).toBeNull();
+    expect(screen.queryByTestId("disassembly-canvas")).toBeNull();
 
     await act(async () => {
       resolveStatus?.({

@@ -1,6 +1,5 @@
 import { parseHexVa } from "@/features/shared/number-utils";
 import { cn } from "@/lib/utils";
-import { useId } from "react";
 import type { MouseEvent } from "react";
 import type {
   MemoryOverviewSliceKind,
@@ -16,22 +15,11 @@ type MemoryOverviewBarProps = {
   onNavigate?: (va: string) => void;
 };
 
-const emptyLabelStyle = {
-  fill: "oklch(var(--foreground) / 0.1)",
-  fontSize: "10px",
-  fontWeight: 400,
-  letterSpacing: "0.08em",
-  textTransform: "uppercase" as const,
-  userSelect: "none" as const,
-};
-
 export function MemoryOverviewBar({
   overview,
   markerVa,
   onNavigate,
 }: MemoryOverviewBarProps) {
-  const emptyPatternId = useId().replace(/:/g, "");
-
   const startVa = overview ? parseHexVa(overview.startVa) : null;
   const endVa = overview ? parseHexVa(overview.endVa) : null;
 
@@ -48,39 +36,14 @@ export function MemoryOverviewBar({
         aria-label="Memory overview"
         data-testid="memory-overview"
       >
-        <svg
+        <div
           className="block h-7 w-full bg-[var(--memory-rail)]"
           data-testid="memory-overview-empty-bar"
-          viewBox={`0 0 ${BAR_VIEWBOX_WIDTH} ${BAR_HEIGHT}`}
-          preserveAspectRatio="none"
           role="img"
           aria-label="Empty memory layout"
         >
-          <defs>
-            <pattern
-              id={emptyPatternId}
-              width="150"
-              height="54"
-              patternUnits="userSpaceOnUse"
-              patternTransform="rotate(-28)"
-            >
-              <text style={emptyLabelStyle} x="8" y="18">
-                Memory Bar
-              </text>
-              <text style={emptyLabelStyle} x="74" y="45">
-                Memory Bar
-              </text>
-            </pattern>
-          </defs>
-          <rect
-            data-testid="memory-overview-empty"
-            x={0}
-            y={0}
-            width={BAR_VIEWBOX_WIDTH}
-            height={BAR_HEIGHT}
-            fill={`url(#${emptyPatternId})`}
-          />
-        </svg>
+          <div data-testid="memory-overview-empty" />
+        </div>
       </div>
     );
   }

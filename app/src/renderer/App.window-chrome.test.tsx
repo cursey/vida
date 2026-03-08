@@ -51,6 +51,16 @@ describe("App custom window chrome", () => {
   it("renders title bar menus and window controls", async () => {
     render(<App />);
 
+    expect(screen.queryByTestId("memory-overview")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("browser-panel")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("disassembly-canvas")).not.toBeInTheDocument();
+    expect(screen.getByTestId("workspace-idle-message")).toHaveTextContent(
+      "Load a file to begin exploring.",
+    );
+    expect(
+      screen.queryByRole("separator", { name: "Resize browser panel" }),
+    ).not.toBeInTheDocument();
+
     await waitFor(() => {
       expect(screen.getByLabelText("Application menu")).toBeInTheDocument();
     });

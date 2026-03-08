@@ -12,45 +12,6 @@ import { cn } from "@/lib/utils";
 import { type FormEvent, type RefObject, useRef } from "react";
 import type { XrefRecord } from "../../../shared/protocol";
 
-type LoadingDialogProps = {
-  isLoading: boolean;
-  loadingPath: string;
-};
-
-export function LoadingDialog({ isLoading, loadingPath }: LoadingDialogProps) {
-  return (
-    <Dialog open={isLoading}>
-      <DialogContent
-        className="w-[min(460px,calc(100vw-32px))] gap-2 p-3.5 transition-none"
-        overlayClassName="animate-none transition-none"
-        onEscapeKeyDown={(event) => event.preventDefault()}
-        onInteractOutside={(event) => event.preventDefault()}
-        onPointerDownOutside={(event) => event.preventDefault()}
-      >
-        <DialogHeader className="flex-row items-center gap-2 space-y-0">
-          <div
-            aria-hidden="true"
-            className="size-4 shrink-0 rounded-full border-2 border-border border-t-primary animate-[loading-spin_700ms_linear_infinite]"
-            data-testid="loading-spinner"
-          />
-          <DialogTitle className="text-[13px] font-semibold">
-            Opening File
-          </DialogTitle>
-        </DialogHeader>
-        <DialogHeader className="block space-y-0">
-          <DialogDescription className="text-xs text-foreground/72">
-            Reading the selected file and preparing the workspace. Analysis will
-            continue in the background.
-          </DialogDescription>
-        </DialogHeader>
-        <code className="m-0 block overflow-hidden text-ellipsis whitespace-nowrap rounded-sm border border-input bg-secondary px-2 py-2 text-[11px] leading-[1.4] text-muted-foreground">
-          {loadingPath}
-        </code>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
 type GoToDialogProps = {
   isOpen: boolean;
   isLoading: boolean;
