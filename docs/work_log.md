@@ -1,5 +1,22 @@
 # Work Log
 
+## 2026-03-08 - Remove Embedded Engine Status Badge and Ping
+
+Summary:
+- Removed the renderer status-bar badge that reported the embedded engine as `online`, leaving the status bar focused on live work indicators like search, analysis, and graph building.
+- Deleted the unused ping command and typed ping protocol from the Tauri app, renderer desktop API, and shared contracts now that the engine runs in-process.
+- Removed the engine-side ping API and regression test so the embedded backend surface only exposes operational module and analysis flows.
+
+Validation commands executed:
+- `cargo check --manifest-path "app/src-tauri/Cargo.toml"`
+- `cargo test --manifest-path "engine/Cargo.toml"`
+- `npm run test:renderer` (in `app`)
+- `just test` (fails on pre-existing UI consistency violation in `app/src/renderer/features/disassembly/memory-overview-bar.tsx`)
+- `just check` (fails on pre-existing Biome formatting issues in renderer files)
+
+Changed files index:
+- See `docs/change_files.md` for the detailed file list for this work item.
+
 ## 2026-03-08 - Refine Windows App Icon Assets
 
 Summary:

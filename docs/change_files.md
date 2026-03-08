@@ -1,5 +1,26 @@
 # Change Files
 
+## 2026-03-08 - Remove Embedded Engine Status Badge and Ping
+
+App:
+- `app/src-tauri/build.rs`
+- `app/src-tauri/src/main.rs`
+- `app/src/renderer/App.tsx`
+- `app/src/renderer/desktop-api.ts`
+- `app/src/renderer/features/app/status-bar.tsx`
+- `app/src/renderer/styles.css`
+- `app/src/renderer/test/mock-desktop-api.ts`
+- `app/src/shared/protocol.ts`
+
+Engine:
+- `engine/src/api.rs`
+- `engine/src/state.rs`
+- `engine/src/tests.rs`
+
+Docs:
+- `docs/work_log.md`
+- `docs/change_files.md`
+
 ## 2026-03-08 - Refine Windows App Icon Assets
 
 Root:

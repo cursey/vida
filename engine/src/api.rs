@@ -1,13 +1,5 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct EnginePingParams {}
-
-#[derive(Debug, Clone, Serialize)]
-pub struct EnginePingResult {
-    pub version: String,
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ModuleOpenParams {
     pub path: String,

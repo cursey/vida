@@ -2,32 +2,32 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::{
-    Arc, Mutex,
     atomic::{AtomicBool, Ordering},
+    Arc, Mutex,
 };
 use std::thread;
 
 use crate::analysis::{
-    AnalysisProgressPhase, AnalysisProgressUpdate, FunctionSeedEntry, InstructionOwnerRange,
-    ModuleAnalysis, build_module_analysis_with_progress, instruction_owner_for_rva,
+    build_module_analysis_with_progress, instruction_owner_for_rva, AnalysisProgressPhase,
+    AnalysisProgressUpdate, FunctionSeedEntry, InstructionOwnerRange, ModuleAnalysis,
 };
 use crate::api::{
-    EnginePingParams, EnginePingResult, ExportInfo, FunctionGraphByVaParams,
-    FunctionGraphByVaResult, FunctionListParams, FunctionListResult, FunctionSeed, ImportInfo,
-    InstructionCategory, InstructionRow, LinearDisassemblyParams, LinearDisassemblyResult,
-    LinearFindRowByVaParams, LinearFindRowByVaResult, LinearRowsParams, LinearRowsResult,
-    LinearViewInfoParams, LinearViewInfoResult, MemoryOverviewSliceKind,
-    ModuleAnalysisStatusParams, ModuleAnalysisStatusResult, ModuleInfoParams, ModuleInfoResult,
-    ModuleMemoryOverviewParams, ModuleMemoryOverviewResult, ModuleOpenParams, ModuleOpenResult,
-    ModuleUnloadParams, ModuleUnloadResult, SectionInfo,
+    ExportInfo, FunctionGraphByVaParams, FunctionGraphByVaResult, FunctionListParams,
+    FunctionListResult, FunctionSeed, ImportInfo, InstructionCategory, InstructionRow,
+    LinearDisassemblyParams, LinearDisassemblyResult, LinearFindRowByVaParams,
+    LinearFindRowByVaResult, LinearRowsParams, LinearRowsResult, LinearViewInfoParams,
+    LinearViewInfoResult, MemoryOverviewSliceKind, ModuleAnalysisStatusParams,
+    ModuleAnalysisStatusResult, ModuleInfoParams, ModuleInfoResult, ModuleMemoryOverviewParams,
+    ModuleMemoryOverviewResult, ModuleOpenParams, ModuleOpenResult, ModuleUnloadParams,
+    ModuleUnloadResult, SectionInfo,
 };
 use crate::disasm::{parse_hex_u64, to_hex};
 use crate::error::EngineError;
 use crate::linear::{
-    DATA_GROUP_SIZE, LINEAR_ROW_HEIGHT, MAX_LINEAR_PAGE_ROWS, find_row_by_rva,
-    materialize_linear_row,
+    find_row_by_rva, materialize_linear_row, DATA_GROUP_SIZE, LINEAR_ROW_HEIGHT,
+    MAX_LINEAR_PAGE_ROWS,
 };
-use crate::pe_utils::{SectionLookup, build_section_lookup, parse_pe64};
+use crate::pe_utils::{build_section_lookup, parse_pe64, SectionLookup};
 const DEFAULT_MAX_INSTRUCTIONS: usize = 512;
 const MAX_MAX_INSTRUCTIONS: usize = 4096;
 const MEMORY_OVERVIEW_TARGET_SLICE_COUNT: usize = 1000;
@@ -180,12 +180,6 @@ pub struct EngineState {
 }
 
 impl EngineState {
-    pub fn ping(&mut self, _params: EnginePingParams) -> Result<EnginePingResult, EngineError> {
-        Ok(EnginePingResult {
-            version: env!("CARGO_PKG_VERSION").to_owned(),
-        })
-    }
-
     pub fn open_module(
         &mut self,
         params: ModuleOpenParams,
@@ -968,9 +962,9 @@ fn find_instruction_index(
 #[cfg(test)]
 mod tests {
     use super::{
-        BaseMemoryRegion, MEMORY_OVERVIEW_TARGET_SLICE_COUNT, MemoryRangeSpec,
         build_memory_overview_segments, build_memory_overview_slices,
-        merge_instruction_owner_ranges,
+        merge_instruction_owner_ranges, BaseMemoryRegion, MemoryRangeSpec,
+        MEMORY_OVERVIEW_TARGET_SLICE_COUNT,
     };
     use crate::analysis::InstructionOwnerRange;
     use crate::api::MemoryOverviewSliceKind;

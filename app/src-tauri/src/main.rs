@@ -10,13 +10,12 @@ use std::{
 use engine::{
     EngineError, EngineState,
     api::{
-        EnginePingParams, EnginePingResult, FunctionGraphByVaParams, FunctionGraphByVaResult,
-        FunctionListParams, FunctionListResult, LinearDisassemblyParams, LinearDisassemblyResult,
-        LinearFindRowByVaParams, LinearFindRowByVaResult, LinearRowsParams, LinearRowsResult,
-        LinearViewInfoParams, LinearViewInfoResult, ModuleAnalysisStatusParams,
-        ModuleAnalysisStatusResult, ModuleInfoParams, ModuleInfoResult, ModuleMemoryOverviewParams,
-        ModuleMemoryOverviewResult, ModuleOpenParams, ModuleOpenResult, ModuleUnloadParams,
-        ModuleUnloadResult,
+        FunctionGraphByVaParams, FunctionGraphByVaResult, FunctionListParams, FunctionListResult,
+        LinearDisassemblyParams, LinearDisassemblyResult, LinearFindRowByVaParams,
+        LinearFindRowByVaResult, LinearRowsParams, LinearRowsResult, LinearViewInfoParams,
+        LinearViewInfoResult, ModuleAnalysisStatusParams, ModuleAnalysisStatusResult,
+        ModuleInfoParams, ModuleInfoResult, ModuleMemoryOverviewParams, ModuleMemoryOverviewResult,
+        ModuleOpenParams, ModuleOpenResult, ModuleUnloadParams, ModuleUnloadResult,
     },
 };
 use serde::{Deserialize, Serialize};
@@ -181,12 +180,6 @@ async fn invoke_title_bar_menu_action(
     command_id: String,
 ) -> Result<(), String> {
     handle_menu_action(&app, &window, &state, &command_id)
-}
-
-#[tauri::command]
-async fn ping_engine(state: State<'_, AppState>) -> Result<EnginePingResult, String> {
-    let engine = Arc::clone(&state.engine);
-    run_engine(engine, |engine| engine.ping(EnginePingParams::default())).await
 }
 
 #[tauri::command]
@@ -362,7 +355,6 @@ fn main() {
             window_control,
             get_title_bar_menu_model,
             invoke_title_bar_menu_action,
-            ping_engine,
             open_module,
             unload_module,
             get_module_analysis_status,

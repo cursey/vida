@@ -5,7 +5,6 @@ const COMMANDS: &[&str] = &[
     "window_control",
     "get_title_bar_menu_model",
     "invoke_title_bar_menu_action",
-    "ping_engine",
     "open_module",
     "unload_module",
     "get_module_analysis_status",

@@ -78,7 +78,6 @@ export const desktopApi: DesktopApi = {
     subscribe<null>(MENU_UNLOAD_MODULE_EVENT, () => {
       callback();
     }),
-  pingEngine: () => invokeApp<MethodResult["engine.ping"]>("ping_engine"),
   openModule: (path: string) =>
     invokeApp<MethodResult["module.open"]>("open_module", { path }),
   unloadModule: (moduleId: string) =>

@@ -1,4 +1,4 @@
-use crate::api::{EnginePingParams, InstructionCategory};
+use crate::api::InstructionCategory;
 use crate::disasm::{categorize_instruction, parse_hex_u64};
 use crate::pe_utils::{
     collect_exception_function_starts_from_entries, collect_tls_callback_starts_from_vas,
@@ -19,15 +19,6 @@ fn decode_instruction(bytes: &[u8]) -> Instruction {
 fn parses_hex_addresses() {
     assert_eq!(parse_hex_u64("0x10").expect("valid"), 16);
     assert!(parse_hex_u64("10").is_err());
-}
-
-#[test]
-fn ping_returns_engine_version() {
-    let mut state = EngineState::default();
-    let result = state
-        .ping(EnginePingParams::default())
-        .expect("ping should succeed");
-    assert!(!result.version.is_empty());
 }
 
 #[test]

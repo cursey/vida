@@ -1,5 +1,4 @@
 export type HexAddress = string;
-export type EnginePingParams = Record<string, never>;
 export type ModuleOpenParams = {
   path: string;
 };
@@ -20,7 +19,6 @@ export type LinearDisassemblyParams = {
 };
 
 export type EngineMethod =
-  | "engine.ping"
   | "module.open"
   | "module.unload"
   | "module.getAnalysisStatus"
@@ -34,7 +32,6 @@ export type EngineMethod =
   | "linear.findRowByVa";
 
 export type MethodParams = {
-  "engine.ping": EnginePingParams;
   "module.open": ModuleOpenParams;
   "module.unload": {
     moduleId: string;
@@ -174,9 +171,6 @@ export type LinearRow = {
 };
 
 export type MethodResult = {
-  "engine.ping": {
-    version: string;
-  };
   "module.open": {
     moduleId: string;
     arch: "x64";
@@ -277,7 +271,6 @@ export type DesktopApi = {
     callback: (model: TitleBarMenuModel) => void,
   ) => () => void;
   invokeTitleBarMenuAction: (commandId: string) => Promise<void>;
-  pingEngine: () => Promise<MethodResult["engine.ping"]>;
   openModule: (path: string) => Promise<MethodResult["module.open"]>;
   unloadModule: (moduleId: string) => Promise<MethodResult["module.unload"]>;
   getModuleAnalysisStatus: (

@@ -1,9 +1,6 @@
 import { ModeToggle } from "@/components/mode-toggle";
-import { Badge } from "@/components/ui/badge";
 
 type AppStatusBarProps = {
-  engineStatus: string;
-  engineStateClass: string;
   isSearchingFunctions: boolean;
   isBuildingGraph: boolean;
   analysisMessage: string;
@@ -29,8 +26,6 @@ function StatusWithAnimatedDots({ text }: { text: string }) {
 }
 
 export function AppStatusBar({
-  engineStatus,
-  engineStateClass,
   isSearchingFunctions,
   isBuildingGraph,
   analysisMessage,
@@ -38,9 +33,6 @@ export function AppStatusBar({
 }: AppStatusBarProps) {
   return (
     <footer className="status-bar">
-      <Badge className={`engine-state ${engineStateClass}`} variant="outline">
-        Engine {engineStatus}
-      </Badge>
       {isBuildingGraph ? (
         <StatusWithAnimatedDots text="Building graph" />
       ) : null}

@@ -79,7 +79,6 @@ const MIN_COLUMN_WIDTHS: Record<DisassemblyColumn, number> = {
 };
 
 export function App() {
-  const [engineStatus, setEngineStatus] = useState<string>("checking");
   const [modulePath, setModulePath] = useState<string>("");
   const [moduleId, setModuleId] = useState<string>("");
   const [entryVa, setEntryVa] = useState<string>("");
@@ -228,20 +227,6 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    void desktopApi
-      .pingEngine()
-      .then((value) => {
-        setEngineStatus(`online (${value.version})`);
-      })
-      .catch((error: unknown) => {
-        setEngineStatus("unavailable");
-        setErrorText(
-          error instanceof Error ? error.message : "Failed to ping engine",
-        );
-      });
-  }, []);
-
-  useEffect(() => {
     const unsubscribe = desktopApi.onMenuOpenExecutable(() => {
       void openExecutableFromPicker();
     });
@@ -372,18 +357,6 @@ export function App() {
       unsubscribe();
     };
   }, [unloadCurrentModule]);
-
-  const engineStateClass = useMemo(() => {
-    if (engineStatus.startsWith("online")) {
-      return "state-online";
-    }
-
-    if (engineStatus === "checking") {
-      return "state-checking";
-    }
-
-    return "state-offline";
-  }, [engineStatus]);
 
   const showTransientStatusMessage = useCallback((message: string) => {
     if (statusMessageTimerRef.current !== null) {
@@ -1604,8 +1577,6 @@ export function App() {
       </main>
 
       <AppStatusBar
-        engineStatus={engineStatus}
-        engineStateClass={engineStateClass}
         isSearchingFunctions={isSearchingFunctions}
         isBuildingGraph={isBuildingGraph}
         analysisMessage={moduleAnalysisMessage}
