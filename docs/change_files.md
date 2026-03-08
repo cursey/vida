@@ -1,5 +1,25 @@
 # Change Files
 
+## 2026-03-08 - Simplify Memory Overview Into Fixed Slices
+
+App:
+- `app/src/shared/protocol.ts`
+- `app/src/renderer/App.disassembly-window.test.tsx`
+- `app/src/renderer/features/disassembly/memory-overview-bar.tsx`
+- `app/src/renderer/styles.css`
+- `app/src/renderer/test/mock-desktop-api.ts`
+
+Engine:
+- `engine/benches/analysis_bench.rs`
+- `engine/src/api.rs`
+- `engine/src/state.rs`
+- `engine/tests/engine_integration.rs`
+
+Docs:
+- `docs/engine_benchmarking.md`
+- `docs/work_log.md`
+- `docs/change_files.md`
+
 ## 2026-03-08 - Prioritize Ready Disassembly Paint and Cache Memory Overview
 
 App:

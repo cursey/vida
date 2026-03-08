@@ -21,48 +21,11 @@ const HUGE_ROW_COUNT = 5_570_947;
 const ROW_HEIGHT = 24;
 const EXPECTED_WINDOW_HEIGHT = 100_000 * ROW_HEIGHT;
 
-function buildMemoryOverview() {
+function buildMemoryOverview(): MethodResult["module.getMemoryOverview"] {
   return {
     startVa: "0x140000000",
     endVa: "0x160000000",
-    regions: [
-      {
-        startVa: "0x140000000",
-        endVa: "0x140001000",
-        mapped: true,
-        readable: true,
-        writable: false,
-        executable: false,
-        discoveredInstruction: false,
-      },
-      {
-        startVa: "0x140001000",
-        endVa: "0x140010000",
-        mapped: true,
-        readable: true,
-        writable: false,
-        executable: true,
-        discoveredInstruction: true,
-      },
-      {
-        startVa: "0x140010000",
-        endVa: "0x140020000",
-        mapped: true,
-        readable: true,
-        writable: false,
-        executable: true,
-        discoveredInstruction: false,
-      },
-      {
-        startVa: "0x140020000",
-        endVa: "0x160000000",
-        mapped: false,
-        readable: false,
-        writable: false,
-        executable: false,
-        discoveredInstruction: false,
-      },
-    ],
+    slices: ["ro", "explored", "unexplored", "unmapped"],
   };
 }
 
@@ -186,13 +149,13 @@ describe("App disassembly window virtualization", () => {
         container.querySelector(".memory-overview-empty-overlay"),
       ).toBeNull();
       expect(
-        container.querySelector(".memory-overview-region.is-discovered"),
+        container.querySelector(".memory-overview-slice.kind-explored"),
       ).not.toBeNull();
       expect(
-        container.querySelector(".memory-overview-region.perm-r-x"),
+        container.querySelector(".memory-overview-slice.kind-ro"),
       ).not.toBeNull();
       expect(
-        container.querySelector(".memory-overview-region.is-unmapped"),
+        container.querySelector(".memory-overview-slice.kind-unmapped"),
       ).not.toBeNull();
     });
 

@@ -124,6 +124,8 @@ The repository's current recorded optimization checkpoints are:
 
 | Date | Fixture Set | Bench | Baseline | Current | Delta | Change driver |
 | --- | --- | --- | --- | --- | --- | --- |
+| 2026-03-08 | quick | `engine/warm/module_memory_overview/minimal_with_pdb` | ~39.36 us | ~105.09 ns | ~-99.7% | `engine/src/api.rs`, `engine/src/state.rs`, `app/src/renderer/features/disassembly/memory-overview-bar.tsx` |
+| 2026-03-08 | quick | `engine/cold/module_open_and_analyze/minimal_with_pdb` | ~36.75 ms | ~34.48 ms | no significant change | `engine/src/state.rs` |
 | 2026-03-07 | all | `engine/cold/module_open_and_analyze/minimal_with_pdb` | ~77.51 ms | ~30.90 ms | ~-60.6% | `engine/src/analysis.rs` |
 | 2026-03-07 | all | `engine/cold/module_open_and_analyze/minimal_without_pdb` | ~75.86 ms | ~30.19 ms | ~-60.1% | `engine/src/analysis.rs` |
 | 2026-03-07 | all | `engine/cold/module_open_and_analyze/overlay_4mb_without_pdb` | ~76.39 ms | ~31.89 ms | ~-58.0% | `engine/src/analysis.rs` |
@@ -168,6 +170,34 @@ Change driver: bounded worker-pool CFG/disassembly execution plus canonical sing
 Evidence: `parallel-analysis-baseline-2026-03-07`; `engine/target/criterion/engine_cold_module_open_and_analyze/overlay_4mb_without_pdb/parallel-analysis-baseline-2026-03-07/`; `engine/target/criterion/engine_cold_module_open_and_analyze/overlay_4mb_without_pdb/new/`; `engine/target/criterion/engine_cold_module_open_and_analyze/overlay_4mb_without_pdb/change/`
 Notes: the same compare run also showed warm micro-bench drift on unaffected APIs (`engine/warm/module_info/*`, `engine/warm/function_list/*`, `engine/warm/linear_disassembly/*`), so those should be treated as follow-up profiling signals rather than hidden by the cold-path win
 
+## 2026-03-08 - Simplify Memory Overview Into Fixed Slices
+
+Date: 2026-03-08
+Commands:
+- `cargo bench --manifest-path engine/Cargo.toml --bench analysis_bench -- engine/warm/module_memory_overview --baseline memory-overview-slices-baseline-2026-03-08`
+- `cargo bench --manifest-path engine/Cargo.toml --bench analysis_bench -- engine/cold/module_open_and_analyze/minimal_with_pdb --baseline memory-overview-slices-baseline-2026-03-08`
+Fixture Set: `quick`
+Machine/Profile: Windows, Criterion release bench profile
+Criterion Artifacts:
+- `engine/target/criterion/engine_warm_module_memory_overview/minimal_with_pdb/{memory-overview-slices-baseline-2026-03-08,new,change}/`
+- `engine/target/criterion/engine_cold_module_open_and_analyze/minimal_with_pdb/{memory-overview-slices-baseline-2026-03-08,new,change}/`
+
+Bench: `engine/warm/module_memory_overview/minimal_with_pdb`
+Baseline: `[37.405 us, 39.356 us, 40.660 us]`
+Current: `[104.57 ns, 105.09 ns, 105.44 ns]`
+Delta: `[-99.723%, -99.710%, -99.697%]`
+Change driver: replaced exact memory-overview regions with a cached 1000-slice dominant-kind summary in `engine/src/state.rs`, then simplified the bar renderer to consume slice kinds directly in `app/src/renderer/features/disassembly/memory-overview-bar.tsx`
+Evidence: `memory-overview-slices-baseline-2026-03-08`; `engine/target/criterion/engine_warm_module_memory_overview/minimal_with_pdb/memory-overview-slices-baseline-2026-03-08/`; `engine/target/criterion/engine_warm_module_memory_overview/minimal_with_pdb/new/`; `engine/target/criterion/engine_warm_module_memory_overview/minimal_with_pdb/change/`
+Notes: the steady-state memory-bar API now clones only the overall VA span and a compact slice-kind array instead of many per-region hex strings
+
+Bench: `engine/cold/module_open_and_analyze/minimal_with_pdb`
+Baseline: `[33.981 ms, 36.752 ms, 40.136 ms]`
+Current: `[33.883 ms, 34.484 ms, 34.887 ms]`
+Delta: `[-10.893%, -4.5638%, +1.5501%]`
+Change driver: same slice-summary change in `engine/src/state.rs`
+Evidence: `memory-overview-slices-baseline-2026-03-08`; `engine/target/criterion/engine_cold_module_open_and_analyze/minimal_with_pdb/memory-overview-slices-baseline-2026-03-08/`; `engine/target/criterion/engine_cold_module_open_and_analyze/minimal_with_pdb/new/`; `engine/target/criterion/engine_cold_module_open_and_analyze/minimal_with_pdb/change/`
+Notes: Criterion reported no statistically significant cold-path change, which keeps the overview simplification effectively free during module open
+
 ## 2026-03-08 - Cache Ready Memory Overview and Prioritize Ready Paint
 
 Date: 2026-03-08
@@ -186,6 +216,18 @@ Evidence: `memory-overview-baseline-2026-03-08-v2`; `engine/target/criterion/eng
 Notes: this benchmark isolates the memory-bar API cost; the renderer change separately prevents the initial ready disassembly paint from queuing behind the function-list and memory-overview requests
 
 ## Saved Baseline Checkpoints
+
+### 2026-03-08 - `memory-overview-slices-baseline-2026-03-08`
+
+- Commands:
+  - `cargo bench --manifest-path engine/Cargo.toml --bench analysis_bench -- engine/warm/module_memory_overview --save-baseline memory-overview-slices-baseline-2026-03-08`
+  - `cargo bench --manifest-path engine/Cargo.toml --bench analysis_bench -- engine/cold/module_open_and_analyze/minimal_with_pdb --save-baseline memory-overview-slices-baseline-2026-03-08`
+- Fixture Set: `quick`
+- Machine/Profile: Windows, Criterion release bench profile
+- Criterion Artifacts:
+  - `engine/target/criterion/engine_warm_module_memory_overview/minimal_with_pdb/memory-overview-slices-baseline-2026-03-08/`
+  - `engine/target/criterion/engine_cold_module_open_and_analyze/minimal_with_pdb/memory-overview-slices-baseline-2026-03-08/`
+- Notes: captured immediately before replacing the exact region payload with the fixed-size slice summary
 
 ### 2026-03-08 - `memory-overview-baseline-2026-03-08-v2`
 

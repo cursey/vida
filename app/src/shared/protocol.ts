@@ -84,15 +84,13 @@ export type SectionInfo = {
   rawSize: number;
 };
 
-export type MemoryOverviewRegion = {
-  startVa: HexAddress;
-  endVa: HexAddress;
-  mapped: boolean;
-  readable: boolean;
-  writable: boolean;
-  executable: boolean;
-  discoveredInstruction: boolean;
-};
+export type MemoryOverviewSliceKind =
+  | "unmapped"
+  | "ro"
+  | "rw"
+  | "rwx"
+  | "explored"
+  | "unexplored";
 
 export type ModuleAnalysisStatus = {
   state:
@@ -195,7 +193,7 @@ export type MethodResult = {
   "module.getMemoryOverview": {
     startVa: HexAddress;
     endVa: HexAddress;
-    regions: MemoryOverviewRegion[];
+    slices: MemoryOverviewSliceKind[];
   };
   "function.list": {
     functions: FunctionSeed[];

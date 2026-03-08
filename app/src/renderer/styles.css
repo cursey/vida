@@ -69,11 +69,11 @@
     --memory-frame: oklch(var(--foreground) / 0.12);
     --memory-rail: oklch(var(--foreground) / 0.06);
     --memory-unmapped: oklch(var(--foreground) / 0.18);
-    --memory-r--: hsl(205 16% 72%);
-    --memory-rw-: hsl(28 62% 58%);
-    --memory-r-x: hsl(188 48% 46%);
+    --memory-ro: hsl(205 16% 72%);
+    --memory-rw: hsl(28 62% 58%);
+    --memory-unexplored: hsl(188 48% 46%);
     --memory-rwx: hsl(6 72% 56%);
-    --memory-discovered: hsl(156 64% 42%);
+    --memory-explored: hsl(156 64% 42%);
     --memory-viewport: hsl(42 100% 48%);
     --memory-shadow: 0 0 0 1px oklch(var(--background) / 0.22) inset;
 
@@ -154,11 +154,11 @@
     --memory-frame: oklch(var(--foreground) / 0.18);
     --memory-rail: oklch(var(--foreground) / 0.08);
     --memory-unmapped: oklch(var(--foreground) / 0.16);
-    --memory-r--: hsl(207 14% 34%);
-    --memory-rw-: hsl(26 70% 47%);
-    --memory-r-x: hsl(192 66% 42%);
+    --memory-ro: hsl(207 14% 34%);
+    --memory-rw: hsl(26 70% 47%);
+    --memory-unexplored: hsl(192 66% 42%);
     --memory-rwx: hsl(10 72% 50%);
-    --memory-discovered: hsl(152 72% 40%);
+    --memory-explored: hsl(152 72% 40%);
     --memory-viewport: hsl(44 100% 62%);
     --memory-shadow: 0 0 0 1px oklch(var(--background) / 0.18) inset;
   }
@@ -418,33 +418,33 @@
   user-select: none;
 }
 
-.memory-overview-region {
+.memory-overview-slice {
   shape-rendering: crispEdges;
-  fill: var(--memory-r--);
+  fill: var(--memory-ro);
 }
 
-.memory-overview-region.is-unmapped {
+.memory-overview-slice.kind-unmapped {
   fill: var(--memory-unmapped);
 }
 
-.memory-overview-region.perm-r-- {
-  fill: var(--memory-r--);
+.memory-overview-slice.kind-ro {
+  fill: var(--memory-ro);
 }
 
-.memory-overview-region.perm-rw- {
-  fill: var(--memory-rw-);
+.memory-overview-slice.kind-rw {
+  fill: var(--memory-rw);
 }
 
-.memory-overview-region.perm-r-x {
-  fill: var(--memory-r-x);
-}
-
-.memory-overview-region.perm-rwx {
+.memory-overview-slice.kind-rwx {
   fill: var(--memory-rwx);
 }
 
-.memory-overview-region.is-discovered {
-  fill: var(--memory-discovered);
+.memory-overview-slice.kind-explored {
+  fill: var(--memory-explored);
+}
+
+.memory-overview-slice.kind-unexplored {
+  fill: var(--memory-unexplored);
 }
 
 .memory-overview-viewport {

@@ -44,7 +44,7 @@ export function createMockDesktopApi(
     getModuleMemoryOverview: vi.fn().mockResolvedValue({
       startVa: "0x0",
       endVa: "0x0",
-      regions: [],
+      slices: [],
     }),
     listFunctions: vi.fn().mockResolvedValue({ functions: [] }),
     getFunctionGraphByVa: vi.fn().mockResolvedValue({

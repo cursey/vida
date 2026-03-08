@@ -1,7 +1,10 @@
 import { parseHexVa } from "@/features/shared/number-utils";
 import { useId } from "react";
 import type { MouseEvent } from "react";
-import type { MethodResult } from "../../../shared/protocol";
+import type {
+  MemoryOverviewSliceKind,
+  MethodResult,
+} from "../../../shared/protocol";
 
 const BAR_VIEWBOX_WIDTH = 1000;
 const BAR_HEIGHT = 28;
@@ -26,7 +29,8 @@ export function MemoryOverviewBar({
     overview === null ||
     startVa === null ||
     endVa === null ||
-    endVa <= startVa
+    endVa <= startVa ||
+    overview.slices.length === 0
   ) {
     return (
       <div className="memory-overview-shell" aria-label="Memory overview">
@@ -70,6 +74,7 @@ export function MemoryOverviewBar({
   const overviewStartVa = startVa;
   const overviewEndVa = endVa;
   const rangeSpan = overviewEndVa - overviewStartVa;
+  const sliceCount = activeOverview.slices.length;
 
   function handleClick(event: MouseEvent<HTMLButtonElement>) {
     if (!onNavigate) {
@@ -108,39 +113,30 @@ export function MemoryOverviewBar({
           preserveAspectRatio="none"
           aria-hidden="true"
         >
-          {activeOverview.regions.map((region) => {
-            const regionStart = parseHexVa(region.startVa);
-            const regionEnd = parseHexVa(region.endVa);
-            if (
-              regionStart === null ||
-              regionEnd === null ||
-              regionEnd <= regionStart ||
-              regionEnd <= overviewStartVa ||
-              regionStart >= overviewEndVa
-            ) {
-              return null;
-            }
-
-            const x =
-              ((Math.max(regionStart, overviewStartVa) - overviewStartVa) /
-                rangeSpan) *
-              BAR_VIEWBOX_WIDTH;
-            const endX =
-              ((Math.min(regionEnd, overviewEndVa) - overviewStartVa) /
-                rangeSpan) *
-              BAR_VIEWBOX_WIDTH;
+          {activeOverview.slices.map((slice, index) => {
+            const x = (index / sliceCount) * BAR_VIEWBOX_WIDTH;
+            const endX = ((index + 1) / sliceCount) * BAR_VIEWBOX_WIDTH;
             const width = Math.max(1, endX - x);
+            const sliceStartVa =
+              overviewStartVa + Math.floor((index * rangeSpan) / sliceCount);
 
             return (
               <rect
-                key={`${region.startVa}-${region.endVa}`}
-                className={regionClassName(region)}
+                key={`${slice}-${sliceStartVa.toString(16)}`}
+                className={sliceClassName(slice)}
                 x={x}
                 y={0}
                 width={width}
                 height={BAR_HEIGHT}
               >
-                <title>{formatRegionTitle(region)}</title>
+                <title>
+                  {formatSliceTitle(
+                    slice,
+                    sliceStartVa,
+                    overviewStartVa +
+                      Math.floor(((index + 1) * rangeSpan) / sliceCount),
+                  )}
+                </title>
               </rect>
             );
           })}
@@ -159,35 +155,33 @@ export function MemoryOverviewBar({
   );
 }
 
-function regionClassName(
-  region: MethodResult["module.getMemoryOverview"]["regions"][number],
-) {
-  if (!region.mapped) {
-    return "memory-overview-region is-unmapped";
-  }
-
-  const permissionKey = `${region.readable ? "r" : "-"}${
-    region.writable ? "w" : "-"
-  }${region.executable ? "x" : "-"}`;
-  return `memory-overview-region perm-${permissionKey}${
-    region.discoveredInstruction ? " is-discovered" : ""
-  }`;
+function sliceClassName(slice: MemoryOverviewSliceKind) {
+  return `memory-overview-slice kind-${slice}`;
 }
 
-function formatRegionTitle(
-  region: MethodResult["module.getMemoryOverview"]["regions"][number],
+function formatSliceTitle(
+  slice: MemoryOverviewSliceKind,
+  sliceStartVa: number,
+  sliceEndVa: number,
 ) {
-  if (!region.mapped) {
-    return `${region.startVa} - ${region.endVa} unmapped`;
-  }
+  return `Approx ${formatSliceLabel(slice)} ${toHex(sliceStartVa)} - ${toHex(sliceEndVa)}`;
+}
 
-  const permissions = `${region.readable ? "r" : "-"}${
-    region.writable ? "w" : "-"
-  }${region.executable ? "x" : "-"}`;
-  const state = region.discoveredInstruction
-    ? "discovered instructions"
-    : "undiscovered";
-  return `${region.startVa} - ${region.endVa} ${permissions} ${state}`;
+function formatSliceLabel(slice: MemoryOverviewSliceKind) {
+  switch (slice) {
+    case "unmapped":
+      return "unmapped";
+    case "ro":
+      return "read-only";
+    case "rw":
+      return "read-write";
+    case "rwx":
+      return "read-write-execute";
+    case "explored":
+      return "explored";
+    case "unexplored":
+      return "unexplored";
+  }
 }
 
 function clampToViewBox(value: number, upperBound: number) {
@@ -195,4 +189,8 @@ function clampToViewBox(value: number, upperBound: number) {
     return 0;
   }
   return Math.min(Math.max(value, 0), upperBound);
+}
+
+function toHex(value: number) {
+  return `0x${value.toString(16)}`;
 }

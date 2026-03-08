@@ -79,21 +79,18 @@ pub struct ModuleMemoryOverviewResult {
     pub start_va: String,
     #[serde(rename = "endVa")]
     pub end_va: String,
-    pub regions: Vec<MemoryOverviewRegion>,
+    pub slices: Vec<MemoryOverviewSliceKind>,
 }
 
-#[derive(Debug, Clone, Serialize)]
-pub struct MemoryOverviewRegion {
-    #[serde(rename = "startVa")]
-    pub start_va: String,
-    #[serde(rename = "endVa")]
-    pub end_va: String,
-    pub mapped: bool,
-    pub readable: bool,
-    pub writable: bool,
-    pub executable: bool,
-    #[serde(rename = "discoveredInstruction")]
-    pub discovered_instruction: bool,
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MemoryOverviewSliceKind {
+    Unmapped,
+    Ro,
+    Rw,
+    Rwx,
+    Explored,
+    Unexplored,
 }
 
 #[derive(Debug, Clone, Serialize)]

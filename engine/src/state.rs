@@ -16,10 +16,10 @@ use crate::api::{
     FunctionGraphByVaResult, FunctionListParams, FunctionListResult, FunctionSeed, ImportInfo,
     InstructionCategory, InstructionRow, LinearDisassemblyParams, LinearDisassemblyResult,
     LinearFindRowByVaParams, LinearFindRowByVaResult, LinearRowsParams, LinearRowsResult,
-    LinearViewInfoParams, LinearViewInfoResult, MemoryOverviewRegion, ModuleAnalysisStatusParams,
-    ModuleAnalysisStatusResult, ModuleInfoParams, ModuleInfoResult, ModuleMemoryOverviewParams,
-    ModuleMemoryOverviewResult, ModuleOpenParams, ModuleOpenResult, ModuleUnloadParams,
-    ModuleUnloadResult, SectionInfo,
+    LinearViewInfoParams, LinearViewInfoResult, MemoryOverviewSliceKind,
+    ModuleAnalysisStatusParams, ModuleAnalysisStatusResult, ModuleInfoParams, ModuleInfoResult,
+    ModuleMemoryOverviewParams, ModuleMemoryOverviewResult, ModuleOpenParams, ModuleOpenResult,
+    ModuleUnloadParams, ModuleUnloadResult, SectionInfo,
 };
 use crate::disasm::{parse_hex_u64, to_hex};
 use crate::error::EngineError;
@@ -30,6 +30,7 @@ use crate::linear::{
 use crate::pe_utils::{SectionLookup, build_section_lookup, parse_pe64};
 const DEFAULT_MAX_INSTRUCTIONS: usize = 512;
 const MAX_MAX_INSTRUCTIONS: usize = 4096;
+const MEMORY_OVERVIEW_TARGET_SLICE_COUNT: usize = 1000;
 
 #[derive(Debug, Clone, Copy)]
 struct MemoryRangeSpec {
@@ -44,6 +45,13 @@ struct BaseMemoryRegion {
     readable: bool,
     writable: bool,
     executable: bool,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct MemoryOverviewSegment {
+    start_rva: u64,
+    end_rva: u64,
+    kind: MemoryOverviewSliceKind,
 }
 
 #[derive(Debug)]
@@ -600,18 +608,13 @@ fn build_memory_overview(
         .last()
         .map(|region| region.end_rva)
         .unwrap_or(0);
-    let regions = build_memory_overview_regions(
-        image_base,
-        start_rva,
-        end_rva,
-        &mapped_regions,
-        &discovered_ranges,
-    );
+    let slices =
+        build_memory_overview_slices(start_rva, end_rva, &mapped_regions, &discovered_ranges);
 
     ModuleMemoryOverviewResult {
         start_va: to_hex(image_base + start_rva),
         end_va: to_hex(image_base + end_rva),
-        regions,
+        slices,
     }
 }
 
@@ -682,18 +685,67 @@ fn merge_instruction_owner_ranges(
     ranges
 }
 
-fn build_memory_overview_regions(
-    image_base: u64,
+fn build_memory_overview_slices(
     start_rva: u64,
     end_rva: u64,
     mapped_regions: &[BaseMemoryRegion],
     discovered_ranges: &[MemoryRangeSpec],
-) -> Vec<MemoryOverviewRegion> {
+) -> Vec<MemoryOverviewSliceKind> {
     if end_rva <= start_rva {
         return Vec::new();
     }
 
-    let mut output = Vec::<MemoryOverviewRegion>::new();
+    let segments =
+        build_memory_overview_segments(start_rva, end_rva, mapped_regions, discovered_ranges);
+    let span = end_rva - start_rva;
+    let slice_count = span
+        .min(MEMORY_OVERVIEW_TARGET_SLICE_COUNT as u64)
+        .try_into()
+        .unwrap_or(MEMORY_OVERVIEW_TARGET_SLICE_COUNT);
+    let mut slices = Vec::with_capacity(slice_count);
+    let mut segment_index = 0usize;
+
+    for slice_index in 0..slice_count {
+        let slice_start = start_rva + ((slice_index as u64) * span) / (slice_count as u64);
+        let slice_end = start_rva + (((slice_index + 1) as u64) * span) / (slice_count as u64);
+        let mut totals = [0u64; 6];
+
+        while segment_index < segments.len() && segments[segment_index].end_rva <= slice_start {
+            segment_index += 1;
+        }
+
+        let mut current_index = segment_index;
+        while let Some(segment) = segments.get(current_index) {
+            if segment.start_rva >= slice_end {
+                break;
+            }
+
+            let overlap_start = segment.start_rva.max(slice_start);
+            let overlap_end = segment.end_rva.min(slice_end);
+            if overlap_end > overlap_start {
+                totals[segment.kind.dominance_index()] += overlap_end - overlap_start;
+            }
+
+            if segment.end_rva >= slice_end {
+                break;
+            }
+
+            current_index += 1;
+        }
+
+        slices.push(MemoryOverviewSliceKind::dominant_for_totals(totals));
+    }
+
+    slices
+}
+
+fn build_memory_overview_segments(
+    start_rva: u64,
+    end_rva: u64,
+    mapped_regions: &[BaseMemoryRegion],
+    discovered_ranges: &[MemoryRangeSpec],
+) -> Vec<MemoryOverviewSegment> {
+    let mut output = Vec::<MemoryOverviewSegment>::new();
 
     let mut cursor = start_rva;
     let mut discovered_index = 0usize;
@@ -710,32 +762,22 @@ fn build_memory_overview_regions(
         }
 
         if cursor < region_start {
-            push_memory_overview_region(
+            push_memory_overview_segment(
                 &mut output,
-                image_base,
                 cursor,
                 region_start,
-                false,
-                false,
-                false,
-                false,
-                false,
+                MemoryOverviewSliceKind::Unmapped,
             );
         }
 
         cursor = region_end;
 
         if !region.executable {
-            push_memory_overview_region(
+            push_memory_overview_segment(
                 &mut output,
-                image_base,
                 region_start,
                 region_end,
-                true,
-                region.readable,
-                region.writable,
-                region.executable,
-                false,
+                mapped_region_kind(region),
             );
             continue;
         }
@@ -757,47 +799,32 @@ fn build_memory_overview_regions(
             }
 
             let Some(range) = discovered_ranges.get(range_index) else {
-                push_memory_overview_region(
+                push_memory_overview_segment(
                     &mut output,
-                    image_base,
                     mapped_cursor,
                     region_end,
-                    true,
-                    region.readable,
-                    region.writable,
-                    region.executable,
-                    false,
+                    MemoryOverviewSliceKind::Unexplored,
                 );
                 break;
             };
 
             if range.start_rva >= region_end {
-                push_memory_overview_region(
+                push_memory_overview_segment(
                     &mut output,
-                    image_base,
                     mapped_cursor,
                     region_end,
-                    true,
-                    region.readable,
-                    region.writable,
-                    region.executable,
-                    false,
+                    MemoryOverviewSliceKind::Unexplored,
                 );
                 break;
             }
 
             if mapped_cursor < range.start_rva {
                 let undiscovered_end = range.start_rva.min(region_end);
-                push_memory_overview_region(
+                push_memory_overview_segment(
                     &mut output,
-                    image_base,
                     mapped_cursor,
                     undiscovered_end,
-                    true,
-                    region.readable,
-                    region.writable,
-                    region.executable,
-                    false,
+                    MemoryOverviewSliceKind::Unexplored,
                 );
                 mapped_cursor = undiscovered_end;
                 continue;
@@ -809,16 +836,11 @@ fn build_memory_overview_regions(
                 continue;
             }
 
-            push_memory_overview_region(
+            push_memory_overview_segment(
                 &mut output,
-                image_base,
                 mapped_cursor,
                 discovered_end,
-                true,
-                region.readable,
-                region.writable,
-                region.executable,
-                true,
+                MemoryOverviewSliceKind::Explored,
             );
             mapped_cursor = discovered_end;
         }
@@ -827,61 +849,88 @@ fn build_memory_overview_regions(
     }
 
     if cursor < end_rva {
-        push_memory_overview_region(
+        push_memory_overview_segment(
             &mut output,
-            image_base,
             cursor,
             end_rva,
-            false,
-            false,
-            false,
-            false,
-            false,
+            MemoryOverviewSliceKind::Unmapped,
         );
     }
 
     output
 }
 
-fn push_memory_overview_region(
-    output: &mut Vec<MemoryOverviewRegion>,
-    image_base: u64,
+fn push_memory_overview_segment(
+    output: &mut Vec<MemoryOverviewSegment>,
     start_rva: u64,
     end_rva: u64,
-    mapped: bool,
-    readable: bool,
-    writable: bool,
-    executable: bool,
-    discovered_instruction: bool,
+    kind: MemoryOverviewSliceKind,
 ) {
     if end_rva <= start_rva {
         return;
     }
 
-    let next_region = MemoryOverviewRegion {
-        start_va: to_hex(image_base + start_rva),
-        end_va: to_hex(image_base + end_rva),
-        mapped,
-        readable,
-        writable,
-        executable,
-        discovered_instruction,
+    let next_segment = MemoryOverviewSegment {
+        start_rva,
+        end_rva,
+        kind,
     };
 
     if let Some(previous) = output.last_mut() {
-        if previous.mapped == next_region.mapped
-            && previous.readable == next_region.readable
-            && previous.writable == next_region.writable
-            && previous.executable == next_region.executable
-            && previous.discovered_instruction == next_region.discovered_instruction
-            && previous.end_va == next_region.start_va
-        {
-            previous.end_va = next_region.end_va;
+        if previous.kind == next_segment.kind && previous.end_rva == next_segment.start_rva {
+            previous.end_rva = next_segment.end_rva;
             return;
         }
     }
 
-    output.push(next_region);
+    output.push(next_segment);
+}
+
+fn mapped_region_kind(region: &BaseMemoryRegion) -> MemoryOverviewSliceKind {
+    if region.executable && region.writable {
+        return MemoryOverviewSliceKind::Rwx;
+    }
+    if region.writable {
+        return MemoryOverviewSliceKind::Rw;
+    }
+    if region.readable {
+        return MemoryOverviewSliceKind::Ro;
+    }
+    MemoryOverviewSliceKind::Ro
+}
+
+impl MemoryOverviewSliceKind {
+    fn dominance_index(self) -> usize {
+        match self {
+            Self::Explored => 0,
+            Self::Unexplored => 1,
+            Self::Rwx => 2,
+            Self::Rw => 3,
+            Self::Ro => 4,
+            Self::Unmapped => 5,
+        }
+    }
+
+    fn dominant_for_totals(totals: [u64; 6]) -> Self {
+        let mut best_index = 5usize;
+        let mut best_total = 0u64;
+
+        for (index, total) in totals.into_iter().enumerate() {
+            if total > best_total {
+                best_total = total;
+                best_index = index;
+            }
+        }
+
+        match best_index {
+            0 => Self::Explored,
+            1 => Self::Unexplored,
+            2 => Self::Rwx,
+            3 => Self::Rw,
+            4 => Self::Ro,
+            _ => Self::Unmapped,
+        }
+    }
 }
 
 fn ready_analysis(snapshot: &BackgroundAnalysisState) -> Result<&ModuleAnalysis, EngineError> {
@@ -919,10 +968,12 @@ fn find_instruction_index(
 #[cfg(test)]
 mod tests {
     use super::{
-        BaseMemoryRegion, MemoryRangeSpec, build_memory_overview_regions,
+        BaseMemoryRegion, MEMORY_OVERVIEW_TARGET_SLICE_COUNT, MemoryRangeSpec,
+        build_memory_overview_segments, build_memory_overview_slices,
         merge_instruction_owner_ranges,
     };
     use crate::analysis::InstructionOwnerRange;
+    use crate::api::MemoryOverviewSliceKind;
     use std::collections::BTreeMap;
 
     #[test]
@@ -950,9 +1001,8 @@ mod tests {
     }
 
     #[test]
-    fn build_memory_overview_regions_splits_executable_regions_by_discovery() {
-        let regions = build_memory_overview_regions(
-            0x140000000,
+    fn build_memory_overview_segments_splits_executable_regions_by_discovery() {
+        let segments = build_memory_overview_segments(
             0x1000,
             0x4000,
             &[
@@ -983,37 +1033,75 @@ mod tests {
             ],
         );
 
-        assert_eq!(regions.len(), 7);
-        assert_eq!(regions[0].start_va, "0x140001000");
-        assert_eq!(regions[0].end_va, "0x140001800");
-        assert!(regions[0].mapped);
-        assert!(!regions[0].executable);
-        assert!(!regions[0].discovered_instruction);
+        assert_eq!(segments.len(), 7);
+        assert_eq!(segments[0].start_rva, 0x1000);
+        assert_eq!(segments[0].end_rva, 0x1800);
+        assert_eq!(segments[0].kind, MemoryOverviewSliceKind::Ro);
 
-        assert_eq!(regions[1].start_va, "0x140001800");
-        assert_eq!(regions[1].end_va, "0x140002000");
-        assert!(!regions[1].mapped);
+        assert_eq!(segments[1].start_rva, 0x1800);
+        assert_eq!(segments[1].end_rva, 0x2000);
+        assert_eq!(segments[1].kind, MemoryOverviewSliceKind::Unmapped);
 
-        assert_eq!(regions[2].start_va, "0x140002000");
-        assert_eq!(regions[2].end_va, "0x140002100");
-        assert!(regions[2].mapped);
-        assert!(regions[2].executable);
-        assert!(!regions[2].discovered_instruction);
+        assert_eq!(segments[2].start_rva, 0x2000);
+        assert_eq!(segments[2].end_rva, 0x2100);
+        assert_eq!(segments[2].kind, MemoryOverviewSliceKind::Unexplored);
 
-        assert_eq!(regions[3].start_va, "0x140002100");
-        assert_eq!(regions[3].end_va, "0x140002200");
-        assert!(regions[3].discovered_instruction);
+        assert_eq!(segments[3].start_rva, 0x2100);
+        assert_eq!(segments[3].end_rva, 0x2200);
+        assert_eq!(segments[3].kind, MemoryOverviewSliceKind::Explored);
 
-        assert_eq!(regions[4].start_va, "0x140002200");
-        assert_eq!(regions[4].end_va, "0x140002300");
-        assert!(!regions[4].discovered_instruction);
+        assert_eq!(segments[4].start_rva, 0x2200);
+        assert_eq!(segments[4].end_rva, 0x2300);
+        assert_eq!(segments[4].kind, MemoryOverviewSliceKind::Unexplored);
 
-        assert_eq!(regions[5].start_va, "0x140002300");
-        assert_eq!(regions[5].end_va, "0x140002400");
-        assert!(regions[5].discovered_instruction);
+        assert_eq!(segments[5].start_rva, 0x2300);
+        assert_eq!(segments[5].end_rva, 0x2400);
+        assert_eq!(segments[5].kind, MemoryOverviewSliceKind::Explored);
 
-        assert_eq!(regions[6].start_va, "0x140002400");
-        assert_eq!(regions[6].end_va, "0x140004000");
-        assert!(!regions[6].discovered_instruction);
+        assert_eq!(segments[6].start_rva, 0x2400);
+        assert_eq!(segments[6].end_rva, 0x4000);
+        assert_eq!(segments[6].kind, MemoryOverviewSliceKind::Unexplored);
+    }
+
+    #[test]
+    fn build_memory_overview_slices_uses_fixed_slice_budget_and_dominant_kind() {
+        let slices = build_memory_overview_slices(
+            0x1000,
+            0x1800,
+            &[BaseMemoryRegion {
+                start_rva: 0x1000,
+                end_rva: 0x1400,
+                readable: true,
+                writable: false,
+                executable: false,
+            }],
+            &[],
+        );
+
+        assert_eq!(slices.len(), MEMORY_OVERVIEW_TARGET_SLICE_COUNT);
+        assert_eq!(slices[0], MemoryOverviewSliceKind::Ro);
+        assert_eq!(slices[slices.len() - 1], MemoryOverviewSliceKind::Unmapped);
+
+        let explored_slices = build_memory_overview_slices(
+            0x1000,
+            0x1004,
+            &[BaseMemoryRegion {
+                start_rva: 0x1000,
+                end_rva: 0x1004,
+                readable: true,
+                writable: false,
+                executable: true,
+            }],
+            &[MemoryRangeSpec {
+                start_rva: 0x1000,
+                end_rva: 0x1003,
+            }],
+        );
+
+        assert_eq!(explored_slices.len(), 4);
+        assert_eq!(explored_slices[0], MemoryOverviewSliceKind::Explored);
+        assert_eq!(explored_slices[1], MemoryOverviewSliceKind::Explored);
+        assert_eq!(explored_slices[2], MemoryOverviewSliceKind::Explored);
+        assert_eq!(explored_slices[3], MemoryOverviewSliceKind::Unexplored);
     }
 }

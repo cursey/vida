@@ -255,7 +255,7 @@ fn bench_module_memory_overview(c: &mut Criterion) {
                         .get_module_memory_overview(black_box(params.clone()))
                         .expect("memory overview should load");
 
-                    black_box(overview.regions.len())
+                    black_box(overview.slices.len())
                 })
             },
         );

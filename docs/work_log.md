@@ -1,5 +1,25 @@
 # Work Log
 
+## 2026-03-08 - Simplify Memory Overview Into Fixed Slices
+
+Summary:
+- Replaced the exact memory-overview region payload with a cached fixed-size slice summary, classifying each slice by its dominant unmapped, permission, or explored state so the memory bar no longer needs byte-perfect backing data.
+- Simplified the renderer memory bar to draw directly from slice kinds with approximate tooltips, while keeping the existing click-to-navigate and viewport marker behavior.
+- Extended engine and renderer coverage for the sliced overview shape, then benchmarked both the warm memory-overview API and the surrounding cold module-open path before and after the change.
+
+Validation commands executed:
+- `cargo bench --manifest-path engine/Cargo.toml --bench analysis_bench -- engine/warm/module_memory_overview --save-baseline memory-overview-slices-baseline-2026-03-08`
+- `cargo bench --manifest-path engine/Cargo.toml --bench analysis_bench -- engine/cold/module_open_and_analyze/minimal_with_pdb --save-baseline memory-overview-slices-baseline-2026-03-08`
+- `cargo fmt --manifest-path engine/Cargo.toml`
+- `npx biome check --write src/shared/protocol.ts src/renderer/test/mock-desktop-api.ts src/renderer/features/disassembly/memory-overview-bar.tsx src/renderer/App.disassembly-window.test.tsx src/renderer/styles.css` (in `app`)
+- `cargo test --manifest-path engine/Cargo.toml`
+- `npx vitest run src/renderer/App.disassembly-window.test.tsx` (in `app`)
+- `cargo bench --manifest-path engine/Cargo.toml --bench analysis_bench -- engine/warm/module_memory_overview --baseline memory-overview-slices-baseline-2026-03-08`
+- `cargo bench --manifest-path engine/Cargo.toml --bench analysis_bench -- engine/cold/module_open_and_analyze/minimal_with_pdb --baseline memory-overview-slices-baseline-2026-03-08`
+
+Changed files index:
+- See `docs/change_files.md` for the detailed file list for this work item.
+
 ## 2026-03-08 - Prioritize Ready Disassembly Paint and Cache Memory Overview
 
 Summary:
