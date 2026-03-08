@@ -1,5 +1,18 @@
 # Work Log
 
+## 2026-03-08 - Simplify Window Chrome Style Reuse
+
+Summary:
+- Refactored `window-chrome.tsx` to centralize repeated title-bar menu and control button styles into shared local constants and a small `WindowControlButton` wrapper.
+- Kept the Tauri drag-region behavior and shadcn dropdown usage unchanged while reducing duplicated utility strings in the renderer-owned window chrome.
+
+Validation commands executed:
+- `npm run test:renderer -- App.window-chrome.test.tsx` (in `app`)
+- `npm run check` (in `app`)
+
+Changed files index:
+- See `docs/change_files.md` for the detailed file list for this work item.
+
 ## 2026-03-08 - Finish Disassembly and Custom Renderer Style Cleanup
 
 Summary:

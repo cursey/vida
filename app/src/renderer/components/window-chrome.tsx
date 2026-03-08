@@ -10,8 +10,9 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { cn } from "@/lib/utils";
 import { Copy, Minus, Square, X } from "lucide-react";
-import type { ReactNode } from "react";
+import type { ComponentProps, ReactNode } from "react";
 import type {
   TitleBarMenuItem,
   TitleBarMenuModel,
@@ -26,6 +27,30 @@ type WindowChromeProps = {
   onWindowControl: (action: WindowControlAction) => void;
   onInvokeMenuAction: (commandId: string) => void;
 };
+
+const menuContentClassName =
+  "app-no-drag min-w-[210px] border-[oklch(var(--foreground)/0.14)]";
+
+const menuTriggerClassName =
+  "app-no-drag h-6 min-w-[42px] rounded-sm border-0 bg-transparent px-2.5 text-xs font-medium text-muted-foreground shadow-none hover:bg-transparent hover:text-foreground focus-visible:border-transparent focus-visible:ring-0 data-[state=open]:bg-transparent";
+
+const windowControlButtonClassName =
+  "app-no-drag h-8 w-11 rounded-none border-0 text-muted-foreground shadow-none hover:text-foreground";
+
+function WindowControlButton({
+  className,
+  ...props
+}: ComponentProps<typeof Button>) {
+  return (
+    <Button
+      className={cn(windowControlButtonClassName, className)}
+      size="icon"
+      type="button"
+      variant="ghost"
+      {...props}
+    />
+  );
+}
 
 function renderMenuItem(
   item: TitleBarMenuItem,
@@ -42,7 +67,7 @@ function renderMenuItem(
         <DropdownMenuSubTrigger disabled={!item.enabled}>
           {item.label}
         </DropdownMenuSubTrigger>
-        <DropdownMenuSubContent className="app-no-drag min-w-[210px] border-[oklch(var(--foreground)/0.14)]">
+        <DropdownMenuSubContent className={menuContentClassName}>
           {item.items.map((child, childIndex) =>
             renderMenuItem(
               child,
@@ -116,7 +141,7 @@ export function WindowChrome({
               <DropdownMenu key={menu.id}>
                 <DropdownMenuTrigger asChild>
                   <Button
-                    className="app-no-drag h-6 min-w-[42px] rounded-sm border-0 bg-transparent px-2.5 text-xs font-medium text-muted-foreground shadow-none hover:bg-transparent hover:text-foreground focus-visible:border-transparent focus-visible:ring-0 data-[state=open]:bg-transparent"
+                    className={menuTriggerClassName}
                     size="sm"
                     type="button"
                     variant="ghost"
@@ -126,7 +151,7 @@ export function WindowChrome({
                 </DropdownMenuTrigger>
                 <DropdownMenuContent
                   align="start"
-                  className="app-no-drag min-w-[210px] border-[oklch(var(--foreground)/0.14)]"
+                  className={menuContentClassName}
                 >
                   {menu.items.map((item, index) =>
                     renderMenuItem(
@@ -148,38 +173,27 @@ export function WindowChrome({
         </div>
       </div>
       <div className="app-no-drag flex items-center border-l border-input">
-        <Button
+        <WindowControlButton
           aria-label="Minimize window"
-          className="app-no-drag h-8 w-11 rounded-none border-0 text-muted-foreground shadow-none hover:text-foreground"
           onClick={() => onWindowControl("minimize")}
-          size="icon"
-          type="button"
-          variant="ghost"
         >
           <Minus />
-        </Button>
-        <Button
+        </WindowControlButton>
+        <WindowControlButton
           aria-label={
             windowState.isMaximized ? "Restore window" : "Maximize window"
           }
-          className="app-no-drag h-8 w-11 rounded-none border-0 text-muted-foreground shadow-none hover:text-foreground"
           onClick={() => onWindowControl("toggleMaximize")}
-          size="icon"
-          type="button"
-          variant="ghost"
         >
           {windowState.isMaximized ? <Copy /> : <Square />}
-        </Button>
-        <Button
+        </WindowControlButton>
+        <WindowControlButton
           aria-label="Close window"
-          className="app-no-drag h-8 w-11 rounded-none border-0 text-muted-foreground shadow-none hover:bg-destructive/90 hover:text-destructive-foreground"
+          className="hover:bg-destructive/90 hover:text-destructive-foreground"
           onClick={() => onWindowControl("close")}
-          size="icon"
-          type="button"
-          variant="ghost"
         >
           <X />
-        </Button>
+        </WindowControlButton>
       </div>
     </header>
   );

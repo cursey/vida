@@ -1,5 +1,14 @@
 # Change Files
 
+## 2026-03-08 - Simplify Window Chrome Style Reuse
+
+App:
+- `app/src/renderer/components/window-chrome.tsx`
+
+Docs:
+- `docs/work_log.md`
+- `docs/change_files.md`
+
 ## 2026-03-08 - Finish Disassembly and Custom Renderer Style Cleanup
 
 App:
