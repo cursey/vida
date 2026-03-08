@@ -1,5 +1,19 @@
 # Work Log
 
+## 2026-03-07 - Add Memory Bar Navigation and Placeholder Refinements
+
+Summary:
+- Refined the shell memory bar so it stays visible before a module is loaded, using a denser diagonal placeholder pattern instead of hiding the strip.
+- Increased the bar height, removed extra framing chrome, and made clicks on the loaded memory bar navigate the disassembly viewport to the corresponding address.
+- Extended renderer coverage to verify the empty-state overlay and click-to-address navigation behavior.
+
+Validation commands executed:
+- `just check`
+- `npx vitest run src/renderer/App.disassembly-window.test.tsx`
+
+Changed files index:
+- See `docs/change_files.md` for the detailed file list for this work item.
+
 ## 2026-03-07 - Add Shell Memory Layout Overview Bar
 
 Summary:

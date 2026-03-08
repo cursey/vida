@@ -1,5 +1,17 @@
 # Change Files
 
+## 2026-03-07 - Add Memory Bar Navigation and Placeholder Refinements
+
+App:
+- `app/src/renderer/App.tsx`
+- `app/src/renderer/App.disassembly-window.test.tsx`
+- `app/src/renderer/features/disassembly/memory-overview-bar.tsx`
+- `app/src/renderer/styles.css`
+
+Docs:
+- `docs/work_log.md`
+- `docs/change_files.md`
+
 ## 2026-03-07 - Add Shell Memory Layout Overview Bar
 
 App:

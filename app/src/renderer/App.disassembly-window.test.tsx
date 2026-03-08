@@ -1,6 +1,6 @@
 import { App } from "@/App";
 import { createMockDesktopApi } from "@/test/mock-desktop-api";
-import { act, render, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, waitFor } from "@testing-library/react";
 import React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DesktopApi, LinearRow } from "../shared/protocol";
@@ -81,10 +81,12 @@ function buildLinearRows(startRow: number, rowCount: number): LinearRow[] {
 
 describe("App disassembly window virtualization", () => {
   let menuOpenHandler: (() => void) | null = null;
+  let findLinearRowByVaMock: ReturnType<typeof vi.fn>;
   let rectSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
     menuOpenHandler = null;
+    findLinearRowByVaMock = vi.fn().mockResolvedValue({ rowIndex: 0 });
     rectSpy = vi
       .spyOn(HTMLElement.prototype, "getBoundingClientRect")
       .mockImplementation(() => ({
@@ -142,6 +144,8 @@ describe("App disassembly window virtualization", () => {
             rows: buildLinearRows(payload.startRow, payload.rowCount),
           }),
         ),
+      findLinearRowByVa:
+        findLinearRowByVaMock as DesktopApi["findLinearRowByVa"],
     });
   });
 
@@ -151,6 +155,11 @@ describe("App disassembly window virtualization", () => {
 
   it("keeps the disassembly canvas bounded for very large row counts", async () => {
     const { container } = render(<App />);
+
+    expect(container.querySelector(".memory-overview-bar")).not.toBeNull();
+    expect(
+      container.querySelector(".memory-overview-empty-overlay"),
+    ).not.toBeNull();
 
     await waitFor(() => {
       expect(menuOpenHandler).toBeTypeOf("function");
@@ -175,6 +184,9 @@ describe("App disassembly window virtualization", () => {
     const overviewBar = container.querySelector(".memory-overview-bar");
     expect(overviewBar).not.toBeNull();
     expect(
+      container.querySelector(".memory-overview-empty-overlay"),
+    ).toBeNull();
+    expect(
       container.querySelector(".memory-overview-region.is-discovered"),
     ).not.toBeNull();
     expect(
@@ -183,6 +195,19 @@ describe("App disassembly window virtualization", () => {
     expect(
       container.querySelector(".memory-overview-region.is-unmapped"),
     ).not.toBeNull();
+
+    const initialLookupCount = findLinearRowByVaMock.mock.calls.length;
+    fireEvent.click(overviewBar as Element, { clientX: 480, clientY: 14 });
+
+    await waitFor(() => {
+      expect(findLinearRowByVaMock).toHaveBeenCalledTimes(
+        initialLookupCount + 1,
+      );
+    });
+    expect(findLinearRowByVaMock.mock.lastCall?.[0]).toEqual({
+      moduleId: "huge-module",
+      va: "0x150000000",
+    });
 
     await waitFor(() => {
       expect(

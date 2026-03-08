@@ -1280,6 +1280,13 @@ export function App() {
     [linearInfo, moduleId, pushSelectionHistory, showTransientStatusMessage],
   );
 
+  const handleMemoryOverviewNavigate = useCallback(
+    (va: string) => {
+      void navigateToVa(va);
+    },
+    [navigateToVa],
+  );
+
   const navigateSelectionHistory = useCallback(
     async (direction: -1 | 1) => {
       if (!moduleId) {
@@ -1510,6 +1517,7 @@ export function App() {
       <MemoryOverviewBar
         overview={memoryOverview}
         markerVa={visibleViewportMarkerVa}
+        onNavigate={handleMemoryOverviewNavigate}
       />
 
       <main className="layout" ref={layoutRef} style={layoutStyle}>
