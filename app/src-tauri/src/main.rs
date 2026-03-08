@@ -109,13 +109,21 @@ impl AppState {
 
 #[tauri::command]
 async fn pick_executable(app: AppHandle) -> Result<Option<String>, String> {
-    app.dialog()
-        .file()
-        .add_filter("Windows Executable", &["exe"])
+    let mut file_dialog = app.dialog().file();
+
+    for (name, extensions) in open_module_filters() {
+        file_dialog = file_dialog.add_filter(name, &extensions);
+    }
+
+    file_dialog
         .blocking_pick_file()
         .map(|file_path| file_path.into_path().map_err(|error| error.to_string()))
         .transpose()
         .map(|path| path.map(|path| path.to_string_lossy().into_owned()))
+}
+
+fn open_module_filters() -> [(&'static str, &'static [&'static str]); 2] {
+    [("PE Files", &["exe", "dll"]), ("All Files", &["*"])]
 }
 
 #[tauri::command]
@@ -592,7 +600,10 @@ fn strip_windows_verbatim_prefix(path: String) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{build_recent_menu_model, prepend_recent_path, sanitize_recent_executables};
+    use super::{
+        build_recent_menu_model, open_module_filters, prepend_recent_path,
+        sanitize_recent_executables,
+    };
     use std::{fs, path::PathBuf};
 
     fn temp_file(name: &str) -> String {
@@ -631,5 +642,13 @@ mod tests {
 
         assert_eq!(updated.first().cloned(), Some(first));
         assert_eq!(updated.get(1).cloned(), Some(second));
+    }
+
+    #[test]
+    fn open_module_filters_include_dll_and_all_files() {
+        let filters = open_module_filters();
+
+        assert_eq!(filters[0], ("PE Files", &["exe", "dll"] as &[&str]));
+        assert_eq!(filters[1], ("All Files", &["*"] as &[&str]));
     }
 }
