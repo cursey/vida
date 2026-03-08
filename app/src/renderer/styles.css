@@ -304,9 +304,7 @@
   margin: 0 -0.1em 0 -0.02em;
   line-height: 1;
   color: hsl(188 100% 78% / 0.95);
-  text-shadow:
-    0 0 4px hsl(188 100% 82% / 0.95),
-    0 0 9px hsl(194 100% 76% / 0.8),
+  text-shadow: 0 0 4px hsl(188 100% 82% / 0.95), 0 0 9px hsl(194 100% 76% / 0.8),
     0 0 14px hsl(202 100% 72% / 0.55);
   transform: translate(-0.09em, 0.01em);
 }

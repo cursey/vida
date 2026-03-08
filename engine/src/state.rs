@@ -2,14 +2,14 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::{
-    atomic::{AtomicBool, Ordering},
     Arc, Mutex,
+    atomic::{AtomicBool, Ordering},
 };
 use std::thread;
 
 use crate::analysis::{
-    build_module_analysis_with_progress, instruction_owner_for_rva, AnalysisProgressPhase,
-    AnalysisProgressUpdate, FunctionSeedEntry, InstructionOwnerRange, ModuleAnalysis,
+    AnalysisProgressPhase, AnalysisProgressUpdate, FunctionSeedEntry, InstructionOwnerRange,
+    ModuleAnalysis, build_module_analysis_with_progress, instruction_owner_for_rva,
 };
 use crate::api::{
     ExportInfo, FunctionGraphByVaParams, FunctionGraphByVaResult, FunctionListParams,
@@ -24,10 +24,10 @@ use crate::api::{
 use crate::disasm::{parse_hex_u64, to_hex};
 use crate::error::EngineError;
 use crate::linear::{
-    find_row_by_rva, materialize_linear_row, DATA_GROUP_SIZE, LINEAR_ROW_HEIGHT,
-    MAX_LINEAR_PAGE_ROWS,
+    DATA_GROUP_SIZE, LINEAR_ROW_HEIGHT, MAX_LINEAR_PAGE_ROWS, find_row_by_rva,
+    materialize_linear_row,
 };
-use crate::pe_utils::{build_section_lookup, parse_pe64, SectionLookup};
+use crate::pe_utils::{SectionLookup, build_section_lookup, parse_pe64};
 const DEFAULT_MAX_INSTRUCTIONS: usize = 512;
 const MAX_MAX_INSTRUCTIONS: usize = 4096;
 const MEMORY_OVERVIEW_TARGET_SLICE_COUNT: usize = 1000;
@@ -962,9 +962,9 @@ fn find_instruction_index(
 #[cfg(test)]
 mod tests {
     use super::{
+        BaseMemoryRegion, MEMORY_OVERVIEW_TARGET_SLICE_COUNT, MemoryRangeSpec,
         build_memory_overview_segments, build_memory_overview_slices,
-        merge_instruction_owner_ranges, BaseMemoryRegion, MemoryRangeSpec,
-        MEMORY_OVERVIEW_TARGET_SLICE_COUNT,
+        merge_instruction_owner_ranges,
     };
     use crate::analysis::InstructionOwnerRange;
     use crate::api::MemoryOverviewSliceKind;
