@@ -280,6 +280,7 @@
   align-self: stretch;
   display: inline-flex;
   align-items: center;
+  position: relative;
   color: var(--text-muted);
   font-size: 11px;
   font-weight: 700;
@@ -289,6 +290,25 @@
   white-space: nowrap;
   user-select: none;
   -webkit-user-select: none;
+}
+
+.window-chrome-app-glyph {
+  position: relative;
+  z-index: 1;
+}
+
+.window-chrome-app-dot {
+  position: relative;
+  z-index: 0;
+  display: inline-block;
+  margin: 0 -0.1em 0 -0.02em;
+  line-height: 1;
+  color: hsl(188 100% 78% / 0.95);
+  text-shadow:
+    0 0 4px hsl(188 100% 82% / 0.95),
+    0 0 9px hsl(194 100% 76% / 0.8),
+    0 0 14px hsl(202 100% 72% / 0.55);
+  transform: translate(-0.09em, 0.01em);
 }
 
 .window-chrome-menubar {

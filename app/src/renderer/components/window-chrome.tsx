@@ -94,8 +94,16 @@ export function WindowChrome({
         }}
       >
         <div className="window-chrome-left">
-          <span className="window-chrome-app-label" data-tauri-drag-region>
-            V.ıDA Pro
+          <span
+            aria-label="ViDA Pro"
+            className="window-chrome-app-label"
+            data-tauri-drag-region
+          >
+            <span className="window-chrome-app-glyph">V</span>
+            <span aria-hidden="true" className="window-chrome-app-dot">
+              .
+            </span>
+            <span className="window-chrome-app-glyph">ıDA Pro</span>
           </span>
           <nav
             aria-label="Application menu"
