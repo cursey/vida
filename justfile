@@ -9,6 +9,9 @@ setup:
 app-build:
   cd app; npm run build
 
+app-icon-windows:
+  python "app/scripts/generate_windows_icon.py"
+
 app-build-release:
   cd app; npx tauri build
 

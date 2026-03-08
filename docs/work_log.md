@@ -1,5 +1,19 @@
 # Work Log
 
+## 2026-03-08 - Refine Windows App Icon Assets
+
+Summary:
+- Replaced the app icon artwork with `C:\Users\curse\Downloads\vidapro.png`, then pre-pixelated the Windows icon master so downscaled variants keep a chunkier retro look.
+- Simplified the repo to a Windows-only icon setup, added a reproducible ICO generator, and rebuilt `icon.ico` with embedded `16, 20, 24, 32, 40, 48, 64, 128, 256` variants using BMP/DIB payloads for small sizes and PNG for `256x256`.
+- Updated the Tauri build script to rerun when the Windows icon assets change, experimented with icon ordering for taskbar selection, and kept the final ICO ordered largest-to-smallest before rebuilding the Windows release bundles.
+
+Validation commands executed:
+- `just app-icon-windows && python -c "from pathlib import Path; import struct; path=Path(r'D:\source\electron-disassembler\app\src-tauri\icons\icon.ico'); data=path.read_bytes(); count=struct.unpack_from('<H', data, 4)[0]; sizes=[]; offset=6\nfor _ in range(count):\n    width,height,colors,reserved,planes,bits,size,image_offset = struct.unpack_from('<BBBBHHII', data, offset)\n    sizes.append((256 if width==0 else width))\n    offset += 16\nprint(sizes)"`
+- `just build-release`
+
+Changed files index:
+- See `docs/change_files.md` for the detailed file list for this work item.
+
 ## 2026-03-08 - Simplify Memory Overview Into Fixed Slices
 
 Summary:

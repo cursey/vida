@@ -1,5 +1,20 @@
 # Change Files
 
+## 2026-03-08 - Refine Windows App Icon Assets
+
+Root:
+- `justfile`
+
+App:
+- `app/scripts/generate_windows_icon.py`
+- `app/src-tauri/build.rs`
+- `app/src-tauri/icons/icon-source.png`
+- `app/src-tauri/icons/icon.ico`
+
+Docs:
+- `docs/work_log.md`
+- `docs/change_files.md`
+
 ## 2026-03-08 - Simplify Memory Overview Into Fixed Slices
 
 App:
