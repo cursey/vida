@@ -9,6 +9,7 @@ import { toFunctionProvenanceCode } from "./function-provenance";
 type BrowserPanelProps = {
   isActive: boolean;
   moduleId: string;
+  showFunctionCount: boolean;
   appliedFunctionSearchQuery: string;
   functionCount: number;
   totalFunctionCount: number;
@@ -30,6 +31,7 @@ type BrowserPanelProps = {
 export function BrowserPanel({
   isActive,
   moduleId,
+  showFunctionCount,
   appliedFunctionSearchQuery,
   functionCount,
   totalFunctionCount,
@@ -57,7 +59,7 @@ export function BrowserPanel({
       <header className="panel-header">
         <h2>Browser</h2>
         <span>
-          {moduleId
+          {moduleId && showFunctionCount
             ? appliedFunctionSearchQuery
               ? `${functionCount}/${totalFunctionCount} functions`
               : `${totalFunctionCount} functions`
@@ -118,7 +120,7 @@ export function BrowserPanel({
               aria-label="Search functions"
               autoComplete="off"
               className="browser-search-input"
-              disabled={!moduleId}
+              disabled={!moduleId || !showFunctionCount}
               onChange={(event) =>
                 onFunctionSearchQueryChange(event.target.value)
               }

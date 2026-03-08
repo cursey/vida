@@ -1031,22 +1031,8 @@ export function App() {
       fallbackVa: string,
       generation: number,
     ): Promise<boolean> => {
-      const listed = await desktopApi.listFunctions(currentModuleId);
-      if (
-        generation !== asyncGenerationRef.current ||
-        currentModuleId !== activeModuleIdRef.current
-      ) {
-        return false;
-      }
-
-      const targetVa =
-        preferredNavigationVaRef.current ||
-        listed.functions[0]?.start ||
-        fallbackVa;
-      const [viewInfo, overview] = await Promise.all([
-        desktopApi.getLinearViewInfo(currentModuleId),
-        desktopApi.getModuleMemoryOverview(currentModuleId),
-      ]);
+      const targetVa = preferredNavigationVaRef.current || fallbackVa;
+      const viewInfo = await desktopApi.getLinearViewInfo(currentModuleId);
       if (
         generation !== asyncGenerationRef.current ||
         currentModuleId !== activeModuleIdRef.current
@@ -1065,9 +1051,6 @@ export function App() {
         return false;
       }
 
-      setFunctions(listed.functions);
-      resetFunctionBrowserViewport();
-      setMemoryOverview(overview);
       setLinearInfo(viewInfo);
       setGoToAddress(targetVa);
       setSelectedRowIndex(null);
@@ -1078,6 +1061,51 @@ export function App() {
       resetLinearCache();
       setPendingScrollRow(rowLookup.rowIndex);
       stopAnalysisPolling();
+      void desktopApi
+        .listFunctions(currentModuleId)
+        .then((listed) => {
+          if (
+            generation !== asyncGenerationRef.current ||
+            currentModuleId !== activeModuleIdRef.current
+          ) {
+            return;
+          }
+
+          setFunctions(listed.functions);
+          resetFunctionBrowserViewport();
+        })
+        .catch((error: unknown) => {
+          if (
+            generation !== asyncGenerationRef.current ||
+            currentModuleId !== activeModuleIdRef.current
+          ) {
+            return;
+          }
+
+          console.warn("Failed to load function list:", error);
+        });
+      void desktopApi
+        .getModuleMemoryOverview(currentModuleId)
+        .then((overview) => {
+          if (
+            generation !== asyncGenerationRef.current ||
+            currentModuleId !== activeModuleIdRef.current
+          ) {
+            return;
+          }
+
+          setMemoryOverview(overview);
+        })
+        .catch((error: unknown) => {
+          if (
+            generation !== asyncGenerationRef.current ||
+            currentModuleId !== activeModuleIdRef.current
+          ) {
+            return;
+          }
+
+          console.warn("Failed to load memory overview:", error);
+        });
       return true;
     },
     [
@@ -1091,7 +1119,6 @@ export function App() {
   const startAnalysisPolling = useCallback(
     (currentModuleId: string, fallbackVa: string, generation: number) => {
       stopAnalysisPolling();
-      let lastListedFunctionCount = -1;
 
       const poll = async () => {
         try {
@@ -1105,19 +1132,6 @@ export function App() {
           }
 
           setAnalysisStatus(status);
-
-          if (status.discoveredFunctionCount !== lastListedFunctionCount) {
-            const listed = await desktopApi.listFunctions(currentModuleId);
-            if (
-              generation !== asyncGenerationRef.current ||
-              currentModuleId !== activeModuleIdRef.current
-            ) {
-              return;
-            }
-            lastListedFunctionCount = listed.functions.length;
-            setFunctions(listed.functions);
-            resetFunctionBrowserViewport();
-          }
 
           if (status.state === "ready") {
             await applyReadyModuleAnalysis(
@@ -1161,11 +1175,7 @@ export function App() {
 
       void poll();
     },
-    [
-      applyReadyModuleAnalysis,
-      resetFunctionBrowserViewport,
-      stopAnalysisPolling,
-    ],
+    [applyReadyModuleAnalysis, stopAnalysisPolling],
   );
 
   async function openModuleFromPath(chosenPath: string) {
@@ -1196,21 +1206,12 @@ export function App() {
         return;
       }
 
-      const overview = await desktopApi.getModuleMemoryOverview(
-        opened.moduleId,
-      );
-      if (generation !== asyncGenerationRef.current) {
-        await desktopApi.unloadModule(opened.moduleId).catch(() => {});
-        return;
-      }
-
       preferredNavigationVaRef.current = opened.entryVa;
       activeModuleIdRef.current = opened.moduleId;
       setModulePath(chosenPath);
       setModuleId(opened.moduleId);
       setEntryVa(opened.entryVa);
       setSections(info.sections);
-      setMemoryOverview(overview);
       setGoToAddress(opened.entryVa);
       setAnalysisStatus({
         state: "queued",
@@ -1524,6 +1525,9 @@ export function App() {
         <BrowserPanel
           isActive={activePanel === "browser"}
           moduleId={moduleId}
+          showFunctionCount={
+            analysisStatus?.state === "ready" && functions.length > 0
+          }
           appliedFunctionSearchQuery={appliedFunctionSearchQuery}
           functionCount={functionCount}
           totalFunctionCount={discoveredFunctionCount}

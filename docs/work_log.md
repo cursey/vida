@@ -1,5 +1,19 @@
 # Work Log
 
+## 2026-03-08 - Defer Browser List and Memory Bar Until Analysis Ready
+
+Summary:
+- Simplified the renderer loading flow so the Browser function list and memory overview bar stay empty while analysis is still queued or running.
+- Changed the ready transition to initialize disassembly first, then load the function list and final memory overview asynchronously so large modules paint the main view sooner.
+- Updated renderer coverage to verify the delayed ready-state loading behavior and preserve large-data virtualization expectations.
+
+Validation commands executed:
+- `npx biome check --write src/renderer/App.tsx src/renderer/App.disassembly-window.test.tsx src/renderer/features/browser/browser-panel.tsx` (in `app`)
+- `npx vitest run src/renderer/App.disassembly-window.test.tsx src/renderer/App.function-browser.test.tsx src/renderer/App.function-browser-window.test.tsx` (in `app`)
+
+Changed files index:
+- See `docs/change_files.md` for the detailed file list for this work item.
+
 ## 2026-03-07 - Add Memory Bar Navigation and Placeholder Refinements
 
 Summary:

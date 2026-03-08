@@ -3,7 +3,7 @@ import { createMockDesktopApi } from "@/test/mock-desktop-api";
 import { act, fireEvent, render, waitFor } from "@testing-library/react";
 import React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { DesktopApi, LinearRow } from "../shared/protocol";
+import type { DesktopApi, LinearRow, MethodResult } from "../shared/protocol";
 
 vi.mock("@/components/mode-toggle", () => ({
   ModeToggle: () => <div data-testid="mode-toggle" />,
@@ -181,20 +181,23 @@ describe("App disassembly window virtualization", () => {
     );
     expect(HUGE_ROW_COUNT * ROW_HEIGHT).toBeGreaterThan(EXPECTED_WINDOW_HEIGHT);
 
+    await waitFor(() => {
+      expect(
+        container.querySelector(".memory-overview-empty-overlay"),
+      ).toBeNull();
+      expect(
+        container.querySelector(".memory-overview-region.is-discovered"),
+      ).not.toBeNull();
+      expect(
+        container.querySelector(".memory-overview-region.perm-r-x"),
+      ).not.toBeNull();
+      expect(
+        container.querySelector(".memory-overview-region.is-unmapped"),
+      ).not.toBeNull();
+    });
+
     const overviewBar = container.querySelector(".memory-overview-bar");
     expect(overviewBar).not.toBeNull();
-    expect(
-      container.querySelector(".memory-overview-empty-overlay"),
-    ).toBeNull();
-    expect(
-      container.querySelector(".memory-overview-region.is-discovered"),
-    ).not.toBeNull();
-    expect(
-      container.querySelector(".memory-overview-region.perm-r-x"),
-    ).not.toBeNull();
-    expect(
-      container.querySelector(".memory-overview-region.is-unmapped"),
-    ).not.toBeNull();
 
     const initialLookupCount = findLinearRowByVaMock.mock.calls.length;
     fireEvent.click(overviewBar as Element, { clientX: 480, clientY: 14 });
@@ -213,6 +216,200 @@ describe("App disassembly window virtualization", () => {
       expect(
         container.querySelector(".memory-overview-viewport"),
       ).not.toBeNull();
+    });
+  });
+
+  it("shows disassembly before the ready memory overview finishes loading", async () => {
+    let resolveReadyOverview:
+      | ((value: ReturnType<typeof buildMemoryOverview>) => void)
+      | null = null;
+    const readyOverviewPromise = new Promise<
+      ReturnType<typeof buildMemoryOverview>
+    >((resolve) => {
+      resolveReadyOverview = resolve;
+    });
+
+    mockDesktopApi = createMockDesktopApi({
+      pickExecutable: vi.fn().mockResolvedValue("C:\\fixtures\\huge.exe"),
+      onMenuOpenExecutable: vi.fn((callback: () => void) => {
+        menuOpenHandler = callback;
+        return () => {};
+      }),
+      openModule: vi.fn().mockResolvedValue({
+        moduleId: "huge-module",
+        arch: "x64",
+        imageBase: "0x140000000",
+        entryVa: "0x140001000",
+      }),
+      getModuleInfo: vi.fn().mockResolvedValue({
+        sections: [
+          {
+            name: ".text",
+            startVa: "0x140001000",
+            endVa: "0x142001000",
+            rawOffset: 0,
+            rawSize: 0,
+          },
+        ],
+        imports: [],
+        exports: [],
+      }),
+      getModuleMemoryOverview: vi
+        .fn()
+        .mockImplementationOnce(async () => readyOverviewPromise),
+      listFunctions: vi.fn().mockResolvedValue({
+        functions: [{ start: "0x140001000", name: "entry", kind: "entry" }],
+      }),
+      getLinearViewInfo: vi.fn().mockResolvedValue({
+        rowCount: HUGE_ROW_COUNT,
+        minVa: "0x140000000",
+        maxVa: "0x160000000",
+        rowHeight: ROW_HEIGHT,
+        dataGroupSize: 16,
+      }),
+      getLinearRows: vi
+        .fn()
+        .mockImplementation(
+          async (payload: { startRow: number; rowCount: number }) => ({
+            rows: buildLinearRows(payload.startRow, payload.rowCount),
+          }),
+        ),
+      findLinearRowByVa:
+        findLinearRowByVaMock as DesktopApi["findLinearRowByVa"],
+    });
+
+    const { container } = render(<App />);
+
+    await waitFor(() => {
+      expect(menuOpenHandler).toBeTypeOf("function");
+    });
+
+    await act(async () => {
+      menuOpenHandler?.();
+    });
+
+    await waitFor(() => {
+      expect(container.textContent).toContain(`${HUGE_ROW_COUNT} rows`);
+    });
+
+    expect(mockDesktopApi.getModuleMemoryOverview).toHaveBeenCalledTimes(1);
+    expect(
+      container.querySelector(".memory-overview-empty-overlay"),
+    ).not.toBeNull();
+
+    await act(async () => {
+      resolveReadyOverview?.(buildMemoryOverview());
+      await readyOverviewPromise;
+    });
+
+    await waitFor(() => {
+      expect(
+        container.querySelector(".memory-overview-empty-overlay"),
+      ).toBeNull();
+    });
+  });
+
+  it("keeps the browser list and memory bar empty until analysis is ready", async () => {
+    let resolveStatus:
+      | ((value: MethodResult["module.getAnalysisStatus"]) => void)
+      | null = null;
+    const pendingStatus = new Promise<MethodResult["module.getAnalysisStatus"]>(
+      (resolve) => {
+        resolveStatus = resolve;
+      },
+    );
+    const listFunctionsMock = vi.fn().mockResolvedValue({
+      functions: [{ start: "0x140001000", name: "entry", kind: "entry" }],
+    });
+    const getModuleMemoryOverviewMock = vi
+      .fn()
+      .mockResolvedValue(buildMemoryOverview());
+
+    mockDesktopApi = createMockDesktopApi({
+      pickExecutable: vi.fn().mockResolvedValue("C:\\fixtures\\huge.exe"),
+      onMenuOpenExecutable: vi.fn((callback: () => void) => {
+        menuOpenHandler = callback;
+        return () => {};
+      }),
+      openModule: vi.fn().mockResolvedValue({
+        moduleId: "huge-module",
+        arch: "x64",
+        imageBase: "0x140000000",
+        entryVa: "0x140001000",
+      }),
+      getModuleAnalysisStatus: vi
+        .fn()
+        .mockImplementationOnce(async () => pendingStatus),
+      getModuleInfo: vi.fn().mockResolvedValue({
+        sections: [
+          {
+            name: ".text",
+            startVa: "0x140001000",
+            endVa: "0x142001000",
+            rawOffset: 0,
+            rawSize: 0,
+          },
+        ],
+        imports: [],
+        exports: [],
+      }),
+      getModuleMemoryOverview:
+        getModuleMemoryOverviewMock as DesktopApi["getModuleMemoryOverview"],
+      listFunctions: listFunctionsMock as DesktopApi["listFunctions"],
+      getLinearViewInfo: vi.fn().mockResolvedValue({
+        rowCount: HUGE_ROW_COUNT,
+        minVa: "0x140000000",
+        maxVa: "0x160000000",
+        rowHeight: ROW_HEIGHT,
+        dataGroupSize: 16,
+      }),
+      getLinearRows: vi
+        .fn()
+        .mockImplementation(
+          async (payload: { startRow: number; rowCount: number }) => ({
+            rows: buildLinearRows(payload.startRow, payload.rowCount),
+          }),
+        ),
+      findLinearRowByVa:
+        findLinearRowByVaMock as DesktopApi["findLinearRowByVa"],
+    });
+
+    const { container } = render(<App />);
+
+    await waitFor(() => {
+      expect(menuOpenHandler).toBeTypeOf("function");
+    });
+
+    await act(async () => {
+      menuOpenHandler?.();
+    });
+
+    await waitFor(() => {
+      expect(mockDesktopApi.getModuleAnalysisStatus).toHaveBeenCalledTimes(1);
+    });
+
+    expect(listFunctionsMock).not.toHaveBeenCalled();
+    expect(getModuleMemoryOverviewMock).not.toHaveBeenCalled();
+    expect(container.querySelectorAll(".function-row")).toHaveLength(0);
+    expect(
+      container.querySelector(".memory-overview-empty-overlay"),
+    ).not.toBeNull();
+
+    await act(async () => {
+      resolveStatus?.({
+        state: "ready",
+        message: "Analysis ready.",
+        discoveredFunctionCount: 1,
+        totalFunctionCount: 1,
+        analyzedFunctionCount: 1,
+      });
+      await pendingStatus;
+    });
+
+    await waitFor(() => {
+      expect(container.textContent).toContain(`${HUGE_ROW_COUNT} rows`);
+      expect(listFunctionsMock).toHaveBeenCalledTimes(1);
+      expect(getModuleMemoryOverviewMock).toHaveBeenCalledTimes(1);
     });
   });
 });
