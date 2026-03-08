@@ -6,11 +6,55 @@ import {
   AppPanelTitle,
 } from "@/components/app/panel";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import type { VirtualItem } from "@tanstack/react-virtual";
 import type { CSSProperties, PointerEvent, RefObject } from "react";
-import type { LinearRow } from "../../../shared/protocol";
+import type { InstructionCategory, LinearRow } from "../../../shared/protocol";
 
 type DisassemblyColumn = "section" | "address" | "bytes" | "instruction";
+
+const DISASSEMBLY_COLUMNS =
+  "var(--col-section-width, 88px) var(--col-address-width, 110px) var(--col-bytes-width, 180px) var(--col-instruction-width, 420px) minmax(var(--col-comment-min-width, 180px), 1fr)";
+
+const cellClassName =
+  "flex h-full items-center overflow-hidden px-2 text-ellipsis whitespace-nowrap";
+
+const mnemonicClassNames: Record<InstructionCategory | "other", string> = {
+  call: "[color:var(--mnemonic-call)]",
+  return: "[color:var(--mnemonic-return)]",
+  control_flow: "[color:var(--mnemonic-control-flow)]",
+  system: "[color:var(--mnemonic-system)]",
+  stack: "[color:var(--mnemonic-stack)]",
+  string: "[color:var(--mnemonic-string)]",
+  compare_test: "[color:var(--mnemonic-compare-test)]",
+  arithmetic: "[color:var(--mnemonic-arithmetic)]",
+  logic: "[color:var(--mnemonic-logic)]",
+  bit_shift: "[color:var(--mnemonic-bit-shift)]",
+  data_transfer: "[color:var(--mnemonic-data-transfer)]",
+  other: "text-foreground",
+};
+
+function columnHeaderCell(
+  label: string,
+  resizeLabel?: string,
+  onPointerDown?: (event: PointerEvent<HTMLButtonElement>) => void,
+) {
+  return (
+    <div className="relative flex h-full items-center border-r border-input px-[8px] pr-[10px] last:border-r-0">
+      <span>{label}</span>
+      {resizeLabel && onPointerDown ? (
+        <Button
+          aria-label={resizeLabel}
+          className="absolute right-0 top-0 h-full w-2 min-w-0 translate-x-1/2 cursor-col-resize rounded-none border-0 bg-transparent p-0 hover:bg-transparent focus-visible:bg-transparent"
+          onPointerDown={onPointerDown}
+          size="icon"
+          type="button"
+          variant="ghost"
+        />
+      ) : null}
+    </div>
+  );
+}
 
 type DisassemblyPanelProps = {
   isActive: boolean;
@@ -72,64 +116,39 @@ export function DisassemblyPanel({
         <AppPanelBody className="flex items-center justify-center p-0" />
       ) : (
         <AppPanelBody
-          className="panel-body table-body"
-          style={disassemblyColumnStyle}
+          className="panel-body flex min-h-0 flex-col overflow-hidden p-0 font-mono"
+          style={{
+            ...disassemblyColumnStyle,
+            ["--disassembly-columns" as string]: DISASSEMBLY_COLUMNS,
+          }}
         >
-          <div className="disassembly-columns-header">
-            <div className="column-header-cell">
-              <span>Section</span>
-              <Button
-                className="column-resizer"
-                size="icon"
-                variant="ghost"
-                aria-label="Resize Section column"
-                onPointerDown={(event) =>
-                  onStartColumnResizing("section", event)
-                }
-              />
-            </div>
-            <div className="column-header-cell">
-              <span>Address</span>
-              <Button
-                className="column-resizer"
-                size="icon"
-                variant="ghost"
-                aria-label="Resize Address column"
-                onPointerDown={(event) =>
-                  onStartColumnResizing("address", event)
-                }
-              />
-            </div>
-            <div className="column-header-cell">
-              <span>Bytes</span>
-              <Button
-                className="column-resizer"
-                size="icon"
-                variant="ghost"
-                aria-label="Resize Bytes column"
-                onPointerDown={(event) => onStartColumnResizing("bytes", event)}
-              />
-            </div>
-            <div className="column-header-cell">
-              <span>Instruction</span>
-              <Button
-                className="column-resizer"
-                size="icon"
-                variant="ghost"
-                aria-label="Resize Instruction column"
-                onPointerDown={(event) =>
-                  onStartColumnResizing("instruction", event)
-                }
-              />
-            </div>
-            <div className="column-header-cell">
-              <span>Comment</span>
-            </div>
+          <div
+            className="grid h-6 text-[11px] font-medium text-muted-foreground border-b border-input bg-secondary"
+            style={{ gridTemplateColumns: "var(--disassembly-columns)" }}
+          >
+            {columnHeaderCell("Section", "Resize Section column", (event) =>
+              onStartColumnResizing("section", event),
+            )}
+            {columnHeaderCell("Address", "Resize Address column", (event) =>
+              onStartColumnResizing("address", event),
+            )}
+            {columnHeaderCell("Bytes", "Resize Bytes column", (event) =>
+              onStartColumnResizing("bytes", event),
+            )}
+            {columnHeaderCell(
+              "Instruction",
+              "Resize Instruction column",
+              (event) => onStartColumnResizing("instruction", event),
+            )}
+            {columnHeaderCell("Comment")}
           </div>
 
-          <div className="disassembly-scroll-region" ref={disassemblyScrollRef}>
+          <div
+            className="relative flex-1 min-h-0 overflow-auto"
+            ref={disassemblyScrollRef}
+          >
             <div
-              className="disassembly-rows-canvas"
+              className="relative min-w-max"
               data-testid="disassembly-canvas"
               style={{ height: `${disassemblyListTotalSize}px` }}
             >
@@ -143,18 +162,23 @@ export function DisassemblyPanel({
                   return (
                     <div
                       key={`loading-${logicalRowIndex}`}
-                      className="disassembly-row row-loading"
-                      style={{ transform: `translateY(${top}px)` }}
+                      className="absolute left-0 grid h-[var(--cell-height)] w-full items-center text-xs text-muted-foreground"
+                      style={{
+                        transform: `translateY(${top}px)`,
+                        gridTemplateColumns: "var(--disassembly-columns)",
+                      }}
                     >
-                      <div className="cell section-cell" />
-                      <div className="cell">
+                      <div
+                        className={cn(cellClassName, "text-muted-foreground")}
+                      />
+                      <div className={cellClassName}>
                         <code>...</code>
                       </div>
-                      <div className="cell">
+                      <div className={cellClassName}>
                         <code>...</code>
                       </div>
-                      <div className="cell">loading</div>
-                      <div className="cell" />
+                      <div className={cellClassName}>loading</div>
+                      <div className={cellClassName} />
                     </div>
                   );
                 }
@@ -162,10 +186,17 @@ export function DisassemblyPanel({
                 return (
                   <div
                     key={`${logicalRowIndex}-${cacheEpoch}-${row.address}`}
-                    className={`disassembly-row kind-${row.kind} ${
-                      selectedRowIndex === logicalRowIndex ? "is-current" : ""
-                    }`}
-                    style={{ transform: `translateY(${top}px)` }}
+                    className={cn(
+                      "absolute left-0 grid h-[var(--cell-height)] w-full items-center text-xs hover:bg-accent",
+                      row.kind === "gap" &&
+                        "bg-secondary/45 text-secondary-foreground italic",
+                      selectedRowIndex === logicalRowIndex &&
+                        "bg-primary/16 shadow-[inset_0_0_0_1px_oklch(var(--primary)/0.35)] hover:bg-primary/16",
+                    )}
+                    style={{
+                      transform: `translateY(${top}px)`,
+                      gridTemplateColumns: "var(--disassembly-columns)",
+                    }}
                     onPointerDown={(event) => {
                       if (event.button !== 0) {
                         return;
@@ -173,32 +204,32 @@ export function DisassemblyPanel({
                       onSelectRow(logicalRowIndex, row.address);
                     }}
                   >
-                    <div className="cell section-cell">
+                    <div className={cn(cellClassName, "text-muted-foreground")}>
                       {findSectionName(row.address)}
                     </div>
-                    <div className="cell">
+                    <div className={cellClassName}>
                       <code>{row.address}</code>
                     </div>
-                    <div className="cell">
+                    <div className={cellClassName}>
                       <code>{row.bytes}</code>
                     </div>
-                    <div className="cell">
+                    <div className={cellClassName}>
                       <span
-                        className={`mnemonic mnemonic-${
-                          row.instructionCategory ?? "other"
-                        }`}
+                        className={
+                          mnemonicClassNames[row.instructionCategory ?? "other"]
+                        }
                       >
                         {row.mnemonic}
                       </span>
                       {row.operands ? (
-                        <span className="operands">{row.operands}</span>
+                        <span className="ml-[1ch]">{row.operands}</span>
                       ) : null}
                     </div>
-                    <div className="cell comment-cell">
+                    <div className={cn(cellClassName, "text-muted-foreground")}>
                       {row.comment ? <span>{`; ${row.comment}`}</span> : null}
                       {row.branchTarget ? (
                         <a
-                          className="comment-link"
+                          className="mr-[10px] cursor-pointer text-primary no-underline hover:underline focus-visible:outline focus-visible:outline-1 focus-visible:outline-ring focus-visible:outline-offset-1"
                           href={`#${row.branchTarget}`}
                           onClick={(event) => {
                             event.preventDefault();
@@ -210,7 +241,7 @@ export function DisassemblyPanel({
                       ) : null}
                       {row.callTarget ? (
                         <a
-                          className="comment-link"
+                          className="mr-[10px] cursor-pointer text-primary no-underline hover:underline focus-visible:outline focus-visible:outline-1 focus-visible:outline-ring focus-visible:outline-offset-1"
                           href={`#${row.callTarget}`}
                           onClick={(event) => {
                             event.preventDefault();

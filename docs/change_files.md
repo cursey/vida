@@ -1,5 +1,20 @@
 # Change Files
 
+## 2026-03-08 - Finish Disassembly and Custom Renderer Style Cleanup
+
+App:
+- `app/src/renderer/features/disassembly/disassembly-panel.tsx`
+- `app/src/renderer/features/disassembly/memory-overview-bar.tsx`
+- `app/src/renderer/features/graph/graph-panel.tsx`
+- `app/src/renderer/styles.css`
+- `app/src/renderer/styles/custom-renderers.css`
+- `app/src/renderer/styles/disassembly.css`
+
+Docs:
+- `docs/renderer_styling.md`
+- `docs/work_log.md`
+- `docs/change_files.md`
+
 ## 2026-03-08 - Split Renderer Styles Into Scoped Modules
 
 App:

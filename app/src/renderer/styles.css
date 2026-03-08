@@ -1,7 +1,6 @@
 @import "./styles/theme.css";
 @import "./styles/base.css";
 @import "./styles/utilities.css";
-@import "./styles/disassembly.css";
 @import "./styles/custom-renderers.css";
 
 @tailwind base;

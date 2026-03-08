@@ -273,9 +273,9 @@ export function GraphPanel({
             : ""}
         </AppPanelMeta>
       </AppPanelHeader>
-      <AppPanelBody className="graph-panel-body">
+      <AppPanelBody className="relative overflow-hidden p-0">
         {graph ? (
-          <div className="graph-canvas" ref={graphRef} />
+          <div className="h-full min-h-0 w-full" ref={graphRef} />
         ) : (
           <div className="flex h-full select-none items-center justify-center text-xs text-muted-foreground">
             No graph loaded.

@@ -1,5 +1,19 @@
 # Work Log
 
+## 2026-03-08 - Finish Disassembly and Custom Renderer Style Cleanup
+
+Summary:
+- Removed the remaining disassembly layout stylesheet by moving column headers, rows, mnemonic colors, row states, and comment-link styling into `disassembly-panel.tsx` with Tailwind classes and typed helper maps.
+- Inlined the memory overview shell, SVG slice coloring, and graph panel container styling so the remaining custom renderer stylesheet is reserved for string-rendered graph node HTML only.
+- Added `docs/renderer_styling.md` to document the new renderer styling rules: shadcn/Tailwind by default, global CSS only for tokens, base rules, tiny utilities, and unavoidable custom renderer output.
+
+Validation commands executed:
+- `npm run test:renderer -- App.disassembly-window.test.tsx App.graph-view.test.tsx App.function-browser.test.tsx App.function-browser-window.test.tsx` (in `app`)
+- `npm run check` (in `app`)
+
+Changed files index:
+- See `docs/change_files.md` for the detailed file list for this work item.
+
 ## 2026-03-08 - Split Renderer Styles Into Scoped Modules
 
 Summary:

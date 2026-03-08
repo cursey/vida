@@ -1,4 +1,5 @@
 import { parseHexVa } from "@/features/shared/number-utils";
+import { cn } from "@/lib/utils";
 import { useId } from "react";
 import type { MouseEvent } from "react";
 import type {
@@ -13,6 +14,15 @@ type MemoryOverviewBarProps = {
   overview: MethodResult["module.getMemoryOverview"] | null;
   markerVa: number | null;
   onNavigate?: (va: string) => void;
+};
+
+const emptyLabelStyle = {
+  fill: "oklch(var(--foreground) / 0.1)",
+  fontSize: "10px",
+  fontWeight: 400,
+  letterSpacing: "0.08em",
+  textTransform: "uppercase" as const,
+  userSelect: "none" as const,
 };
 
 export function MemoryOverviewBar({
@@ -34,12 +44,12 @@ export function MemoryOverviewBar({
   ) {
     return (
       <div
-        className="memory-overview-shell"
+        className="-mx-2 flex-none p-0"
         aria-label="Memory overview"
         data-testid="memory-overview"
       >
         <svg
-          className="memory-overview-bar"
+          className="block h-7 w-full bg-[var(--memory-rail)]"
           data-testid="memory-overview-empty-bar"
           viewBox={`0 0 ${BAR_VIEWBOX_WIDTH} ${BAR_HEIGHT}`}
           preserveAspectRatio="none"
@@ -54,16 +64,15 @@ export function MemoryOverviewBar({
               patternUnits="userSpaceOnUse"
               patternTransform="rotate(-28)"
             >
-              <text x="8" y="18" className="memory-overview-empty-label">
+              <text style={emptyLabelStyle} x="8" y="18">
                 Memory Bar
               </text>
-              <text x="74" y="45" className="memory-overview-empty-label">
+              <text style={emptyLabelStyle} x="74" y="45">
                 Memory Bar
               </text>
             </pattern>
           </defs>
           <rect
-            className="memory-overview-empty-overlay"
             data-testid="memory-overview-empty"
             x={0}
             y={0}
@@ -107,19 +116,22 @@ export function MemoryOverviewBar({
 
   return (
     <div
-      className="memory-overview-shell"
+      className="-mx-2 flex-none p-0"
       aria-label="Memory overview"
       data-testid="memory-overview"
     >
       <button
         type="button"
-        className="memory-overview-button"
+        className="block w-full border-0 bg-transparent p-0"
         data-testid="memory-overview-button"
         onClick={handleClick}
         aria-label="Jump disassembly using memory overview"
       >
         <svg
-          className={`memory-overview-bar${onNavigate ? " is-interactive" : ""}`}
+          className={cn(
+            "block h-7 w-full bg-[var(--memory-rail)]",
+            onNavigate && "cursor-pointer",
+          )}
           viewBox={`0 0 ${BAR_VIEWBOX_WIDTH} ${BAR_HEIGHT}`}
           preserveAspectRatio="none"
           aria-hidden="true"
@@ -134,8 +146,9 @@ export function MemoryOverviewBar({
             return (
               <rect
                 key={`${slice}-${sliceStartVa.toString(16)}`}
-                className={sliceClassName(slice)}
                 data-testid={`memory-slice-${slice}`}
+                fill={sliceFill(slice)}
+                shapeRendering="crispEdges"
                 x={x}
                 y={0}
                 width={width}
@@ -154,8 +167,11 @@ export function MemoryOverviewBar({
           })}
           {markerX !== null ? (
             <line
-              className="memory-overview-viewport"
               data-testid="memory-overview-viewport"
+              filter="drop-shadow(0 0 4px oklch(var(--foreground) / 0.18))"
+              stroke="var(--memory-viewport)"
+              strokeWidth={2}
+              vectorEffect="non-scaling-stroke"
               x1={markerX}
               x2={markerX}
               y1={1}
@@ -168,8 +184,21 @@ export function MemoryOverviewBar({
   );
 }
 
-function sliceClassName(slice: MemoryOverviewSliceKind) {
-  return `memory-overview-slice kind-${slice}`;
+function sliceFill(slice: MemoryOverviewSliceKind) {
+  switch (slice) {
+    case "unmapped":
+      return "var(--memory-unmapped)";
+    case "ro":
+      return "var(--memory-ro)";
+    case "rw":
+      return "var(--memory-rw)";
+    case "rwx":
+      return "var(--memory-rwx)";
+    case "explored":
+      return "var(--memory-explored)";
+    case "unexplored":
+      return "var(--memory-unexplored)";
+  }
 }
 
 function formatSliceTitle(
