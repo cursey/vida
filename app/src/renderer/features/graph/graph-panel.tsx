@@ -93,7 +93,7 @@ function estimateNodeSize(block: {
   return { width, height };
 }
 
-function renderGraphNodeHtml(data: GraphNodeData): string {
+export function renderGraphNodeHtml(data: GraphNodeData): string {
   const instructionLines = data.instructions
     .map((instruction) => {
       const mnemonic = escapeHtml(instruction.mnemonic);

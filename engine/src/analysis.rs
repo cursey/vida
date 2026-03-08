@@ -11,11 +11,9 @@ use std::time::Duration;
 
 use goblin::pe::PE;
 
-use crate::api::{
-    FunctionGraphBlock, FunctionGraphEdge, FunctionGraphInstruction, XrefKind, XrefTargetKind,
-};
+use crate::api::{FunctionGraphEdge, InstructionCategory, XrefKind, XrefTargetKind};
 use crate::cfg::{BasicBlockEdgeKind, FunctionGraphAnalysis, analyze_function_cfg};
-use crate::disasm::{default_function_name, to_hex};
+use crate::disasm::default_function_name;
 use crate::error::EngineError;
 use crate::linear::{AnalyzedInstructionRow, LinearView, build_linear_view};
 use crate::pdb_symbols::discover_pdb_function_seeds;
@@ -45,9 +43,23 @@ pub(crate) struct ModuleAnalysis {
 pub(crate) struct CachedFunctionGraph {
     pub(crate) function_start_rva: u64,
     pub(crate) function_name: String,
-    pub(crate) blocks: Vec<FunctionGraphBlock>,
+    pub(crate) blocks: Vec<CachedFunctionGraphBlock>,
     pub(crate) edges: Vec<FunctionGraphEdge>,
     pub(crate) instruction_block_id_by_rva: HashMap<u64, String>,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct CachedFunctionGraphBlock {
+    pub(crate) id: String,
+    pub(crate) start_rva: u64,
+    pub(crate) instructions: Vec<CachedFunctionGraphInstruction>,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct CachedFunctionGraphInstruction {
+    pub(crate) start_rva: u64,
+    pub(crate) len: u8,
+    pub(crate) instruction_category: InstructionCategory,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -525,8 +537,7 @@ fn analyze_seed(
         return Err(EngineError::Canceled);
     }
 
-    let (cached_graph, function_rows) =
-        build_cached_function_graph(analysis, image_base, seed.name.clone());
+    let (cached_graph, function_rows) = build_cached_function_graph(analysis, seed.name.clone());
 
     if is_canceled() {
         return Err(EngineError::Canceled);
@@ -781,7 +792,6 @@ fn seed_priority(kind: &str) -> u8 {
 
 fn build_cached_function_graph(
     analysis: FunctionGraphAnalysis,
-    image_base: u64,
     function_name: String,
 ) -> (CachedFunctionGraph, Vec<AnalyzedInstructionRow>) {
     let block_id_by_start_rva = analysis
@@ -812,29 +822,26 @@ fn build_cached_function_graph(
                     linear_rows.push(AnalyzedInstructionRow {
                         start_rva: instruction.start_rva,
                         len: instruction.len,
-                        bytes: instruction.bytes.clone(),
-                        mnemonic: instruction.mnemonic.clone(),
-                        operands: instruction.operands.clone(),
                         instruction_category: instruction.instruction_category,
                         branch_target_rva: instruction.branch_target_rva,
                         call_target_rva: instruction.call_target_rva,
                         xrefs: instruction.xrefs.clone(),
                     });
-                    FunctionGraphInstruction {
-                        mnemonic: instruction.mnemonic.clone(),
-                        operands: instruction.operands.clone(),
+                    CachedFunctionGraphInstruction {
+                        start_rva: instruction.start_rva,
+                        len: instruction.len,
                         instruction_category: instruction.instruction_category,
                     }
                 })
                 .collect();
 
-            FunctionGraphBlock {
+            CachedFunctionGraphBlock {
                 id: block_id,
-                start_va: to_hex(image_base + block.start_rva),
+                start_rva: block.start_rva,
                 instructions,
             }
         })
-        .collect::<Vec<FunctionGraphBlock>>();
+        .collect::<Vec<CachedFunctionGraphBlock>>();
 
     linear_rows.sort_by_key(|row| row.start_rva);
 
@@ -889,9 +896,6 @@ mod tests {
         AnalyzedInstructionRow {
             start_rva,
             len,
-            bytes: "90".to_owned(),
-            mnemonic: "nop".to_owned(),
-            operands: String::new(),
             instruction_category: InstructionCategory::Other,
             branch_target_rva: None,
             call_target_rva: None,

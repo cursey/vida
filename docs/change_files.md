@@ -1,5 +1,32 @@
 # Change Files
 
+## 2026-03-08 - Restore Graph Instruction Listing Layout
+
+App:
+- `app/src/renderer/features/graph/graph-panel.tsx`
+- `app/src/renderer/features/graph/graph-panel.test.ts`
+- `app/src/renderer/styles/custom-renderers.css`
+
+Docs:
+- `docs/work_log.md`
+- `docs/change_files.md`
+
+## 2026-03-08 - Optimize Engine Analysis with Lazy Instruction Rendering
+
+Engine:
+- `engine/src/analysis.rs`
+- `engine/src/cfg.rs`
+- `engine/src/disasm.rs`
+- `engine/src/linear.rs`
+- `engine/src/state.rs`
+- `engine/src/tests.rs`
+- `engine/tests/engine_integration.rs`
+
+Docs:
+- `docs/work_log.md`
+- `docs/change_files.md`
+- `docs/engine_benchmarking.md`
+
 ## 2026-03-08 - Add Drag-and-Drop Workspace Import
 
 App:

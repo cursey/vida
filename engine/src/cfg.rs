@@ -1,11 +1,9 @@
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
-use iced_x86::{
-    Decoder, DecoderOptions, FlowControl, Formatter, Instruction, IntelFormatter, Mnemonic,
-};
+use iced_x86::{Decoder, DecoderOptions, FlowControl, Instruction, Mnemonic};
 
 use crate::api::{InstructionCategory, XrefKind, XrefTargetKind};
-use crate::disasm::{bytes_to_hex, categorize_instruction, split_instruction_text};
+use crate::disasm::categorize_instruction;
 use crate::error::EngineError;
 use crate::linear::InstructionXref;
 use crate::pe_utils::SectionLookup;
@@ -30,9 +28,6 @@ pub(crate) struct BasicBlockAnalysis {
 pub(crate) struct BasicBlockInstructionAnalysis {
     pub(crate) start_rva: u64,
     pub(crate) len: u8,
-    pub(crate) bytes: String,
-    pub(crate) mnemonic: String,
-    pub(crate) operands: String,
     pub(crate) instruction_category: InstructionCategory,
     pub(crate) branch_target_rva: Option<u64>,
     pub(crate) call_target_rva: Option<u64>,
@@ -56,9 +51,6 @@ pub(crate) struct BasicBlockEdgeAnalysis {
 #[derive(Debug)]
 struct DecodedInstruction {
     len: u8,
-    bytes: String,
-    mnemonic: String,
-    operands: String,
     instruction_category: InstructionCategory,
     flow_control: FlowControl,
     branch_target_rva: Option<u64>,
@@ -76,8 +68,6 @@ pub(crate) fn analyze_function_cfg(
     if !section_lookup.is_executable_rva(start_rva) {
         return Err(EngineError::InvalidAddress);
     }
-
-    let mut formatter = IntelFormatter::new();
 
     let mut queue = VecDeque::new();
     let mut enqueued = BTreeSet::new();
@@ -120,13 +110,8 @@ pub(crate) fn analyze_function_cfg(
                 break;
             }
 
-            let Some(decoded) = decode_instruction_at_rva(
-                bytes,
-                section_lookup,
-                image_base,
-                current_rva,
-                &mut formatter,
-            )?
+            let Some(decoded) =
+                decode_instruction_at_rva(bytes, section_lookup, image_base, current_rva)?
             else {
                 break;
             };
@@ -134,9 +119,6 @@ pub(crate) fn analyze_function_cfg(
             instructions.push(BasicBlockInstructionAnalysis {
                 start_rva: current_rva,
                 len: decoded.len,
-                bytes: decoded.bytes,
-                mnemonic: decoded.mnemonic,
-                operands: decoded.operands,
                 instruction_category: decoded.instruction_category,
                 branch_target_rva: decoded.branch_target_rva,
                 call_target_rva: decoded.call_target_rva,
@@ -230,7 +212,6 @@ fn decode_instruction_at_rva(
     section_lookup: &SectionLookup,
     image_base: u64,
     rva: u64,
-    formatter: &mut IntelFormatter,
 ) -> Result<Option<DecodedInstruction>, EngineError> {
     let Some(section) = section_lookup.section_for_rva(rva) else {
         return Err(EngineError::InvalidAddress);
@@ -267,12 +248,7 @@ fn decode_instruction_at_rva(
         return Ok(None);
     }
 
-    let instruction_len = usize::from(instruction.len());
-    let mut instruction_text = String::new();
-    formatter.format(&instruction, &mut instruction_text);
-    let (mnemonic, operands) = split_instruction_text(&instruction_text);
-    let instruction_category = categorize_instruction(&instruction, &mnemonic);
-    let bytes_text = bytes_to_hex(&decode_window[0..instruction_len]);
+    let instruction_category = categorize_instruction(&instruction);
 
     let branch_target_rva = match instruction.flow_control() {
         FlowControl::ConditionalBranch | FlowControl::UnconditionalBranch => {
@@ -336,9 +312,6 @@ fn decode_instruction_at_rva(
 
     Ok(Some(DecodedInstruction {
         len: instruction.len().min(u8::MAX as usize) as u8,
-        bytes: bytes_text,
-        mnemonic,
-        operands,
         instruction_category,
         flow_control: instruction.flow_control(),
         branch_target_rva,

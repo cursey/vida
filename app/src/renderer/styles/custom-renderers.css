@@ -10,20 +10,86 @@
   line-height: 1.25;
   padding: 10px 12px;
   overflow: hidden;
+  box-shadow: inset 0 1px 0 oklch(var(--background) / 0.22);
 }
 
 .graph-node-header {
   color: var(--text-muted);
   margin-bottom: 6px;
   white-space: nowrap;
+  border-bottom: 1px solid oklch(var(--foreground) / 0.08);
+  padding-bottom: 4px;
 }
 
 .graph-node-line {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  display: grid;
+  grid-template-columns: minmax(5ch, max-content) minmax(0, 1fr);
+  column-gap: 1ch;
+  align-items: baseline;
+  min-width: 0;
 }
 
 .graph-node-line + .graph-node-line {
   margin-top: 2px;
+}
+
+.graph-node-line .mnemonic {
+  font-weight: 600;
+  min-width: 5ch;
+}
+
+.graph-node-line .operands {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-secondary);
+}
+
+.graph-node-line .mnemonic-call {
+  color: var(--mnemonic-call);
+}
+
+.graph-node-line .mnemonic-return {
+  color: var(--mnemonic-return);
+}
+
+.graph-node-line .mnemonic-control_flow {
+  color: var(--mnemonic-control-flow);
+}
+
+.graph-node-line .mnemonic-system {
+  color: var(--mnemonic-system);
+}
+
+.graph-node-line .mnemonic-stack {
+  color: var(--mnemonic-stack);
+}
+
+.graph-node-line .mnemonic-string {
+  color: var(--mnemonic-string);
+}
+
+.graph-node-line .mnemonic-compare_test {
+  color: var(--mnemonic-compare-test);
+}
+
+.graph-node-line .mnemonic-arithmetic {
+  color: var(--mnemonic-arithmetic);
+}
+
+.graph-node-line .mnemonic-logic {
+  color: var(--mnemonic-logic);
+}
+
+.graph-node-line .mnemonic-bit_shift {
+  color: var(--mnemonic-bit-shift);
+}
+
+.graph-node-line .mnemonic-data_transfer {
+  color: var(--mnemonic-data-transfer);
+}
+
+.graph-node-line .mnemonic-other {
+  color: var(--mnemonic-other);
 }

@@ -80,20 +80,14 @@ fn collects_tls_callbacks_with_image_base_and_exec_filtering() {
 #[test]
 fn categorizes_flow_control_before_stack() {
     let call = decode_instruction(&[0xE8, 0x00, 0x00, 0x00, 0x00]);
-    assert_eq!(
-        categorize_instruction(&call, "callq"),
-        InstructionCategory::Call
-    );
+    assert_eq!(categorize_instruction(&call), InstructionCategory::Call);
 
     let ret = decode_instruction(&[0xC3]);
-    assert_eq!(
-        categorize_instruction(&ret, "retq"),
-        InstructionCategory::Return
-    );
+    assert_eq!(categorize_instruction(&ret), InstructionCategory::Return);
 
     let jmp = decode_instruction(&[0xEB, 0x00]);
     assert_eq!(
-        categorize_instruction(&jmp, "jmp"),
+        categorize_instruction(&jmp),
         InstructionCategory::ControlFlow
     );
 }
@@ -101,56 +95,71 @@ fn categorizes_flow_control_before_stack() {
 #[test]
 fn categorizes_system_stack_and_mnemonic_groups() {
     let int3 = decode_instruction(&[0xCC]);
-    assert_eq!(
-        categorize_instruction(&int3, "int3"),
-        InstructionCategory::System
-    );
+    assert_eq!(categorize_instruction(&int3), InstructionCategory::System);
 
     let push = decode_instruction(&[0x50]);
-    assert_eq!(
-        categorize_instruction(&push, "push"),
-        InstructionCategory::Stack
-    );
+    assert_eq!(categorize_instruction(&push), InstructionCategory::Stack);
 
     let movs = decode_instruction(&[0xA4]);
-    assert_eq!(
-        categorize_instruction(&movs, "movsb"),
-        InstructionCategory::String
-    );
+    assert_eq!(categorize_instruction(&movs), InstructionCategory::String);
 
     let cmp = decode_instruction(&[0x3B, 0xC0]);
     assert_eq!(
-        categorize_instruction(&cmp, "cmp"),
+        categorize_instruction(&cmp),
         InstructionCategory::CompareTest
     );
 
     let add = decode_instruction(&[0x01, 0xD8]);
     assert_eq!(
-        categorize_instruction(&add, "addq"),
+        categorize_instruction(&add),
         InstructionCategory::Arithmetic
     );
 
     let and = decode_instruction(&[0x21, 0xD8]);
-    assert_eq!(
-        categorize_instruction(&and, "and"),
-        InstructionCategory::Logic
-    );
+    assert_eq!(categorize_instruction(&and), InstructionCategory::Logic);
 
     let shr = decode_instruction(&[0xD1, 0xE8]);
-    assert_eq!(
-        categorize_instruction(&shr, "shr"),
-        InstructionCategory::BitShift
-    );
+    assert_eq!(categorize_instruction(&shr), InstructionCategory::BitShift);
 
     let mov = decode_instruction(&[0x89, 0xD8]);
     assert_eq!(
-        categorize_instruction(&mov, "mov"),
+        categorize_instruction(&mov),
         InstructionCategory::DataTransfer
     );
 
     let nop = decode_instruction(&[0x90]);
+    assert_eq!(categorize_instruction(&nop), InstructionCategory::Other);
+}
+
+#[test]
+fn categorizes_mnemonic_families_without_eager_instruction_text() {
+    let movzx = decode_instruction(&[0x0F, 0xB6, 0xC0]);
     assert_eq!(
-        categorize_instruction(&nop, "nop"),
-        InstructionCategory::Other
+        categorize_instruction(&movzx),
+        InstructionCategory::DataTransfer
+    );
+
+    let cmovne = decode_instruction(&[0x0F, 0x45, 0xC0]);
+    assert_eq!(
+        categorize_instruction(&cmovne),
+        InstructionCategory::DataTransfer
+    );
+
+    let setne = decode_instruction(&[0x0F, 0x95, 0xC0]);
+    assert_eq!(
+        categorize_instruction(&setne),
+        InstructionCategory::DataTransfer
+    );
+
+    let ucomisd = decode_instruction(&[0x66, 0x0F, 0x2E, 0xC0]);
+    assert_eq!(
+        categorize_instruction(&ucomisd),
+        InstructionCategory::CompareTest
+    );
+
+    let prefetchnta = decode_instruction(&[0x0F, 0x18, 0x00]);
+    assert_eq!(
+        categorize_instruction(&prefetchnta),
+        InstructionCategory::DataTransfer
     );
 }

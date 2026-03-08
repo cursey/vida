@@ -244,6 +244,14 @@ fn opens_module_lists_functions_and_disassembles() {
         "Expected non-empty disassembly"
     );
     for instruction in &disassembly_result.instructions {
+        assert!(
+            !instruction.bytes.is_empty(),
+            "lazy-rendered disassembly rows should include byte text"
+        );
+        assert!(
+            !instruction.mnemonic.is_empty(),
+            "lazy-rendered disassembly rows should include a mnemonic"
+        );
         let category = format!("{:?}", instruction.instruction_category);
         assert!(
             !category.is_empty(),
@@ -275,9 +283,20 @@ fn opens_module_lists_functions_and_disassembles() {
         "entry row should decode to an instruction"
     );
     assert!(
+        !row.bytes.is_empty(),
+        "linear rows should render bytes lazily"
+    );
+    assert!(
+        !row.mnemonic.is_empty(),
+        "linear rows should render a mnemonic lazily"
+    );
+    assert!(
         row.instruction_category.is_some(),
         "instruction rows should include instructionCategory"
     );
+    assert_eq!(row.address, disassembly_result.instructions[0].address);
+    assert_eq!(row.bytes, disassembly_result.instructions[0].bytes);
+    assert_eq!(row.mnemonic, disassembly_result.instructions[0].mnemonic);
 
     let graph_result = state
         .get_function_graph_by_va(FunctionGraphByVaParams {
@@ -321,16 +340,24 @@ fn opens_module_lists_functions_and_disassembles() {
 
     assert!(!linear_from_mid.instructions.is_empty());
 
-    let first_block = &graph_result.blocks[0];
+    let focus_block = graph_result
+        .blocks
+        .iter()
+        .find(|block| block.id == graph_result.focus_block_id)
+        .expect("graph result should include the focused block");
     assert!(
-        first_block.start_va.starts_with("0x"),
+        focus_block.start_va.starts_with("0x"),
         "Graph blocks should include a startVa label"
     );
-    let first_instruction = first_block
+    let first_instruction = focus_block
         .instructions
         .first()
         .expect("graph blocks should include instruction rows");
     assert!(!first_instruction.mnemonic.is_empty());
+    assert_eq!(
+        first_instruction.mnemonic,
+        disassembly_result.instructions[0].mnemonic
+    );
     assert!(matches!(
         state.get_function_graph_by_va(FunctionGraphByVaParams {
             module_id,

@@ -1,5 +1,45 @@
 # Work Log
 
+## 2026-03-08 - Restore Graph Instruction Listing Layout
+
+Summary:
+- Fixed graph-node instruction rows so mnemonics and operands render as separate listing columns instead of collapsing together.
+- Added graph-node CSS for mnemonic category coloring, operand spacing, and stronger header/listing structure inside Cytoscape HTML labels.
+- Added a renderer regression test that exercises the generated graph-node HTML directly.
+
+Validation commands executed:
+- `npm run test:renderer -- graph-panel`
+- `npm run test:renderer -- App.graph-view`
+- `npm run check`
+
+Changed files index:
+- See `docs/change_files.md` for the detailed file list for this work item.
+
+## 2026-03-08 - Optimize Engine Analysis with Lazy Instruction Rendering
+
+Summary:
+- Removed eager instruction text/byte rendering from the analysis cache so initial analysis keeps compact instruction metadata instead of fully formatted presentation strings.
+- Centralized lazy instruction rendering in a shared helper used by linear rows, linear disassembly, and function-graph views to keep warm-path reconstruction consistent.
+- Restored broader mnemonic-family categorization coverage without reintroducing eager full-instruction formatting during analysis.
+- Added regression coverage to ensure lazily rendered bytes and mnemonics stay populated across linear and graph APIs.
+
+Validation commands executed:
+- `cargo fmt --manifest-path engine/Cargo.toml`
+- `cargo check --manifest-path engine/Cargo.toml`
+- `cargo test --manifest-path engine/Cargo.toml`
+- `just test`
+- `cargo bench --manifest-path engine/Cargo.toml --bench analysis_bench -- engine/cold/module_open_and_analyze/minimal_with_pdb --baseline hybrid-full-2026-03-07`
+- `cargo bench --manifest-path engine/Cargo.toml --bench analysis_bench -- engine/warm/linear_rows/minimal_with_pdb --baseline hybrid-full-2026-03-07`
+- `cargo bench --manifest-path engine/Cargo.toml --bench analysis_bench -- engine/warm/function_graph_by_va/minimal_with_pdb --baseline hybrid-full-2026-03-07`
+
+Observed benchmark deltas:
+- `engine/cold/module_open_and_analyze/minimal_with_pdb`: improved to `[20.874 ms, 23.165 ms, 26.187 ms]` vs `hybrid-full-2026-03-07`
+- `engine/warm/linear_rows/minimal_with_pdb`: regressed to `[70.039 us, 71.349 us, 72.709 us]` vs `hybrid-full-2026-03-07`
+- `engine/warm/function_graph_by_va/minimal_with_pdb`: regressed to `[33.520 us, 33.558 us, 33.600 us]` vs `hybrid-full-2026-03-07`
+
+Changed files index:
+- See `docs/change_files.md` for the detailed file list for this work item.
+
 ## 2026-03-08 - Add Drag-and-Drop Workspace Import
 
 Summary:

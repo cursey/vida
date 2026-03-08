@@ -21,7 +21,7 @@ use crate::api::{
     ModuleMemoryOverviewResult, ModuleOpenParams, ModuleOpenResult, ModuleUnloadParams,
     ModuleUnloadResult, SectionInfo, XrefRecord, XrefsToVaParams, XrefsToVaResult,
 };
-use crate::disasm::{parse_hex_u64, to_hex};
+use crate::disasm::{parse_hex_u64, render_instruction, to_hex};
 use crate::error::EngineError;
 use crate::linear::{
     DATA_GROUP_SIZE, LINEAR_ROW_HEIGHT, MAX_LINEAR_PAGE_ROWS, find_row_by_rva,
@@ -372,11 +372,37 @@ impl EngineState {
             .cloned()
             .ok_or(EngineError::InvalidAddress)?;
 
+        let mut blocks = Vec::with_capacity(graph.blocks.len());
+        for block in &graph.blocks {
+            let mut instructions = Vec::with_capacity(block.instructions.len());
+            for cached_inst in &block.instructions {
+                let rendered = render_instruction(
+                    module.bytes.as_slice(),
+                    &module.section_lookup,
+                    image_base,
+                    cached_inst.start_rva,
+                    cached_inst.len,
+                    false,
+                )?;
+
+                instructions.push(crate::api::FunctionGraphInstruction {
+                    mnemonic: rendered.mnemonic,
+                    operands: rendered.operands,
+                    instruction_category: cached_inst.instruction_category,
+                });
+            }
+            blocks.push(crate::api::FunctionGraphBlock {
+                id: block.id.clone(),
+                start_va: to_hex(image_base + block.start_rva),
+                instructions,
+            });
+        }
+
         Ok(FunctionGraphByVaResult {
             function_start_va: to_hex(image_base + graph.function_start_rva),
             function_name: graph.function_name.clone(),
             focus_block_id,
-            blocks: graph.blocks.clone(),
+            blocks,
             edges: graph.edges.clone(),
         })
     }
@@ -417,11 +443,20 @@ impl EngineState {
             .skip(start_index)
             .take(max_instructions)
         {
+            let rendered = render_instruction(
+                module.bytes.as_slice(),
+                &module.section_lookup,
+                image_base,
+                row.start_rva,
+                row.len,
+                true,
+            )?;
+
             instructions.push(InstructionRow {
                 address: to_hex(image_base + row.start_rva),
-                bytes: row.bytes.clone(),
-                mnemonic: row.mnemonic.clone(),
-                operands: row.operands.clone(),
+                bytes: rendered.bytes.unwrap_or_default(),
+                mnemonic: rendered.mnemonic,
+                operands: rendered.operands,
                 instruction_category: row.instruction_category,
                 branch_target: row
                     .branch_target_rva

@@ -125,6 +125,9 @@ The repository's current recorded optimization checkpoints are:
 
 | Date | Fixture Set | Bench | Baseline | Current | Delta | Change driver |
 | --- | --- | --- | --- | --- | --- | --- |
+| 2026-03-08 | quick | `engine/cold/module_open_and_analyze/minimal_with_pdb` | `[70.520 ms, 71.511 ms, 72.486 ms]` | `[20.874 ms, 23.165 ms, 26.187 ms]` | `[-70.663%, -68.523%, -65.805%]` | `engine/src/analysis.rs`, `engine/src/cfg.rs`, `engine/src/disasm.rs`, `engine/src/linear.rs`, `engine/src/state.rs` |
+| 2026-03-08 | quick | `engine/warm/linear_rows/minimal_with_pdb` | `[26.086 us, 26.241 us, 26.403 us]` | `[70.039 us, 71.349 us, 72.709 us]` | `[+164.93%, +171.42%, +178.68%]` | `engine/src/disasm.rs`, `engine/src/linear.rs`, `engine/src/state.rs` |
+| 2026-03-08 | quick | `engine/warm/function_graph_by_va/minimal_with_pdb` | `[9.2074 us, 9.2482 us, 9.2859 us]` | `[33.520 us, 33.558 us, 33.600 us]` | `[+259.71%, +262.26%, +264.76%]` | `engine/src/disasm.rs`, `engine/src/state.rs` |
 | 2026-03-08 | quick | `engine/warm/module_memory_overview/minimal_with_pdb` | ~39.36 us | ~105.09 ns | ~-99.7% | `engine/src/api.rs`, `engine/src/state.rs`, `app/src/renderer/features/disassembly/memory-overview-bar.tsx` |
 | 2026-03-08 | quick | `engine/warm/xrefs_to_va/minimal_with_pdb` | n/a (new benchmark) | ~664.52 ns | n/a | `engine/src/cfg.rs`, `engine/src/analysis.rs`, `engine/src/state.rs`, `engine/benches/analysis_bench.rs` |
 | 2026-03-08 | quick | `engine/cold/module_open_and_analyze/minimal_with_pdb` | ~36.75 ms | ~34.48 ms | no significant change | `engine/src/state.rs` |
@@ -246,6 +249,45 @@ Change driver: same xref indexing work above, measured against the saved `hybrid
 Evidence: `hybrid-full-2026-03-07`; `engine/target/criterion/engine_cold_module_open_and_analyze/minimal_with_pdb/hybrid-full-2026-03-07/`; `engine/target/criterion/engine_cold_module_open_and_analyze/minimal_with_pdb/new/`; `engine/target/criterion/engine_cold_module_open_and_analyze/minimal_with_pdb/change/`
 Notes: this comparison is against an older saved baseline that predates several unrelated engine improvements, so it mainly confirms the cold path remains comfortably benchmarkable after adding xref indexing rather than isolating the xref pass alone
 
+## 2026-03-08 - Optimize Engine Analysis with Lazy Instruction Rendering
+
+Date: 2026-03-08
+Commit: workspace state after moving instruction presentation formatting to shared lazy-render helpers while keeping analysis caches compact.
+Commands:
+- `cargo bench --manifest-path engine/Cargo.toml --bench analysis_bench -- engine/cold/module_open_and_analyze/minimal_with_pdb --baseline hybrid-full-2026-03-07`
+- `cargo bench --manifest-path engine/Cargo.toml --bench analysis_bench -- engine/warm/linear_rows/minimal_with_pdb --baseline hybrid-full-2026-03-07`
+- `cargo bench --manifest-path engine/Cargo.toml --bench analysis_bench -- engine/warm/function_graph_by_va/minimal_with_pdb --baseline hybrid-full-2026-03-07`
+Fixture Set: `quick`
+Machine/Profile: Windows, Criterion release bench profile
+Criterion Artifacts:
+- `engine/target/criterion/engine_cold_module_open_and_analyze/minimal_with_pdb/{hybrid-full-2026-03-07,new,change}/`
+- `engine/target/criterion/engine_warm_linear_rows/minimal_with_pdb/{hybrid-full-2026-03-07,new,change}/`
+- `engine/target/criterion/engine_warm_function_graph_by_va/minimal_with_pdb/{hybrid-full-2026-03-07,new,change}/`
+
+Bench: `engine/cold/module_open_and_analyze/minimal_with_pdb`
+Baseline: `[70.520 ms, 71.511 ms, 72.486 ms]`
+Current: `[20.874 ms, 23.165 ms, 26.187 ms]`
+Delta: `[-70.663%, -68.523%, -65.805%]`
+Change driver: removed eager per-instruction byte/mnemonic/operand rendering from `engine/src/analysis.rs` and `engine/src/cfg.rs`, then reconstructed presentation text on demand via shared helpers in `engine/src/disasm.rs`, `engine/src/linear.rs`, and `engine/src/state.rs`
+Evidence: `engine/target/criterion/engine_cold_module_open_and_analyze/minimal_with_pdb/hybrid-full-2026-03-07/`; `engine/target/criterion/engine_cold_module_open_and_analyze/minimal_with_pdb/new/`; `engine/target/criterion/engine_cold_module_open_and_analyze/minimal_with_pdb/change/`
+Notes: cold analysis remains substantially faster than the saved pre-lazy-render baseline because the analysis pass now stores compact instruction metadata instead of eagerly formatted presentation strings
+
+Bench: `engine/warm/linear_rows/minimal_with_pdb`
+Baseline: `[26.086 us, 26.241 us, 26.403 us]`
+Current: `[70.039 us, 71.349 us, 72.709 us]`
+Delta: `[+164.93%, +171.42%, +178.68%]`
+Change driver: `engine/src/linear.rs` now formats instruction bytes and text lazily through the shared renderer when rows are materialized
+Evidence: `engine/target/criterion/engine_warm_linear_rows/minimal_with_pdb/hybrid-full-2026-03-07/`; `engine/target/criterion/engine_warm_linear_rows/minimal_with_pdb/new/`; `engine/target/criterion/engine_warm_linear_rows/minimal_with_pdb/change/`
+Notes: warm linear-row fetches are slower because formatting work moved from analysis time to view time, but the absolute cost remains on the order of tens of microseconds
+
+Bench: `engine/warm/function_graph_by_va/minimal_with_pdb`
+Baseline: `[9.2074 us, 9.2482 us, 9.2859 us]`
+Current: `[33.520 us, 33.558 us, 33.600 us]`
+Delta: `[+259.71%, +262.26%, +264.76%]`
+Change driver: `engine/src/state.rs` now reconstructs graph instruction mnemonics and operands on demand via the shared lazy renderer, while skipping unused byte rendering for graph blocks
+Evidence: `engine/target/criterion/engine_warm_function_graph_by_va/minimal_with_pdb/hybrid-full-2026-03-07/`; `engine/target/criterion/engine_warm_function_graph_by_va/minimal_with_pdb/new/`; `engine/target/criterion/engine_warm_function_graph_by_va/minimal_with_pdb/change/`
+Notes: graph materialization shows the same intentional warm-path tradeoff as linear rows, but avoiding unused byte formatting cuts a large share of the intermediate regression while keeping formatting consistency covered by engine integration tests
+
 ## Saved Baseline Checkpoints
 
 ### 2026-03-08 - `memory-overview-slices-baseline-2026-03-08`
@@ -306,3 +348,4 @@ Notes: this comparison is against an older saved baseline that predates several 
 | `engine/warm/function_graph_by_va` | `minimal_without_pdb` | `[9.3307 us, 9.4318 us, 9.5678 us]` | `engine/target/criterion/engine_warm_function_graph_by_va/minimal_without_pdb/hybrid-full-2026-03-07/` |
 | `engine/warm/linear_disassembly` | `minimal_with_pdb` | `[845.32 ns, 849.79 ns, 854.57 ns]` | `engine/target/criterion/engine_warm_linear_disassembly/minimal_with_pdb/hybrid-full-2026-03-07/` |
 | `engine/warm/linear_disassembly` | `minimal_without_pdb` | `[855.07 ns, 863.54 ns, 874.38 ns]` | `engine/target/criterion/engine_warm_linear_disassembly/minimal_without_pdb/hybrid-full-2026-03-07/` |
+

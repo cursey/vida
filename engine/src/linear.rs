@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::fmt::Write as FmtWrite;
 
 use crate::api::{InstructionCategory, LinearViewRow, XrefKind, XrefTargetKind};
-use crate::disasm::{bytes_to_hex, to_hex};
+use crate::disasm::{bytes_to_hex, render_instruction, to_hex};
 use crate::error::EngineError;
 use crate::pe_utils::SectionLookup;
 
@@ -21,9 +21,6 @@ pub(crate) struct InstructionXref {
 pub(crate) struct AnalyzedInstructionRow {
     pub(crate) start_rva: u64,
     pub(crate) len: u8,
-    pub(crate) bytes: String,
-    pub(crate) mnemonic: String,
-    pub(crate) operands: String,
     pub(crate) instruction_category: InstructionCategory,
     pub(crate) branch_target_rva: Option<u64>,
     pub(crate) call_target_rva: Option<u64>,
@@ -359,13 +356,21 @@ pub(crate) fn materialize_linear_row(
             let row = instructions.rows.get(row_offset as usize).ok_or_else(|| {
                 EngineError::Internal("Invalid instruction row offset".to_owned())
             })?;
+            let rendered = render_instruction(
+                bytes,
+                section_lookup,
+                image_base,
+                row.start_rva,
+                row.len,
+                true,
+            )?;
 
             Ok(LinearViewRow {
                 kind: "instruction",
                 address: to_hex(image_base + row.start_rva),
-                bytes: row.bytes.clone(),
-                mnemonic: row.mnemonic.clone(),
-                operands: row.operands.clone(),
+                bytes: rendered.bytes.unwrap_or_default(),
+                mnemonic: rendered.mnemonic,
+                operands: rendered.operands,
                 instruction_category: Some(row.instruction_category),
                 branch_target: row
                     .branch_target_rva
