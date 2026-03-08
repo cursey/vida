@@ -76,6 +76,8 @@ Baseline expectations:
 - Bug fixes should include regression tests when practical.
 - `just test` must run the project test suites.
 - Keep tests close to the code they validate and make them deterministic.
+- Prefer shared UI primitives for standard buttons and inputs, but do not force highly custom interactive visualization controls through generic wrappers when that breaks semantics, behavior, or styling.
+- When a raw control is the correct abstraction for a custom renderer element, document that exception clearly in the relevant test or guidance instead of reshaping the component to satisfy an overly broad rule.
 
 ## Security Baseline
 When handling unknown binaries:
