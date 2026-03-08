@@ -1,5 +1,5 @@
 import { vi } from "vitest";
-import type { DesktopApi } from "../../shared/protocol";
+import type { DesktopApi } from "../../shared";
 
 export function createMockDesktopApi(
   overrides: Partial<DesktopApi> = {},

@@ -4,15 +4,12 @@ import {
   AppPanelHeader,
   AppPanelMeta,
   AppPanelTitle,
-} from "@/components/app/panel";
+} from "@/shell/components/panel";
 import cytoscape from "cytoscape";
 // @ts-expect-error - library does not ship TypeScript declarations.
 import cytoscapeNodeHtmlLabel from "cytoscape-node-html-label";
 import { useEffect, useMemo, useRef } from "react";
-import type {
-  FunctionGraphInstruction,
-  MethodResult,
-} from "../../../shared/protocol";
+import type { FunctionGraphInstruction, MethodResult } from "../../../shared";
 
 type FunctionGraph = MethodResult["function.getGraphByVa"];
 

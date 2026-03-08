@@ -1,5 +1,5 @@
 import { App } from "@/App";
-import { createMockDesktopApi } from "@/test/mock-desktop-api";
+import { createMockDesktopApi } from "@/test-utils/mock-desktop-api";
 import {
   act,
   fireEvent,
@@ -9,30 +9,15 @@ import {
 } from "@testing-library/react";
 import React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { DesktopApi, LinearRow } from "../shared/protocol";
+import type { DesktopApi, LinearRow } from "../../shared";
 
 vi.mock("@/components/mode-toggle", () => ({
   ModeToggle: () => <div data-testid="mode-toggle" />,
 }));
 
-vi.mock("cytoscape", () => ({
-  default: vi.fn(() => ({
-    getElementById: vi.fn(() => ({
-      nonempty: () => true,
-    })),
-    zoom: vi.fn(),
-    center: vi.fn(),
-    destroy: vi.fn(),
-  })),
-}));
-
-vi.mock("cytoscape-node-html-label", () => ({
-  default: vi.fn(),
-}));
-
 let mockDesktopApi: DesktopApi;
 
-vi.mock("@/desktop-api", () => ({
+vi.mock("@/platform/desktop-api", () => ({
   get desktopApi() {
     return mockDesktopApi;
   },
@@ -43,20 +28,23 @@ function buildRows(): LinearRow[] {
     {
       kind: "instruction",
       address: "0x140001000",
-      bytes: "55",
-      mnemonic: "push",
-      operands: "rbp",
-      instructionCategory: "stack",
+      bytes: "48 8b 05 39 20 00 00",
+      mnemonic: "mov",
+      operands: "rax,[rip+0x2039]",
+      instructionCategory: "data_transfer",
     },
   ];
 }
 
-describe("App graph view", () => {
+describe("App xrefs modal", () => {
   let menuOpenHandler: (() => void) | null = null;
   let rectSpy: ReturnType<typeof vi.spyOn>;
 
   function installMockApi(
-    getFunctionGraphByVa: DesktopApi["getFunctionGraphByVa"],
+    getXrefsToVa: DesktopApi["getXrefsToVa"],
+    findLinearRowByVa: DesktopApi["findLinearRowByVa"] = vi
+      .fn()
+      .mockResolvedValue({ rowIndex: 0 }),
   ): DesktopApi {
     mockDesktopApi = createMockDesktopApi({
       pickExecutable: vi.fn().mockResolvedValue("C:\\fixtures\\sample.exe"),
@@ -92,7 +80,6 @@ describe("App graph view", () => {
           },
         ],
       }),
-      getFunctionGraphByVa,
       getLinearViewInfo: vi.fn().mockResolvedValue({
         rowCount: 1,
         minVa: "0x140001000",
@@ -103,9 +90,8 @@ describe("App graph view", () => {
       getLinearRows: vi.fn().mockResolvedValue({
         rows: buildRows(),
       }),
-      findLinearRowByVa: vi.fn().mockResolvedValue({
-        rowIndex: 0,
-      }),
+      findLinearRowByVa,
+      getXrefsToVa,
     });
 
     return mockDesktopApi;
@@ -132,32 +118,22 @@ describe("App graph view", () => {
     rectSpy.mockRestore();
   });
 
-  it("toggles between disassembly and graph view on space for function instructions", async () => {
-    const getFunctionGraphByVa = vi.fn().mockResolvedValue({
-      functionStartVa: "0x140001000",
-      functionName: "sub_140001000",
-      focusBlockId: "b_1000",
-      blocks: [
+  it("opens the xrefs modal for the highlighted VA and navigates on click", async () => {
+    const findLinearRowByVa = vi.fn().mockResolvedValue({ rowIndex: 0 });
+    const getXrefsToVa = vi.fn().mockResolvedValue({
+      targetVa: "0x140001000",
+      xrefs: [
         {
-          id: "b_1000",
-          startVa: "0x140001000",
-          instructions: [
-            {
-              mnemonic: "push",
-              operands: "rbp",
-              instructionCategory: "stack",
-            },
-            {
-              mnemonic: "mov",
-              operands: "rbp,rsp",
-              instructionCategory: "data_transfer",
-            },
-          ],
+          sourceVa: "0x140001234",
+          sourceFunctionStartVa: "0x140001200",
+          sourceFunctionName: "sub_140001200",
+          kind: "call",
+          targetVa: "0x140001000",
+          targetKind: "code",
         },
       ],
-      edges: [],
     });
-    installMockApi(getFunctionGraphByVa);
+    installMockApi(getXrefsToVa, findLinearRowByVa);
 
     render(<App />);
 
@@ -173,29 +149,36 @@ describe("App graph view", () => {
       expect(screen.getByText("Disassembly")).toBeInTheDocument();
     });
 
-    fireEvent.keyDown(window, { key: " ", code: "Space" });
+    fireEvent.keyDown(window, { key: "x", code: "KeyX" });
 
     await waitFor(() => {
-      expect(screen.getByText("Graph View")).toBeInTheDocument();
-      expect(getFunctionGraphByVa).toHaveBeenCalledWith({
+      expect(screen.getByText("Xrefs To 0x140001000")).toBeInTheDocument();
+      expect(screen.getByText("sub_140001200")).toBeInTheDocument();
+      expect(getXrefsToVa).toHaveBeenCalledWith({
         moduleId: "m1",
         va: "0x140001000",
       });
     });
 
-    fireEvent.keyDown(window, { key: " ", code: "Space" });
+    fireEvent.click(screen.getByRole("button", { name: /sub_140001200/i }));
 
     await waitFor(() => {
-      expect(screen.getByText("Disassembly")).toBeInTheDocument();
-      expect(screen.queryByText("Graph View")).not.toBeInTheDocument();
+      expect(findLinearRowByVa).toHaveBeenLastCalledWith({
+        moduleId: "m1",
+        va: "0x140001234",
+      });
+      expect(
+        screen.queryByText("Xrefs To 0x140001000"),
+      ).not.toBeInTheDocument();
     });
   });
 
-  it("shows a status message and stays in disassembly when the highlighted instruction is not in a discovered function", async () => {
-    const getFunctionGraphByVa = vi
-      .fn()
-      .mockRejectedValue(new Error("Invalid address (INVALID_ADDRESS)"));
-    installMockApi(getFunctionGraphByVa);
+  it("shows a transient status message when the highlighted VA has no xrefs", async () => {
+    const getXrefsToVa = vi.fn().mockResolvedValue({
+      targetVa: "0x140001000",
+      xrefs: [],
+    });
+    installMockApi(getXrefsToVa);
 
     render(<App />);
 
@@ -211,16 +194,15 @@ describe("App graph view", () => {
       expect(screen.getByText("Disassembly")).toBeInTheDocument();
     });
 
-    fireEvent.keyDown(window, { key: " ", code: "Space" });
+    fireEvent.keyDown(window, { key: "x", code: "KeyX" });
 
     await waitFor(() => {
       expect(
-        screen.getByText(
-          "The highlighted instruction does not belong to a discovered function.",
-        ),
+        screen.getByText("No xrefs are available for the highlighted VA."),
       ).toBeInTheDocument();
-      expect(screen.getByText("Disassembly")).toBeInTheDocument();
-      expect(screen.queryByText("Graph View")).not.toBeInTheDocument();
+      expect(
+        screen.queryByText("Xrefs To 0x140001000"),
+      ).not.toBeInTheDocument();
     });
   });
 });

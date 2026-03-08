@@ -1,5 +1,5 @@
+import { clamp } from "@/lib/number-utils";
 import type { MutableRefObject } from "react";
-import { clamp } from "./number-utils";
 
 type RebaseDirection = -1 | 0 | 1;
 

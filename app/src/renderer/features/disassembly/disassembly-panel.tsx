@@ -1,15 +1,15 @@
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import {
   AppPanel,
   AppPanelBody,
   AppPanelHeader,
   AppPanelMeta,
   AppPanelTitle,
-} from "@/components/app/panel";
-import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+} from "@/shell/components/panel";
 import type { VirtualItem } from "@tanstack/react-virtual";
 import type { CSSProperties, PointerEvent, RefObject } from "react";
-import type { InstructionCategory, LinearRow } from "../../../shared/protocol";
+import type { InstructionCategory, LinearRow } from "../../../shared";
 
 type DisassemblyColumn = "section" | "address" | "bytes" | "instruction";
 

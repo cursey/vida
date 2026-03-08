@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { toFunctionProvenanceCode } from "./App";
+import { toFunctionProvenanceCode } from "./function-provenance";
 
 describe("function provenance shortcodes", () => {
   it("maps known kinds to stable 3-letter codes", () => {

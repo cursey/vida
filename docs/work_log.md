@@ -1,5 +1,19 @@
 # Work Log
 
+## 2026-03-08 - Reorganize Renderer Shell, Platform, and Shared Contracts
+
+Summary:
+- Moved renderer shell concerns into dedicated `shell`, `platform`, and `test-utils` namespaces so window chrome, dialogs, status UI, Tauri API wiring, and app-shell tests no longer sit in generic root/component folders.
+- Split the shared TypeScript contract surface into `engine-contracts`, `desktop-contracts`, and a shared index, then updated renderer imports to consume the narrower shared modules instead of a single `protocol.ts`.
+- Reduced the root renderer entry to a thin `App` re-export and extracted shell-owned hooks for panel layout/resizing and window-chrome/menu wiring while keeping existing workspace behavior and tests intact.
+
+Validation commands executed:
+- `npm run check` (in `app`)
+- `just test`
+
+Changed files index:
+- See `docs/change_files.md` for the detailed file list for this work item.
+
 ## 2026-03-08 - Restore Graph Instruction Listing Layout
 
 Summary:

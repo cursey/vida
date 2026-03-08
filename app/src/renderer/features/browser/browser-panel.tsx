@@ -1,17 +1,17 @@
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 import {
   AppPanel,
   AppPanelBody,
   AppPanelHeader,
   AppPanelMeta,
   AppPanelTitle,
-} from "@/components/app/panel";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { cn } from "@/lib/utils";
+} from "@/shell/components/panel";
 import type { VirtualItem } from "@tanstack/react-virtual";
 import type { RefObject } from "react";
-import type { FunctionSeed } from "../../../shared/protocol";
+import type { FunctionSeed } from "../../../shared";
 import { toFunctionProvenanceCode } from "./function-provenance";
 
 type BrowserPanelProps = {

@@ -1,5 +1,5 @@
 import { App } from "@/App";
-import { createMockDesktopApi } from "@/test/mock-desktop-api";
+import { createMockDesktopApi } from "@/test-utils/mock-desktop-api";
 import {
   act,
   fireEvent,
@@ -9,7 +9,7 @@ import {
 } from "@testing-library/react";
 import React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { DesktopApi, FunctionSeed } from "../shared/protocol";
+import type { DesktopApi, FunctionSeed } from "../../shared";
 
 vi.mock("@/components/mode-toggle", () => ({
   ModeToggle: () => <div data-testid="mode-toggle" />,
@@ -17,7 +17,7 @@ vi.mock("@/components/mode-toggle", () => ({
 
 let mockDesktopApi: DesktopApi;
 
-vi.mock("@/desktop-api", () => ({
+vi.mock("@/platform/desktop-api", () => ({
   get desktopApi() {
     return mockDesktopApi;
   },

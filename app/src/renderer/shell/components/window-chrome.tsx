@@ -18,7 +18,7 @@ import type {
   TitleBarMenuModel,
   WindowChromeState,
   WindowControlAction,
-} from "../../shared/protocol";
+} from "../../../shared";
 
 type WindowChromeProps = {
   titleText: string;

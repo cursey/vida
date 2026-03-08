@@ -2,16 +2,12 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type {
   DesktopApi,
+  DragDropPayload,
   MethodResult,
   TitleBarMenuModel,
   WindowChromeState,
   WindowControlAction,
-} from "../shared/protocol";
-
-export type DragDropPayload = {
-  paths: string[];
-  position: { x: number; y: number };
-};
+} from "../../shared";
 
 const WINDOW_CHROME_STATE_CHANGED_EVENT = "app://window-chrome-state-changed";
 const TITLE_BAR_MENU_MODEL_CHANGED_EVENT = "app://title-bar-menu-model-changed";

@@ -1,5 +1,46 @@
 # Change Files
 
+## 2026-03-08 - Reorganize Renderer Shell, Platform, and Shared Contracts
+
+App:
+- `app/src/renderer/App.tsx`
+- `app/src/renderer/main.tsx`
+- `app/src/renderer/features/browser/browser-panel.tsx`
+- `app/src/renderer/features/browser/function-provenance.test.ts`
+- `app/src/renderer/features/disassembly/disassembly-panel.tsx`
+- `app/src/renderer/features/disassembly/memory-overview-bar.tsx`
+- `app/src/renderer/features/graph/graph-panel.tsx`
+- `app/src/renderer/lib/dom-utils.ts`
+- `app/src/renderer/lib/number-utils.ts`
+- `app/src/renderer/platform/desktop-api.ts`
+- `app/src/renderer/shell/App.tsx`
+- `app/src/renderer/shell/app.disassembly-window.test.tsx`
+- `app/src/renderer/shell/app.function-browser-window.test.tsx`
+- `app/src/renderer/shell/app.function-browser.test.tsx`
+- `app/src/renderer/shell/app.graph-view.test.tsx`
+- `app/src/renderer/shell/app.loading-modal.test.tsx`
+- `app/src/renderer/shell/app.window-chrome.test.tsx`
+- `app/src/renderer/shell/app.xrefs-modal.test.tsx`
+- `app/src/renderer/shell/components/app-dialogs.tsx`
+- `app/src/renderer/shell/components/panel.tsx`
+- `app/src/renderer/shell/components/status-bar.tsx`
+- `app/src/renderer/shell/components/theme-provider.tsx`
+- `app/src/renderer/shell/components/window-chrome.tsx`
+- `app/src/renderer/shell/hooks/use-panel-layout.ts`
+- `app/src/renderer/shell/hooks/use-shell-chrome.ts`
+- `app/src/renderer/shell/utils/deferred-edge-rebase.ts`
+- `app/src/renderer/test-utils/mock-desktop-api.ts`
+- `app/src/renderer/test-utils/setup.ts`
+- `app/src/shared/desktop-contracts.ts`
+- `app/src/shared/engine-contracts.ts`
+- `app/src/shared/index.ts`
+- `app/src/shared/protocol.ts`
+- `app/vitest.config.ts`
+
+Docs:
+- `docs/work_log.md`
+- `docs/change_files.md`
+
 ## 2026-03-08 - Restore Graph Instruction Listing Layout
 
 App:

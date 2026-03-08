@@ -1,10 +1,7 @@
-import { parseHexVa } from "@/features/shared/number-utils";
+import { parseHexVa } from "@/lib/number-utils";
 import { cn } from "@/lib/utils";
 import type { MouseEvent } from "react";
-import type {
-  MemoryOverviewSliceKind,
-  MethodResult,
-} from "../../../shared/protocol";
+import type { MemoryOverviewSliceKind, MethodResult } from "../../../shared";
 
 const BAR_VIEWBOX_WIDTH = 1000;
 const BAR_HEIGHT = 28;

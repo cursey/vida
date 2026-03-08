@@ -10,7 +10,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { type FormEvent, type RefObject, useRef } from "react";
-import type { XrefRecord } from "../../../shared/protocol";
+import type { XrefRecord } from "../../../shared";
 
 type GoToDialogProps = {
   isOpen: boolean;
