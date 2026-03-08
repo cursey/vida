@@ -1,5 +1,33 @@
 # Change Files
 
+## 2026-03-08 - Split Renderer Styles Into Scoped Modules
+
+App:
+- `app/src/renderer/App.disassembly-window.test.tsx`
+- `app/src/renderer/App.function-browser-window.test.tsx`
+- `app/src/renderer/App.function-browser.test.tsx`
+- `app/src/renderer/App.loading-modal.test.tsx`
+- `app/src/renderer/App.tsx`
+- `app/src/renderer/components/app/panel.tsx`
+- `app/src/renderer/components/mode-toggle.tsx`
+- `app/src/renderer/components/window-chrome.tsx`
+- `app/src/renderer/features/app/app-dialogs.tsx`
+- `app/src/renderer/features/app/status-bar.tsx`
+- `app/src/renderer/features/browser/browser-panel.tsx`
+- `app/src/renderer/features/disassembly/disassembly-panel.tsx`
+- `app/src/renderer/features/disassembly/memory-overview-bar.tsx`
+- `app/src/renderer/features/graph/graph-panel.tsx`
+- `app/src/renderer/styles.css`
+- `app/src/renderer/styles/base.css`
+- `app/src/renderer/styles/custom-renderers.css`
+- `app/src/renderer/styles/disassembly.css`
+- `app/src/renderer/styles/theme.css`
+- `app/src/renderer/styles/utilities.css`
+
+Docs:
+- `docs/work_log.md`
+- `docs/change_files.md`
+
 ## 2026-03-08 - Add Disassembly Xref Modal Shortcut and Navigation
 
 App:

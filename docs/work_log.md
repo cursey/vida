@@ -1,5 +1,19 @@
 # Work Log
 
+## 2026-03-08 - Split Renderer Styles Into Scoped Modules
+
+Summary:
+- Split the renderer stylesheet entrypoint into focused CSS modules for theme tokens, base rules, Tailwind-safe utilities, disassembly-specific rules, and custom renderer styling so `app/src/renderer/styles.css` no longer acts as a monolith.
+- Moved app chrome, panel shells, dialogs, status bar, mode toggle, and browser list presentation into Tailwind/shadcn-friendly component classes, backed by a shared `AppPanel` wrapper for consistent panel structure.
+- Replaced touched test selectors that depended on styling classes with stable `data-testid` hooks for browser virtualization, loading state, disassembly canvas bounds, and memory overview assertions.
+
+Validation commands executed:
+- `npm run test:renderer -- App.loading-modal.test.tsx App.function-browser.test.tsx App.function-browser-window.test.tsx App.disassembly-window.test.tsx App.window-chrome.test.tsx App.xrefs-modal.test.tsx App.graph-view.test.tsx` (in `app`)
+- `npm run check` (in `app`)
+
+Changed files index:
+- See `docs/change_files.md` for the detailed file list for this work item.
+
 ## 2026-03-08 - Add Disassembly Xref Modal Shortcut and Navigation
 
 Summary:

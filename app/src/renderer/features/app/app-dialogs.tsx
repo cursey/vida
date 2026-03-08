@@ -8,6 +8,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 import { type FormEvent, type RefObject, useRef } from "react";
 import type { XrefRecord } from "../../../shared/protocol";
 
@@ -20,23 +21,31 @@ export function LoadingDialog({ isLoading, loadingPath }: LoadingDialogProps) {
   return (
     <Dialog open={isLoading}>
       <DialogContent
-        className="loading-modal"
-        overlayClassName="loading-modal-overlay"
+        className="w-[min(460px,calc(100vw-32px))] gap-2 p-3.5 transition-none"
+        overlayClassName="animate-none transition-none"
         onEscapeKeyDown={(event) => event.preventDefault()}
         onInteractOutside={(event) => event.preventDefault()}
         onPointerDownOutside={(event) => event.preventDefault()}
       >
-        <DialogHeader className="loading-header">
-          <div aria-hidden="true" className="loading-spinner" />
-          <DialogTitle className="loading-title">Opening File</DialogTitle>
+        <DialogHeader className="flex-row items-center gap-2 space-y-0">
+          <div
+            aria-hidden="true"
+            className="size-4 shrink-0 rounded-full border-2 border-border border-t-primary animate-[loading-spin_700ms_linear_infinite]"
+            data-testid="loading-spinner"
+          />
+          <DialogTitle className="text-[13px] font-semibold">
+            Opening File
+          </DialogTitle>
         </DialogHeader>
-        <DialogHeader className="loading-copy">
-          <DialogDescription className="loading-description">
+        <DialogHeader className="block space-y-0">
+          <DialogDescription className="text-xs text-foreground/72">
             Reading the selected file and preparing the workspace. Analysis will
             continue in the background.
           </DialogDescription>
         </DialogHeader>
-        <code className="loading-path">{loadingPath}</code>
+        <code className="m-0 block overflow-hidden text-ellipsis whitespace-nowrap rounded-sm border border-input bg-secondary px-2 py-2 text-[11px] leading-[1.4] text-muted-foreground">
+          {loadingPath}
+        </code>
       </DialogContent>
     </Dialog>
   );
@@ -65,23 +74,26 @@ export function GoToDialog({
 }: GoToDialogProps) {
   return (
     <Dialog onOpenChange={onOpenChange} open={isOpen}>
-      <DialogContent className="go-to-modal">
+      <DialogContent className="w-[min(420px,calc(100vw-32px))] gap-2.5 p-3">
         <DialogHeader>
-          <DialogTitle className="go-to-title">Go To Address</DialogTitle>
+          <DialogTitle className="text-[13px] font-semibold">
+            Go To Address
+          </DialogTitle>
         </DialogHeader>
         <form
-          className="go-to-form"
+          className="flex flex-col gap-2.5"
           onSubmit={(event) => {
             onSubmit(event);
           }}
         >
           <Input
+            className="font-mono"
             ref={goToInputRef}
             value={goToInputValue}
             onChange={(event) => onGoToInputChange(event.target.value)}
             placeholder="0x140001000"
           />
-          <DialogFooter className="go-to-modal-actions">
+          <DialogFooter className="mt-0 justify-end gap-1.5 sm:space-x-0">
             <Button
               onClick={() => onOpenChange(false)}
               type="button"
@@ -122,7 +134,7 @@ export function XrefsDialog({
   return (
     <Dialog onOpenChange={onOpenChange} open={isOpen}>
       <DialogContent
-        className="xrefs-modal"
+        className="w-[min(560px,calc(100vw-32px))] gap-2.5 p-3"
         onOpenAutoFocus={(event) => {
           event.preventDefault();
           contentRef.current?.focus();
@@ -131,29 +143,48 @@ export function XrefsDialog({
         tabIndex={-1}
       >
         <DialogHeader>
-          <DialogTitle className="xrefs-title">Xrefs To {targetVa}</DialogTitle>
-          <DialogDescription className="xrefs-description">
+          <DialogTitle className="text-[13px] font-semibold">
+            Xrefs To {targetVa}
+          </DialogTitle>
+          <DialogDescription className="text-xs">
             Select an xref to jump to its source in Disassembly.
           </DialogDescription>
         </DialogHeader>
-        <ul className="xrefs-list">
+        <ul className="m-0 flex max-h-[min(52vh,420px)] list-none flex-col overflow-y-auto border-t border-input p-0">
           {xrefs.map((xref) => (
-            <li key={`${xref.sourceVa}-${xref.kind}-${xref.targetVa}`}>
+            <li
+              className="border-b border-input"
+              key={`${xref.sourceVa}-${xref.kind}-${xref.targetVa}`}
+            >
               <Button
-                className="xrefs-item"
+                className="block w-full min-w-0 justify-start rounded-none border-0 bg-transparent px-2 text-left text-foreground shadow-none transition-colors hover:bg-accent focus-visible:bg-accent"
                 disabled={isLoading}
                 onClick={() => onNavigateToXref(xref)}
                 size="sm"
                 type="button"
                 variant="ghost"
               >
-                <div className="xrefs-item-line">
-                  <code>{xref.sourceVa}</code>
-                  <span className="xrefs-function-name">
+                <div className="flex w-full min-w-0 items-center gap-2.5">
+                  <code className="shrink-0 text-[11px] text-muted-foreground">
+                    {xref.sourceVa}
+                  </code>
+                  <span className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap font-mono text-xs">
                     {xref.sourceFunctionName}
                   </span>
-                  <code>{xref.sourceFunctionStartVa}</code>
-                  <span className={`xrefs-kind kind-${xref.kind}`}>
+                  <code className="shrink-0 text-[11px] text-muted-foreground">
+                    {xref.sourceFunctionStartVa}
+                  </code>
+                  <span
+                    className={cn(
+                      "inline-flex h-[18px] min-w-[52px] shrink-0 items-center justify-center rounded-full border border-border bg-secondary px-[7px] text-[10px] lowercase leading-none text-foreground/72",
+                      xref.kind === "call" &&
+                        "border-[oklch(var(--chart-2)/0.45)] text-[oklch(var(--chart-2))]",
+                      (xref.kind === "jump" || xref.kind === "branch") &&
+                        "border-[oklch(var(--chart-3)/0.45)] text-[oklch(var(--chart-3))]",
+                      xref.kind === "data" &&
+                        "border-[oklch(var(--chart-5)/0.45)] text-[oklch(var(--chart-5))]",
+                    )}
+                  >
                     {xref.kind}
                   </span>
                 </div>
@@ -161,7 +192,7 @@ export function XrefsDialog({
             </li>
           ))}
         </ul>
-        <DialogFooter className="xrefs-modal-actions">
+        <DialogFooter className="mt-0 justify-end gap-1.5 sm:space-x-0">
           <Button
             onClick={() => onOpenChange(false)}
             type="button"

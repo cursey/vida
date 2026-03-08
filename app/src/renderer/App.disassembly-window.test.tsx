@@ -1,6 +1,12 @@
 import { App } from "@/App";
 import { createMockDesktopApi } from "@/test/mock-desktop-api";
-import { act, fireEvent, render, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DesktopApi, LinearRow, MethodResult } from "../shared/protocol";
@@ -119,10 +125,8 @@ describe("App disassembly window virtualization", () => {
   it("keeps the disassembly canvas bounded for very large row counts", async () => {
     const { container } = render(<App />);
 
-    expect(container.querySelector(".memory-overview-bar")).not.toBeNull();
-    expect(
-      container.querySelector(".memory-overview-empty-overlay"),
-    ).not.toBeNull();
+    expect(screen.getByTestId("memory-overview-empty-bar")).toBeInTheDocument();
+    expect(screen.getByTestId("memory-overview-empty")).toBeInTheDocument();
 
     await waitFor(() => {
       expect(menuOpenHandler).toBeTypeOf("function");
@@ -136,8 +140,7 @@ describe("App disassembly window virtualization", () => {
       expect(container.textContent).toContain(`${HUGE_ROW_COUNT} rows`);
     });
 
-    const canvas = container.querySelector(".disassembly-rows-canvas");
-    expect(canvas).not.toBeNull();
+    const canvas = screen.getByTestId("disassembly-canvas");
     expect(canvas).toHaveAttribute(
       "style",
       `height: ${EXPECTED_WINDOW_HEIGHT}px;`,
@@ -145,25 +148,16 @@ describe("App disassembly window virtualization", () => {
     expect(HUGE_ROW_COUNT * ROW_HEIGHT).toBeGreaterThan(EXPECTED_WINDOW_HEIGHT);
 
     await waitFor(() => {
-      expect(
-        container.querySelector(".memory-overview-empty-overlay"),
-      ).toBeNull();
-      expect(
-        container.querySelector(".memory-overview-slice.kind-explored"),
-      ).not.toBeNull();
-      expect(
-        container.querySelector(".memory-overview-slice.kind-ro"),
-      ).not.toBeNull();
-      expect(
-        container.querySelector(".memory-overview-slice.kind-unmapped"),
-      ).not.toBeNull();
+      expect(screen.queryByTestId("memory-overview-empty")).toBeNull();
+      expect(screen.getByTestId("memory-slice-explored")).toBeInTheDocument();
+      expect(screen.getByTestId("memory-slice-ro")).toBeInTheDocument();
+      expect(screen.getByTestId("memory-slice-unmapped")).toBeInTheDocument();
     });
 
-    const overviewBar = container.querySelector(".memory-overview-bar");
-    expect(overviewBar).not.toBeNull();
+    const overviewBar = screen.getByTestId("memory-overview-button");
 
     const initialLookupCount = findLinearRowByVaMock.mock.calls.length;
-    fireEvent.click(overviewBar as Element, { clientX: 480, clientY: 14 });
+    fireEvent.click(overviewBar, { clientX: 480, clientY: 14 });
 
     await waitFor(() => {
       expect(findLinearRowByVaMock).toHaveBeenCalledTimes(
@@ -177,8 +171,8 @@ describe("App disassembly window virtualization", () => {
 
     await waitFor(() => {
       expect(
-        container.querySelector(".memory-overview-viewport"),
-      ).not.toBeNull();
+        screen.getByTestId("memory-overview-viewport"),
+      ).toBeInTheDocument();
     });
   });
 
@@ -256,9 +250,7 @@ describe("App disassembly window virtualization", () => {
     });
 
     expect(mockDesktopApi.getModuleMemoryOverview).toHaveBeenCalledTimes(1);
-    expect(
-      container.querySelector(".memory-overview-empty-overlay"),
-    ).not.toBeNull();
+    expect(screen.getByTestId("memory-overview-empty")).toBeInTheDocument();
 
     await act(async () => {
       resolveReadyOverview?.(buildMemoryOverview());
@@ -266,9 +258,7 @@ describe("App disassembly window virtualization", () => {
     });
 
     await waitFor(() => {
-      expect(
-        container.querySelector(".memory-overview-empty-overlay"),
-      ).toBeNull();
+      expect(screen.queryByTestId("memory-overview-empty")).toBeNull();
     });
   });
 
@@ -353,10 +343,8 @@ describe("App disassembly window virtualization", () => {
 
     expect(listFunctionsMock).not.toHaveBeenCalled();
     expect(getModuleMemoryOverviewMock).not.toHaveBeenCalled();
-    expect(container.querySelectorAll(".function-row")).toHaveLength(0);
-    expect(
-      container.querySelector(".memory-overview-empty-overlay"),
-    ).not.toBeNull();
+    expect(screen.queryAllByTestId("function-row")).toHaveLength(0);
+    expect(screen.getByTestId("memory-overview-empty")).toBeInTheDocument();
 
     await act(async () => {
       resolveStatus?.({

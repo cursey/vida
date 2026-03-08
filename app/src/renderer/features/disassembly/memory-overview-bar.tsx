@@ -33,9 +33,14 @@ export function MemoryOverviewBar({
     overview.slices.length === 0
   ) {
     return (
-      <div className="memory-overview-shell" aria-label="Memory overview">
+      <div
+        className="memory-overview-shell"
+        aria-label="Memory overview"
+        data-testid="memory-overview"
+      >
         <svg
           className="memory-overview-bar"
+          data-testid="memory-overview-empty-bar"
           viewBox={`0 0 ${BAR_VIEWBOX_WIDTH} ${BAR_HEIGHT}`}
           preserveAspectRatio="none"
           role="img"
@@ -59,6 +64,7 @@ export function MemoryOverviewBar({
           </defs>
           <rect
             className="memory-overview-empty-overlay"
+            data-testid="memory-overview-empty"
             x={0}
             y={0}
             width={BAR_VIEWBOX_WIDTH}
@@ -100,10 +106,15 @@ export function MemoryOverviewBar({
         );
 
   return (
-    <div className="memory-overview-shell" aria-label="Memory overview">
+    <div
+      className="memory-overview-shell"
+      aria-label="Memory overview"
+      data-testid="memory-overview"
+    >
       <button
         type="button"
         className="memory-overview-button"
+        data-testid="memory-overview-button"
         onClick={handleClick}
         aria-label="Jump disassembly using memory overview"
       >
@@ -124,6 +135,7 @@ export function MemoryOverviewBar({
               <rect
                 key={`${slice}-${sliceStartVa.toString(16)}`}
                 className={sliceClassName(slice)}
+                data-testid={`memory-slice-${slice}`}
                 x={x}
                 y={0}
                 width={width}
@@ -143,6 +155,7 @@ export function MemoryOverviewBar({
           {markerX !== null ? (
             <line
               className="memory-overview-viewport"
+              data-testid="memory-overview-viewport"
               x1={markerX}
               x2={markerX}
               y1={1}

@@ -133,8 +133,7 @@ describe("App function browser bounded window virtualization", () => {
       );
     });
 
-    const functionList = container.querySelector(".function-list");
-    expect(functionList).not.toBeNull();
+    const functionList = screen.getByTestId("function-list");
     expect(functionList).toHaveAttribute(
       "style",
       `height: ${FUNCTION_WINDOW_SIZE * FUNCTION_ROW_HEIGHT}px;`,
@@ -165,9 +164,7 @@ describe("App function browser bounded window virtualization", () => {
     const expectedCanvasHeight =
       Math.min(expectedCount, FUNCTION_WINDOW_SIZE) * FUNCTION_ROW_HEIGHT;
 
-    const browserPanel = container.querySelector(".panel-nav");
-    expect(browserPanel).not.toBeNull();
-    fireEvent.pointerDown(browserPanel as Element);
+    fireEvent.pointerDown(screen.getByTestId("browser-panel"));
     fireEvent.keyDown(window, { key: "f", ctrlKey: true });
 
     fireEvent.change(await screen.findByLabelText("Search functions"), {
@@ -188,8 +185,7 @@ describe("App function browser bounded window virtualization", () => {
       { timeout: 15000 },
     );
 
-    const functionList = container.querySelector(".function-list");
-    expect(functionList).not.toBeNull();
+    const functionList = screen.getByTestId("function-list");
     expect(functionList).toHaveAttribute(
       "style",
       `height: ${expectedCanvasHeight}px;`,

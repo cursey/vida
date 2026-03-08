@@ -1,3 +1,10 @@
+import {
+  AppPanel,
+  AppPanelBody,
+  AppPanelHeader,
+  AppPanelMeta,
+  AppPanelTitle,
+} from "@/components/app/panel";
 import cytoscape from "cytoscape";
 // @ts-expect-error - library does not ship TypeScript declarations.
 import cytoscapeNodeHtmlLabel from "cytoscape-node-html-label";
@@ -251,27 +258,30 @@ export function GraphPanel({
   }, [elements, graph, rootIds]);
 
   return (
-    <section
-      className={`panel panel-graph ${isActive ? "is-panel-active" : ""}`}
+    <AppPanel
+      className="col-[3]"
+      isActive={isActive}
       onPointerDown={onActivate}
       onWheel={onActivate}
       onFocusCapture={onActivate}
     >
-      <header className="panel-header">
-        <h2>Graph View</h2>
-        <span>
+      <AppPanelHeader>
+        <AppPanelTitle>Graph View</AppPanelTitle>
+        <AppPanelMeta>
           {moduleId && graph
             ? `${graph.functionName} @ ${graph.functionStartVa}`
             : ""}
-        </span>
-      </header>
-      <div className="panel-body graph-panel-body">
+        </AppPanelMeta>
+      </AppPanelHeader>
+      <AppPanelBody className="graph-panel-body">
         {graph ? (
           <div className="graph-canvas" ref={graphRef} />
         ) : (
-          <div className="graph-empty-state">No graph loaded.</div>
+          <div className="flex h-full select-none items-center justify-center text-xs text-muted-foreground">
+            No graph loaded.
+          </div>
         )}
-      </div>
-    </section>
+      </AppPanelBody>
+    </AppPanel>
   );
 }

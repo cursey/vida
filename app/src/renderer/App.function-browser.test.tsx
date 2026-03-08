@@ -142,13 +142,15 @@ describe("App function browser virtualization", () => {
 
     await waitFor(() => {
       expect(container.textContent).toContain(`${FUNCTION_COUNT} functions`);
-      expect(container.querySelector(".function-list")).toHaveAttribute(
+      expect(screen.getByTestId("function-list")).toHaveAttribute(
         "style",
         `height: ${FUNCTION_COUNT * 26}px;`,
       );
     });
 
-    const renderedRowCount = container.querySelectorAll(".function-row").length;
+    const renderedRowCount = container.querySelectorAll(
+      '[data-testid="function-row"]',
+    ).length;
     expect(renderedRowCount).toBeLessThan(FUNCTION_COUNT);
 
     await act(async () => {
@@ -177,9 +179,7 @@ describe("App function browser virtualization", () => {
       expect(container.textContent).toContain(`${FUNCTION_COUNT} functions`);
     });
 
-    const browserPanel = container.querySelector(".panel-nav");
-    expect(browserPanel).not.toBeNull();
-    fireEvent.pointerDown(browserPanel as Element);
+    fireEvent.pointerDown(screen.getByTestId("browser-panel"));
     fireEvent.keyDown(window, { key: "f", ctrlKey: true });
 
     const searchInput = await screen.findByLabelText("Search functions");
@@ -197,7 +197,7 @@ describe("App function browser virtualization", () => {
       expect(container.textContent).toContain(
         `${expectedCount}/${FUNCTION_COUNT} functions`,
       );
-      expect(container.querySelector(".function-list")).toHaveAttribute(
+      expect(screen.getByTestId("function-list")).toHaveAttribute(
         "style",
         `height: ${expectedCount * 26}px;`,
       );
@@ -207,7 +207,7 @@ describe("App function browser virtualization", () => {
 
     await waitFor(() => {
       expect(container.textContent).toContain(`0/${FUNCTION_COUNT} functions`);
-      expect(container.querySelector(".function-list")).toHaveAttribute(
+      expect(screen.getByTestId("function-list")).toHaveAttribute(
         "style",
         "height: 0px;",
       );
@@ -217,7 +217,7 @@ describe("App function browser virtualization", () => {
 
     await waitFor(() => {
       expect(container.textContent).toContain(`${FUNCTION_COUNT} functions`);
-      expect(container.querySelector(".function-list")).toHaveAttribute(
+      expect(screen.getByTestId("function-list")).toHaveAttribute(
         "style",
         `height: ${FUNCTION_COUNT * 26}px;`,
       );

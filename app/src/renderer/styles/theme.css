@@ -1,0 +1,154 @@
+@layer base {
+  :root {
+    color-scheme: light;
+    --background: 1 0 0;
+    --foreground: 0.141 0.005 285.823;
+    --card: 1 0 0;
+    --card-foreground: 0.141 0.005 285.823;
+    --popover: 1 0 0;
+    --popover-foreground: 0.141 0.005 285.823;
+    --primary: 0.21 0.006 285.885;
+    --primary-foreground: 0.985 0 0;
+    --secondary: 0.967 0.001 286.375;
+    --secondary-foreground: 0.21 0.006 285.885;
+    --muted: 0.967 0.001 286.375;
+    --muted-foreground: 0.552 0.016 285.938;
+    --accent: 0.967 0.001 286.375;
+    --accent-foreground: 0.21 0.006 285.885;
+    --destructive: 0.577 0.245 27.325;
+    --destructive-foreground: 0.985 0 0;
+    --border: 0.92 0.004 286.32;
+    --input: 0.92 0.004 286.32;
+    --ring: 0.705 0.015 286.067;
+    --chart-1: 0.646 0.222 41.116;
+    --chart-2: 0.6 0.118 184.704;
+    --chart-3: 0.398 0.07 227.392;
+    --chart-4: 0.828 0.189 84.429;
+    --chart-5: 0.769 0.188 70.08;
+    --sidebar: 0.985 0 0;
+    --sidebar-foreground: 0.141 0.005 285.823;
+    --sidebar-primary: 0.21 0.006 285.885;
+    --sidebar-primary-foreground: 0.985 0 0;
+    --sidebar-accent: 0.967 0.001 286.375;
+    --sidebar-accent-foreground: 0.21 0.006 285.885;
+    --sidebar-border: 0.92 0.004 286.32;
+    --sidebar-ring: 0.705 0.015 286.067;
+    --radius: 0.5rem;
+    --font-sans: "Geist Sans", "Inter", "Segoe UI", sans-serif;
+    --font-mono: "Geist Mono", "JetBrains Mono", "Cascadia Mono", monospace;
+    --bg-canvas: oklch(var(--background));
+    --bg-panel: oklch(var(--card));
+    --bg-panel-header: oklch(var(--secondary));
+    --line-strong: oklch(var(--border));
+    --line-soft: oklch(var(--input));
+    --line-width-strong: 1px;
+    --line-width-soft: 1px;
+    --text-primary: oklch(var(--foreground));
+    --text-secondary: oklch(var(--foreground) / 0.72);
+    --text-muted: oklch(var(--muted-foreground));
+    --scrollbar-size: 10px;
+    --scrollbar-track: oklch(var(--secondary));
+    --scrollbar-thumb: oklch(var(--muted-foreground) / 0.45);
+    --scrollbar-thumb-hover: oklch(var(--foreground) / 0.55);
+    --scrollbar-thumb-active: oklch(var(--foreground) / 0.68);
+    --danger-bg: oklch(var(--destructive) / 0.15);
+    --danger-line: oklch(var(--destructive));
+    --danger-text: oklch(var(--destructive-foreground));
+    --memory-shell-bg: linear-gradient(
+      180deg,
+      oklch(var(--secondary) / 0.28),
+      oklch(var(--background))
+    );
+    --memory-frame: oklch(var(--foreground) / 0.12);
+    --memory-rail: oklch(var(--foreground) / 0.06);
+    --memory-unmapped: oklch(var(--foreground) / 0.18);
+    --memory-ro: hsl(205 16% 72%);
+    --memory-rw: hsl(28 62% 58%);
+    --memory-unexplored: hsl(188 48% 46%);
+    --memory-rwx: hsl(6 72% 56%);
+    --memory-explored: hsl(156 64% 42%);
+    --memory-viewport: hsl(42 100% 48%);
+    --memory-shadow: 0 0 0 1px oklch(var(--background) / 0.22) inset;
+    --mnemonic-call: hsl(222 60% 43%);
+    --mnemonic-return: hsl(32 75% 42%);
+    --mnemonic-control-flow: hsl(262 42% 45%);
+    --mnemonic-system: hsl(0 57% 43%);
+    --mnemonic-stack: hsl(167 40% 38%);
+    --mnemonic-string: hsl(145 42% 36%);
+    --mnemonic-compare-test: hsl(43 62% 38%);
+    --mnemonic-arithmetic: hsl(34 76% 42%);
+    --mnemonic-logic: hsl(195 58% 40%);
+    --mnemonic-bit-shift: hsl(271 46% 45%);
+    --mnemonic-data-transfer: hsl(220 52% 43%);
+    --mnemonic-other: oklch(var(--foreground));
+    --space-1: 4px;
+    --space-2: 6px;
+    --space-3: 8px;
+    --space-4: 10px;
+    --cell-height: 24px;
+    --splitter-width: 0px;
+  }
+
+  .dark {
+    color-scheme: dark;
+    --background: 0.141 0.005 285.823;
+    --foreground: 0.985 0 0;
+    --card: 0.21 0.006 285.885;
+    --card-foreground: 0.985 0 0;
+    --popover: 0.21 0.006 285.885;
+    --popover-foreground: 0.985 0 0;
+    --primary: 0.92 0.004 286.32;
+    --primary-foreground: 0.21 0.006 285.885;
+    --secondary: 0.274 0.006 286.033;
+    --secondary-foreground: 0.985 0 0;
+    --muted: 0.274 0.006 286.033;
+    --muted-foreground: 0.705 0.015 286.067;
+    --accent: 0.274 0.006 286.033;
+    --accent-foreground: 0.985 0 0;
+    --destructive: 0.704 0.191 22.216;
+    --destructive-foreground: 0.985 0 0;
+    --border: 1 0 0 / 10%;
+    --input: 1 0 0 / 15%;
+    --ring: 0.552 0.016 285.938;
+    --chart-1: 0.488 0.243 264.376;
+    --chart-2: 0.696 0.17 162.48;
+    --chart-3: 0.769 0.188 70.08;
+    --chart-4: 0.627 0.265 303.9;
+    --chart-5: 0.645 0.246 16.439;
+    --sidebar: 0.21 0.006 285.885;
+    --sidebar-foreground: 0.985 0 0;
+    --sidebar-primary: 0.488 0.243 264.376;
+    --sidebar-primary-foreground: 0.985 0 0;
+    --sidebar-accent: 0.274 0.006 286.033;
+    --sidebar-accent-foreground: 0.985 0 0;
+    --sidebar-border: 1 0 0 / 10%;
+    --sidebar-ring: 0.552 0.016 285.938;
+    --mnemonic-call: hsl(214 95% 78%);
+    --mnemonic-return: hsl(33 95% 74%);
+    --mnemonic-control-flow: hsl(265 80% 80%);
+    --mnemonic-system: hsl(0 78% 76%);
+    --mnemonic-stack: hsl(172 72% 71%);
+    --mnemonic-string: hsl(143 66% 72%);
+    --mnemonic-compare-test: hsl(46 93% 78%);
+    --mnemonic-arithmetic: hsl(38 96% 71%);
+    --mnemonic-logic: hsl(190 90% 72%);
+    --mnemonic-bit-shift: hsl(274 86% 82%);
+    --mnemonic-data-transfer: hsl(217 91% 80%);
+    --mnemonic-other: oklch(var(--foreground));
+    --memory-shell-bg: linear-gradient(
+      180deg,
+      oklch(var(--secondary) / 0.32),
+      oklch(var(--background) / 0.88)
+    );
+    --memory-frame: oklch(var(--foreground) / 0.18);
+    --memory-rail: oklch(var(--foreground) / 0.08);
+    --memory-unmapped: oklch(var(--foreground) / 0.16);
+    --memory-ro: hsl(207 14% 34%);
+    --memory-rw: hsl(26 70% 47%);
+    --memory-unexplored: hsl(192 66% 42%);
+    --memory-rwx: hsl(10 72% 50%);
+    --memory-explored: hsl(152 72% 40%);
+    --memory-viewport: hsl(44 100% 62%);
+    --memory-shadow: 0 0 0 1px oklch(var(--background) / 0.18) inset;
+  }
+}

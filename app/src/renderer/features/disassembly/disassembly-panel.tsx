@@ -1,3 +1,10 @@
+import {
+  AppPanel,
+  AppPanelBody,
+  AppPanelHeader,
+  AppPanelMeta,
+  AppPanelTitle,
+} from "@/components/app/panel";
 import { Button } from "@/components/ui/button";
 import type { VirtualItem } from "@tanstack/react-virtual";
 import type { CSSProperties, PointerEvent, RefObject } from "react";
@@ -48,20 +55,26 @@ export function DisassemblyPanel({
   onNavigateToVa,
 }: DisassemblyPanelProps) {
   return (
-    <section
-      className={`panel panel-disassembly ${isActive ? "is-panel-active" : ""}`}
+    <AppPanel
+      className="panel-disassembly col-[3]"
+      isActive={isActive}
       onPointerDown={onActivate}
       onWheel={onActivate}
       onFocusCapture={onActivate}
     >
-      <header className="panel-header">
-        <h2>Disassembly</h2>
-        <span>{moduleId && isReady ? `${rowCount} rows` : ""}</span>
-      </header>
+      <AppPanelHeader>
+        <AppPanelTitle>Disassembly</AppPanelTitle>
+        <AppPanelMeta>
+          {moduleId && isReady ? `${rowCount} rows` : ""}
+        </AppPanelMeta>
+      </AppPanelHeader>
       {!isReady && moduleId ? (
-        <div className="panel-body panel-placeholder-panel" />
+        <AppPanelBody className="flex items-center justify-center p-0" />
       ) : (
-        <div className="panel-body table-body" style={disassemblyColumnStyle}>
+        <AppPanelBody
+          className="panel-body table-body"
+          style={disassemblyColumnStyle}
+        >
           <div className="disassembly-columns-header">
             <div className="column-header-cell">
               <span>Section</span>
@@ -117,6 +130,7 @@ export function DisassemblyPanel({
           <div className="disassembly-scroll-region" ref={disassemblyScrollRef}>
             <div
               className="disassembly-rows-canvas"
+              data-testid="disassembly-canvas"
               style={{ height: `${disassemblyListTotalSize}px` }}
             >
               {virtualItems.map((virtualRow) => {
@@ -212,8 +226,8 @@ export function DisassemblyPanel({
               })}
             </div>
           </div>
-        </div>
+        </AppPanelBody>
       )}
-    </section>
+    </AppPanel>
   );
 }

@@ -68,7 +68,7 @@ describe("App loading modal", () => {
         ),
       ).toBeInTheDocument();
       expect(screen.getByText("C:\\fixtures\\sample.exe")).toBeInTheDocument();
-      expect(document.querySelector(".loading-spinner")).not.toBeNull();
+      expect(screen.getByTestId("loading-spinner")).toBeInTheDocument();
     });
 
     await act(async () => {

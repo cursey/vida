@@ -42,7 +42,7 @@ function renderMenuItem(
         <DropdownMenuSubTrigger disabled={!item.enabled}>
           {item.label}
         </DropdownMenuSubTrigger>
-        <DropdownMenuSubContent className="titlebar-menu-content app-no-drag">
+        <DropdownMenuSubContent className="app-no-drag min-w-[210px] border-[oklch(var(--foreground)/0.14)]">
           {item.items.map((child, childIndex) =>
             renderMenuItem(
               child,
@@ -82,9 +82,9 @@ export function WindowChrome({
   onInvokeMenuAction,
 }: WindowChromeProps) {
   return (
-    <header className="window-chrome">
+    <header className="-mx-2 mt-[-8px] flex h-[34px] min-h-[34px] items-stretch overflow-hidden border-0 border-b border-border bg-secondary">
       <div
-        className="window-chrome-drag app-drag"
+        className="app-drag flex min-w-0 flex-1 items-center gap-2.5 pr-1.5"
         data-tauri-drag-region
         onDoubleClick={(event) => {
           if ((event.target as HTMLElement).closest(".app-no-drag")) {
@@ -93,27 +93,30 @@ export function WindowChrome({
           onWindowControl("toggleMaximize");
         }}
       >
-        <div className="window-chrome-left">
+        <div className="flex min-w-0 items-center gap-0 self-stretch">
           <span
             aria-label="ViDA Pro"
-            className="window-chrome-app-label"
+            className="relative inline-flex select-none items-center self-stretch whitespace-nowrap border-r border-input bg-card px-2.5 text-[11px] font-bold text-muted-foreground"
             data-tauri-drag-region
           >
-            <span className="window-chrome-app-glyph">V</span>
-            <span aria-hidden="true" className="window-chrome-app-dot">
+            <span className="relative z-[1]">V</span>
+            <span
+              aria-hidden="true"
+              className="relative z-0 -mx-[0.1em] ml-[-0.02em] inline-block translate-x-[-0.09em] translate-y-[0.01em] leading-none text-[hsl(188_100%_78%_/_0.95)] [text-shadow:0_0_4px_hsl(188_100%_82%_/_0.95),0_0_9px_hsl(194_100%_76%_/_0.8),0_0_14px_hsl(202_100%_72%_/_0.55)]"
+            >
               .
             </span>
-            <span className="window-chrome-app-glyph">ıDA Pro</span>
+            <span className="relative z-[1]">ıDA Pro</span>
           </span>
           <nav
             aria-label="Application menu"
-            className="window-chrome-menubar app-no-drag"
+            className="app-no-drag flex items-center gap-px self-stretch pl-1.5"
           >
             {menuModel.menus.map((menu) => (
               <DropdownMenu key={menu.id}>
                 <DropdownMenuTrigger asChild>
                   <Button
-                    className="titlebar-menu-trigger app-no-drag focus-visible:border-transparent focus-visible:ring-0"
+                    className="app-no-drag h-6 min-w-[42px] rounded-sm border-0 bg-transparent px-2.5 text-xs font-medium text-muted-foreground shadow-none hover:bg-transparent hover:text-foreground focus-visible:border-transparent focus-visible:ring-0 data-[state=open]:bg-transparent"
                     size="sm"
                     type="button"
                     variant="ghost"
@@ -123,7 +126,7 @@ export function WindowChrome({
                 </DropdownMenuTrigger>
                 <DropdownMenuContent
                   align="start"
-                  className="titlebar-menu-content app-no-drag"
+                  className="app-no-drag min-w-[210px] border-[oklch(var(--foreground)/0.14)]"
                 >
                   {menu.items.map((item, index) =>
                     renderMenuItem(
@@ -137,14 +140,17 @@ export function WindowChrome({
             ))}
           </nav>
         </div>
-        <div className="window-chrome-title" data-tauri-drag-region>
+        <div
+          className="flex-1 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-center text-xs text-foreground/72"
+          data-tauri-drag-region
+        >
           {titleText}
         </div>
       </div>
-      <div className="window-chrome-controls app-no-drag">
+      <div className="app-no-drag flex items-center border-l border-input">
         <Button
           aria-label="Minimize window"
-          className="titlebar-control-button app-no-drag"
+          className="app-no-drag h-8 w-11 rounded-none border-0 text-muted-foreground shadow-none hover:text-foreground"
           onClick={() => onWindowControl("minimize")}
           size="icon"
           type="button"
@@ -156,7 +162,7 @@ export function WindowChrome({
           aria-label={
             windowState.isMaximized ? "Restore window" : "Maximize window"
           }
-          className="titlebar-control-button app-no-drag"
+          className="app-no-drag h-8 w-11 rounded-none border-0 text-muted-foreground shadow-none hover:text-foreground"
           onClick={() => onWindowControl("toggleMaximize")}
           size="icon"
           type="button"
@@ -166,7 +172,7 @@ export function WindowChrome({
         </Button>
         <Button
           aria-label="Close window"
-          className="titlebar-control-button titlebar-control-close app-no-drag"
+          className="app-no-drag h-8 w-11 rounded-none border-0 text-muted-foreground shadow-none hover:bg-destructive/90 hover:text-destructive-foreground"
           onClick={() => onWindowControl("close")}
           size="icon"
           type="button"

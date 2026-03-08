@@ -1610,7 +1610,10 @@ export function App() {
 
   return (
     <div
-      className={cn("shell", (isResizing || isColumnResizing) && "is-resizing")}
+      className={cn(
+        "flex h-screen min-h-0 flex-col gap-0 overflow-hidden p-2",
+        (isResizing || isColumnResizing) && "cursor-col-resize select-none",
+      )}
     >
       {windowChromeState.useCustomChrome ? (
         <WindowChrome
@@ -1621,14 +1624,26 @@ export function App() {
           windowState={windowChromeState}
         />
       ) : null}
-      {errorText ? <div className="error-banner">{errorText}</div> : null}
+      {errorText ? (
+        <div className="rounded-md border border-destructive bg-destructive/15 px-2.5 py-2 text-[13px] text-destructive-foreground">
+          {errorText}
+        </div>
+      ) : null}
       <MemoryOverviewBar
         overview={memoryOverview}
         markerVa={visibleViewportMarkerVa}
         onNavigate={handleMemoryOverviewNavigate}
       />
 
-      <main className="layout" ref={layoutRef} style={layoutStyle}>
+      <main
+        className="-mx-2 grid flex-1 min-h-0 overflow-hidden"
+        ref={layoutRef}
+        style={{
+          ...layoutStyle,
+          gridTemplateColumns:
+            "var(--left-panel-width, 268px) var(--splitter-width) minmax(420px, 1fr)",
+        }}
+      >
         <BrowserPanel
           isActive={activePanel === "browser"}
           moduleId={moduleId}
@@ -1654,7 +1669,7 @@ export function App() {
         />
 
         <div
-          className="splitter splitter-left"
+          className="col-[2] z-[2] mx-[-4px] min-h-0 min-w-2 w-2 justify-self-center border-0 bg-transparent cursor-col-resize"
           role="separator"
           aria-label="Resize browser panel"
           aria-orientation="vertical"

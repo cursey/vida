@@ -1,3 +1,11 @@
+import {
+  AppPanel,
+  AppPanelBody,
+  AppPanelHeader,
+  AppPanelMeta,
+  AppPanelTitle,
+} from "@/components/app/panel";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -50,26 +58,32 @@ export function BrowserPanel({
   onActivate,
 }: BrowserPanelProps) {
   return (
-    <section
-      className={`panel panel-nav ${isActive ? "is-panel-active" : ""}`}
+    <AppPanel
+      className="col-[1]"
+      data-testid="browser-panel"
+      isActive={isActive}
       onPointerDown={onActivate}
       onWheel={onActivate}
       onFocusCapture={onActivate}
     >
-      <header className="panel-header">
-        <h2>Browser</h2>
-        <span>
+      <AppPanelHeader>
+        <AppPanelTitle>Browser</AppPanelTitle>
+        <AppPanelMeta>
           {moduleId && showFunctionCount
             ? appliedFunctionSearchQuery
               ? `${functionCount}/${totalFunctionCount} functions`
               : `${totalFunctionCount} functions`
             : ""}
-        </span>
-      </header>
-      <div className="panel-body">
-        <div className="function-scroll-region" ref={functionScrollRef}>
+        </AppPanelMeta>
+      </AppPanelHeader>
+      <AppPanelBody className="flex flex-col overflow-hidden p-0">
+        <div
+          className="flex-1 min-h-0 overflow-auto overflow-x-hidden overscroll-contain"
+          ref={functionScrollRef}
+        >
           <ul
-            className="function-list"
+            className="relative m-0 min-h-full list-none p-0"
+            data-testid="function-list"
             style={{ height: `${functionListTotalSize}px` }}
           >
             {functionVirtualItems.map((virtualRow) => {
@@ -84,29 +98,48 @@ export function BrowserPanel({
               }
               return (
                 <li
-                  className="function-row"
+                  className="absolute left-0 top-0 h-[26px] w-full pb-[2px]"
+                  data-testid="function-row"
                   key={`${func.kind}-${func.start}-${sourceFunctionIndex}`}
                   style={{ transform: `translateY(${virtualRow.start}px)` }}
                 >
                   <Button
                     className={cn(
-                      "function-link",
-                      func.start === goToAddress && "is-active",
+                      "grid h-6 w-full grid-cols-[minmax(34px,max-content)_1fr_auto] justify-start gap-1 rounded-none border-0 px-1.5 text-left text-xs font-normal text-foreground shadow-none",
+                      "hover:bg-accent hover:text-foreground",
+                      func.start === goToAddress &&
+                        "bg-primary/15 shadow-[inset_2px_0_0_oklch(var(--primary))] hover:bg-primary/15",
                     )}
                     variant="ghost"
                     type="button"
                     onClick={() => void onNavigateToVa(func.start)}
                   >
-                    <span
+                    <Badge
                       className={cn(
-                        "function-meta",
-                        `function-meta-${func.kind}`,
+                        "h-3 self-center justify-self-start rounded-full border px-1.5 text-[9px] font-medium lowercase leading-none tracking-[0.01em] shadow-none",
+                        func.kind === "entry" &&
+                          "border-[oklch(var(--chart-3)/0.45)] bg-[oklch(var(--chart-3)/0.14)] text-[oklch(var(--chart-3))]",
+                        func.kind === "export" &&
+                          "border-[oklch(var(--chart-2)/0.45)] bg-[oklch(var(--chart-2)/0.14)] text-[oklch(var(--chart-2))]",
+                        func.kind === "tls" &&
+                          "border-[oklch(var(--chart-1)/0.45)] bg-[oklch(var(--chart-1)/0.14)] text-[oklch(var(--chart-1))]",
+                        func.kind === "exception" &&
+                          "border-[oklch(var(--chart-5)/0.45)] bg-[oklch(var(--chart-5)/0.14)] text-[oklch(var(--chart-5))]",
+                        func.kind === "pdb" &&
+                          "border-[oklch(var(--chart-4)/0.45)] bg-[oklch(var(--chart-4)/0.14)] text-[oklch(var(--chart-4))]",
+                        func.kind === "call" &&
+                          "border-[oklch(var(--chart-2)/0.45)] bg-[oklch(var(--chart-2)/0.14)] text-[oklch(var(--chart-2))]",
                       )}
+                      variant="outline"
                     >
                       {toFunctionProvenanceCode(func.kind)}
+                    </Badge>
+                    <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap font-mono">
+                      {func.name}
                     </span>
-                    <span className="function-name">{func.name}</span>
-                    <code>{func.start}</code>
+                    <code className="text-[11px] text-muted-foreground">
+                      {func.start}
+                    </code>
                   </Button>
                 </li>
               );
@@ -114,12 +147,12 @@ export function BrowserPanel({
           </ul>
         </div>
         {isBrowserSearchVisible ? (
-          <div className="browser-search">
+          <div className="border-t border-input p-1.5">
             <Input
               ref={browserSearchInputRef}
               aria-label="Search functions"
               autoComplete="off"
-              className="browser-search-input"
+              className="h-6 rounded-none px-2 text-xs"
               disabled={!moduleId || !showFunctionCount}
               onChange={(event) =>
                 onFunctionSearchQueryChange(event.target.value)
@@ -131,7 +164,7 @@ export function BrowserPanel({
             />
           </div>
         ) : null}
-      </div>
-    </section>
+      </AppPanelBody>
+    </AppPanel>
   );
 }
