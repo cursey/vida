@@ -19,11 +19,7 @@ use engine::{
     },
 };
 use serde::{Deserialize, Serialize};
-use tauri::{
-    AppHandle, Emitter, Manager, State, WebviewWindow, Window, WindowEvent,
-    async_runtime::spawn_blocking,
-    menu::{MenuBuilder, MenuItem, SubmenuBuilder},
-};
+use tauri::{AppHandle, Emitter, Manager, State, WebviewWindow, async_runtime::spawn_blocking};
 use tauri_plugin_dialog::DialogExt;
 
 const MAX_RECENT_EXECUTABLES: usize = 10;
@@ -33,7 +29,6 @@ const TITLE_BAR_MENU_MODEL_CHANGED_EVENT: &str = "app://title-bar-menu-model-cha
 const MENU_OPEN_EXECUTABLE_EVENT: &str = "app://menu-open-executable";
 const MENU_OPEN_RECENT_EXECUTABLE_EVENT: &str = "app://menu-open-recent-executable";
 const MENU_UNLOAD_MODULE_EVENT: &str = "app://menu-unload-module";
-const FILE_MENU_ID: &str = "file";
 const FILE_OPEN_COMMAND_ID: &str = "file.open";
 const FILE_OPEN_RECENT_COMMAND_PREFIX: &str = "file.openRecent.";
 const FILE_UNLOAD_COMMAND_ID: &str = "file.unload";
@@ -329,25 +324,6 @@ fn main() {
 
             Ok(())
         })
-        .on_menu_event(|app, event| {
-            if let Some(window) = app.get_webview_window("main") {
-                let state = app.state::<AppState>();
-                if let Err(error) = handle_menu_action(app, &window, &state, event.id().as_ref()) {
-                    eprintln!("Failed to handle menu event: {error}");
-                }
-            }
-        })
-        .on_window_event(|window, event| {
-            if matches!(
-                event,
-                WindowEvent::Focused(_)
-                    | WindowEvent::Resized(_)
-                    | WindowEvent::Moved(_)
-                    | WindowEvent::ScaleFactorChanged { .. }
-            ) {
-                let _ = emit_window_chrome_state(window);
-            }
-        })
         .invoke_handler(tauri::generate_handler![
             pick_executable,
             add_recent_executable,
@@ -412,27 +388,11 @@ fn handle_menu_action(
     Ok(())
 }
 
-fn emit_window_chrome_state(window: &Window) -> Result<(), String> {
-    let state = window_chrome_state(window)?;
-    window
-        .emit(WINDOW_CHROME_STATE_CHANGED_EVENT, state)
-        .map_err(|error| error.to_string())
-}
-
 fn emit_webview_window_chrome_state(window: &WebviewWindow) -> Result<(), String> {
     let state = webview_window_chrome_state(window)?;
     window
         .emit(WINDOW_CHROME_STATE_CHANGED_EVENT, state)
         .map_err(|error| error.to_string())
-}
-
-fn window_chrome_state(window: &Window) -> Result<WindowChromeState, String> {
-    Ok(WindowChromeState {
-        use_custom_chrome: true,
-        platform: "win32".to_string(),
-        is_maximized: window.is_maximized().map_err(|error| error.to_string())?,
-        is_focused: window.is_focused().map_err(|error| error.to_string())?,
-    })
 }
 
 fn webview_window_chrome_state(window: &WebviewWindow) -> Result<WindowChromeState, String> {
@@ -490,8 +450,7 @@ fn refresh_menu(app: &AppHandle, state: &AppState) -> Result<(), String> {
         .map_err(|error| error.to_string())?
         .clone();
 
-    let (menu, menu_model, recent_commands) = build_menu(app, &recent)?;
-    app.set_menu(menu).map_err(|error| error.to_string())?;
+    let (menu_model, recent_commands) = build_menu_model(&recent);
 
     *state.menu_model.lock().map_err(|error| error.to_string())? = menu_model.clone();
     *state
@@ -508,72 +467,16 @@ fn refresh_menu(app: &AppHandle, state: &AppState) -> Result<(), String> {
     Ok(())
 }
 
-fn build_menu(
-    app: &AppHandle,
-    recent: &[String],
-) -> Result<
-    (
-        tauri::menu::Menu<tauri::Wry>,
-        TitleBarMenuModel,
-        HashMap<String, String>,
-    ),
-    String,
-> {
-    let open_item = MenuItem::with_id(
-        app,
-        FILE_OPEN_COMMAND_ID,
-        "Open...",
-        true,
-        Some("CmdOrCtrl+O"),
-    )
-    .map_err(|error| error.to_string())?;
-    let unload_item = MenuItem::with_id(app, FILE_UNLOAD_COMMAND_ID, "Unload", true, None::<&str>)
-        .map_err(|error| error.to_string())?;
-    let quit_item = MenuItem::with_id(
-        app,
-        FILE_CLOSE_OR_QUIT_COMMAND_ID,
-        "Quit",
-        true,
-        Some("Alt+F4"),
-    )
-    .map_err(|error| error.to_string())?;
-
+fn build_menu_model(recent: &[String]) -> (TitleBarMenuModel, HashMap<String, String>) {
     let mut recent_commands = HashMap::new();
-    let mut recent_submenu_builder = SubmenuBuilder::with_id(app, "file.openRecent", "Open Recent");
     for (index, path) in recent.iter().enumerate() {
         let command_id = format!("{FILE_OPEN_RECENT_COMMAND_PREFIX}{index}");
         recent_commands.insert(command_id.clone(), path.clone());
-        let item = MenuItem::with_id(app, command_id, path, true, None::<&str>)
-            .map_err(|error| error.to_string())?;
-        recent_submenu_builder = recent_submenu_builder.item(&item);
     }
-
-    if recent.is_empty() {
-        let disabled = MenuItem::new(app, "No Recent Files", false, None::<&str>)
-            .map_err(|error| error.to_string())?;
-        recent_submenu_builder = recent_submenu_builder.item(&disabled);
-    }
-
-    let recent_submenu = recent_submenu_builder
-        .build()
-        .map_err(|error| error.to_string())?;
-    let file_submenu = SubmenuBuilder::with_id(app, FILE_MENU_ID, "File")
-        .item(&open_item)
-        .item(&recent_submenu)
-        .item(&unload_item)
-        .separator()
-        .item(&quit_item)
-        .build()
-        .map_err(|error| error.to_string())?;
-
-    let menu = MenuBuilder::new(app)
-        .item(&file_submenu)
-        .build()
-        .map_err(|error| error.to_string())?;
 
     let menu_model = TitleBarMenuModel {
         menus: vec![TitleBarMenu {
-            id: FILE_MENU_ID.to_string(),
+            id: "file".to_string(),
             label: "File".to_string(),
             items: vec![
                 TitleBarMenuItem::Item {
@@ -604,7 +507,7 @@ fn build_menu(
         }],
     };
 
-    Ok((menu, menu_model, recent_commands))
+    (menu_model, recent_commands)
 }
 
 fn build_recent_menu_model(recent: &[String]) -> Vec<TitleBarMenuItem> {

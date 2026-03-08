@@ -1,5 +1,14 @@
 # Change Files
 
+## 2026-03-08 - Remove Native Menu Updates From Custom Chrome App
+
+App:
+- `app/src-tauri/src/main.rs`
+
+Docs:
+- `docs/work_log.md`
+- `docs/change_files.md`
+
 ## 2026-03-08 - Remove Embedded Engine Status Badge and Ping
 
 App:

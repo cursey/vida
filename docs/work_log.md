@@ -1,5 +1,19 @@
 # Work Log
 
+## 2026-03-08 - Remove Native Menu Updates From Custom Chrome App
+
+Summary:
+- Removed native Tauri menu registration and runtime `app.set_menu(...)` calls from the Windows host after crash dumps showed the file-load failure was happening in `muda` menu painting and subclass callbacks.
+- Kept the custom title-bar menu model and recent-file command mapping so the renderer-owned chrome menu continues to provide `Open`, `Open Recent`, `Unload`, and `Quit` without relying on native menu state.
+
+Validation commands executed:
+- `cargo fmt --manifest-path "app/src-tauri/Cargo.toml"`
+- `cargo test --manifest-path "app/src-tauri/Cargo.toml"`
+- `just app-test`
+
+Changed files index:
+- See `docs/change_files.md` for the detailed file list for this work item.
+
 ## 2026-03-08 - Remove Embedded Engine Status Badge and Ping
 
 Summary:
