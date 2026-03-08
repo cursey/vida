@@ -12,8 +12,9 @@ use engine::{
         FunctionListParams, FunctionListResult, LinearDisassemblyParams, LinearDisassemblyResult,
         LinearFindRowByVaParams, LinearFindRowByVaResult, LinearRowsParams, LinearRowsResult,
         LinearViewInfoParams, LinearViewInfoResult, ModuleAnalysisStatusParams,
-        ModuleAnalysisStatusResult, ModuleInfoParams, ModuleInfoResult, ModuleOpenParams,
-        ModuleOpenResult, ModuleUnloadParams, ModuleUnloadResult,
+        ModuleAnalysisStatusResult, ModuleInfoParams, ModuleInfoResult, ModuleMemoryOverviewParams,
+        ModuleMemoryOverviewResult, ModuleOpenParams, ModuleOpenResult, ModuleUnloadParams,
+        ModuleUnloadResult,
     },
 };
 use serde::{Deserialize, Serialize};
@@ -232,6 +233,18 @@ async fn get_module_info(
 }
 
 #[tauri::command]
+async fn get_module_memory_overview(
+    state: State<'_, AppState>,
+    module_id: String,
+) -> Result<ModuleMemoryOverviewResult, String> {
+    let engine = Arc::clone(&state.engine);
+    run_engine(engine, move |engine| {
+        engine.get_module_memory_overview(ModuleMemoryOverviewParams { module_id })
+    })
+    .await
+}
+
+#[tauri::command]
 async fn list_functions(
     state: State<'_, AppState>,
     module_id: String,
@@ -352,6 +365,7 @@ fn main() {
             unload_module,
             get_module_analysis_status,
             get_module_info,
+            get_module_memory_overview,
             list_functions,
             get_function_graph_by_va,
             disassemble_linear,

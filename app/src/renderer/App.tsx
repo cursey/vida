@@ -4,6 +4,7 @@ import { GoToDialog, LoadingDialog } from "@/features/app/app-dialogs";
 import { AppStatusBar } from "@/features/app/status-bar";
 import { BrowserPanel } from "@/features/browser/browser-panel";
 import { DisassemblyPanel } from "@/features/disassembly/disassembly-panel";
+import { MemoryOverviewBar } from "@/features/disassembly/memory-overview-bar";
 import { GraphPanel } from "@/features/graph/graph-panel";
 import {
   resetDeferredEdgeRebaseState,
@@ -85,6 +86,9 @@ export function App() {
   const [goToAddress, setGoToAddress] = useState<string>("");
   const [functions, setFunctions] = useState<FunctionSeed[]>([]);
   const [sections, setSections] = useState<SectionInfo[]>([]);
+  const [memoryOverview, setMemoryOverview] = useState<
+    MethodResult["module.getMemoryOverview"] | null
+  >(null);
   const [windowChromeState, setWindowChromeState] = useState<WindowChromeState>(
     {
       useCustomChrome: true,
@@ -310,6 +314,7 @@ export function App() {
     setModuleId("");
     setEntryVa("");
     setSections([]);
+    setMemoryOverview(null);
     setFunctions([]);
     setAnalysisStatus(null);
     resetDeferredEdgeRebaseState({
@@ -834,6 +839,29 @@ export function App() {
     return pageRows[index % PAGE_SIZE];
   }, []);
 
+  const visibleViewportMarkerVa = useMemo(() => {
+    if (!memoryOverview) {
+      return null;
+    }
+
+    if (virtualItems.length > 0) {
+      const startVa = parseHexVa(readRow(visibleStart)?.address ?? "");
+      const endVa = parseHexVa(readRow(visibleEnd)?.address ?? "");
+      if (startVa !== null && endVa !== null) {
+        return Math.floor((startVa + endVa) / 2);
+      }
+    }
+
+    return parseHexVa(goToAddress);
+  }, [
+    goToAddress,
+    memoryOverview,
+    readRow,
+    virtualItems.length,
+    visibleEnd,
+    visibleStart,
+  ]);
+
   const toggleGraphViewForSelection = useCallback(async () => {
     if (!moduleId || activePanel !== "disassembly") {
       return;
@@ -1015,7 +1043,10 @@ export function App() {
         preferredNavigationVaRef.current ||
         listed.functions[0]?.start ||
         fallbackVa;
-      const viewInfo = await desktopApi.getLinearViewInfo(currentModuleId);
+      const [viewInfo, overview] = await Promise.all([
+        desktopApi.getLinearViewInfo(currentModuleId),
+        desktopApi.getModuleMemoryOverview(currentModuleId),
+      ]);
       if (
         generation !== asyncGenerationRef.current ||
         currentModuleId !== activeModuleIdRef.current
@@ -1036,6 +1067,7 @@ export function App() {
 
       setFunctions(listed.functions);
       resetFunctionBrowserViewport();
+      setMemoryOverview(overview);
       setLinearInfo(viewInfo);
       setGoToAddress(targetVa);
       setSelectedRowIndex(null);
@@ -1164,12 +1196,21 @@ export function App() {
         return;
       }
 
+      const overview = await desktopApi.getModuleMemoryOverview(
+        opened.moduleId,
+      );
+      if (generation !== asyncGenerationRef.current) {
+        await desktopApi.unloadModule(opened.moduleId).catch(() => {});
+        return;
+      }
+
       preferredNavigationVaRef.current = opened.entryVa;
       activeModuleIdRef.current = opened.moduleId;
       setModulePath(chosenPath);
       setModuleId(opened.moduleId);
       setEntryVa(opened.entryVa);
       setSections(info.sections);
+      setMemoryOverview(overview);
       setGoToAddress(opened.entryVa);
       setAnalysisStatus({
         state: "queued",
@@ -1466,6 +1507,10 @@ export function App() {
         />
       ) : null}
       {errorText ? <div className="error-banner">{errorText}</div> : null}
+      <MemoryOverviewBar
+        overview={memoryOverview}
+        markerVa={visibleViewportMarkerVa}
+      />
 
       <main className="layout" ref={layoutRef} style={layoutStyle}>
         <BrowserPanel

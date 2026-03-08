@@ -25,6 +25,7 @@ export type EngineMethod =
   | "module.unload"
   | "module.getAnalysisStatus"
   | "module.info"
+  | "module.getMemoryOverview"
   | "function.list"
   | "function.getGraphByVa"
   | "function.disassembleLinear"
@@ -42,6 +43,9 @@ export type MethodParams = {
     moduleId: string;
   };
   "module.info": ModuleInfoParams;
+  "module.getMemoryOverview": {
+    moduleId: string;
+  };
   "function.list": FunctionListParams;
   "function.getGraphByVa": FunctionGraphByVaParams;
   "function.disassembleLinear": LinearDisassemblyParams;
@@ -78,6 +82,16 @@ export type SectionInfo = {
   endVa: HexAddress;
   rawOffset: number;
   rawSize: number;
+};
+
+export type MemoryOverviewRegion = {
+  startVa: HexAddress;
+  endVa: HexAddress;
+  mapped: boolean;
+  readable: boolean;
+  writable: boolean;
+  executable: boolean;
+  discoveredInstruction: boolean;
 };
 
 export type ModuleAnalysisStatus = {
@@ -178,6 +192,11 @@ export type MethodResult = {
     imports: ImportInfo[];
     exports: ExportInfo[];
   };
+  "module.getMemoryOverview": {
+    startVa: HexAddress;
+    endVa: HexAddress;
+    regions: MemoryOverviewRegion[];
+  };
   "function.list": {
     functions: FunctionSeed[];
   };
@@ -267,6 +286,9 @@ export type DesktopApi = {
     moduleId: string,
   ) => Promise<MethodResult["module.getAnalysisStatus"]>;
   getModuleInfo: (moduleId: string) => Promise<MethodResult["module.info"]>;
+  getModuleMemoryOverview: (
+    moduleId: string,
+  ) => Promise<MethodResult["module.getMemoryOverview"]>;
   listFunctions: (moduleId: string) => Promise<MethodResult["function.list"]>;
   getFunctionGraphByVa: (
     payload: MethodParams["function.getGraphByVa"],

@@ -6,8 +6,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use engine::api::{
     FunctionGraphByVaParams, FunctionListParams, LinearDisassemblyParams, LinearFindRowByVaParams,
-    LinearRowsParams, LinearViewInfoParams, ModuleAnalysisStatusParams, ModuleOpenParams,
-    ModuleUnloadParams,
+    LinearRowsParams, LinearViewInfoParams, ModuleAnalysisStatusParams, ModuleMemoryOverviewParams,
+    ModuleOpenParams, ModuleUnloadParams,
 };
 use engine::{EngineError, EngineState, fixture_path};
 
@@ -53,6 +53,48 @@ fn opens_module_lists_functions_and_disassembles() {
 
     let ready_status = wait_for_analysis_ready(&mut state, &module_id);
     assert_eq!(ready_status.state, "ready");
+
+    let memory_overview = state
+        .get_module_memory_overview(ModuleMemoryOverviewParams {
+            module_id: module_id.clone(),
+        })
+        .expect("memory overview should load");
+
+    assert!(!memory_overview.regions.is_empty());
+    assert_eq!(
+        memory_overview.regions[0].start_va,
+        memory_overview.start_va
+    );
+    assert_eq!(
+        memory_overview
+            .regions
+            .last()
+            .expect("overview should include a final region")
+            .end_va,
+        memory_overview.end_va
+    );
+    assert!(
+        memory_overview
+            .regions
+            .iter()
+            .any(|region| { region.mapped && region.executable && region.discovered_instruction })
+    );
+
+    let mut previous_end = None::<u64>;
+    for region in &memory_overview.regions {
+        let start =
+            u64::from_str_radix(region.start_va.trim_start_matches("0x"), 16).expect("valid hex");
+        let end =
+            u64::from_str_radix(region.end_va.trim_start_matches("0x"), 16).expect("valid hex");
+        assert!(end > start, "overview regions should be non-empty");
+        if let Some(expected_start) = previous_end {
+            assert_eq!(
+                start, expected_start,
+                "overview regions should cover the image span without holes"
+            );
+        }
+        previous_end = Some(end);
+    }
 
     let list_result = state
         .list_functions(FunctionListParams {

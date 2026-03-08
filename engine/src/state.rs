@@ -16,9 +16,10 @@ use crate::api::{
     FunctionGraphByVaResult, FunctionListParams, FunctionListResult, FunctionSeed, ImportInfo,
     InstructionCategory, InstructionRow, LinearDisassemblyParams, LinearDisassemblyResult,
     LinearFindRowByVaParams, LinearFindRowByVaResult, LinearRowsParams, LinearRowsResult,
-    LinearViewInfoParams, LinearViewInfoResult, ModuleAnalysisStatusParams,
-    ModuleAnalysisStatusResult, ModuleInfoParams, ModuleInfoResult, ModuleOpenParams,
-    ModuleOpenResult, ModuleUnloadParams, ModuleUnloadResult, SectionInfo,
+    LinearViewInfoParams, LinearViewInfoResult, MemoryOverviewRegion, ModuleAnalysisStatusParams,
+    ModuleAnalysisStatusResult, ModuleInfoParams, ModuleInfoResult, ModuleMemoryOverviewParams,
+    ModuleMemoryOverviewResult, ModuleOpenParams, ModuleOpenResult, ModuleUnloadParams,
+    ModuleUnloadResult, SectionInfo,
 };
 use crate::disasm::{parse_hex_u64, to_hex};
 use crate::error::EngineError;
@@ -29,6 +30,21 @@ use crate::linear::{
 use crate::pe_utils::{SectionLookup, build_section_lookup, parse_pe64};
 const DEFAULT_MAX_INSTRUCTIONS: usize = 512;
 const MAX_MAX_INSTRUCTIONS: usize = 4096;
+
+#[derive(Debug, Clone, Copy)]
+struct MemoryRangeSpec {
+    start_rva: u64,
+    end_rva: u64,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct BaseMemoryRegion {
+    start_rva: u64,
+    end_rva: u64,
+    readable: bool,
+    writable: bool,
+    executable: bool,
+}
 
 #[derive(Debug)]
 struct ModuleState {
@@ -266,6 +282,23 @@ impl EngineState {
             imports,
             exports,
         })
+    }
+
+    pub fn get_module_memory_overview(
+        &mut self,
+        params: ModuleMemoryOverviewParams,
+    ) -> Result<ModuleMemoryOverviewResult, EngineError> {
+        let module = self
+            .modules
+            .get(&params.module_id)
+            .ok_or(EngineError::ModuleNotFound)?;
+        let snapshot = module.analysis_task.lock_state()?;
+
+        Ok(build_memory_overview(
+            module.image_base,
+            &module.section_lookup,
+            snapshot.analysis.as_ref(),
+        ))
     }
 
     pub fn list_functions(
@@ -509,6 +542,188 @@ fn spawn_background_analysis(path: PathBuf, bytes: Arc<Vec<u8>>) -> BackgroundAn
     });
 
     BackgroundAnalysisHandle { shared, cancel }
+}
+
+fn build_memory_overview(
+    image_base: u64,
+    section_lookup: &SectionLookup,
+    analysis: Option<&ModuleAnalysis>,
+) -> ModuleMemoryOverviewResult {
+    let mapped_regions = collect_base_memory_regions(section_lookup);
+    let discovered_ranges = collect_discovered_instruction_ranges(analysis);
+
+    let start_rva = mapped_regions
+        .first()
+        .map(|region| region.start_rva)
+        .unwrap_or(0);
+    let end_rva = mapped_regions
+        .last()
+        .map(|region| region.end_rva)
+        .unwrap_or(0);
+    let regions = build_memory_overview_regions(
+        image_base,
+        start_rva,
+        end_rva,
+        &mapped_regions,
+        &discovered_ranges,
+    );
+
+    ModuleMemoryOverviewResult {
+        start_va: to_hex(image_base + start_rva),
+        end_va: to_hex(image_base + end_rva),
+        regions,
+    }
+}
+
+fn collect_base_memory_regions(section_lookup: &SectionLookup) -> Vec<BaseMemoryRegion> {
+    let mut regions = Vec::new();
+
+    let size_of_headers = section_lookup.size_of_headers();
+    if size_of_headers > 0 {
+        regions.push(BaseMemoryRegion {
+            start_rva: 0,
+            end_rva: size_of_headers,
+            readable: true,
+            writable: false,
+            executable: false,
+        });
+    }
+
+    for section in section_lookup.sections() {
+        if section.end_rva <= section.start_rva {
+            continue;
+        }
+        regions.push(BaseMemoryRegion {
+            start_rva: section.start_rva,
+            end_rva: section.end_rva,
+            readable: section.readable,
+            writable: section.writable,
+            executable: section.executable,
+        });
+    }
+
+    regions.sort_by_key(|region| region.start_rva);
+    regions
+}
+
+fn collect_discovered_instruction_ranges(
+    analysis: Option<&ModuleAnalysis>,
+) -> Vec<MemoryRangeSpec> {
+    let Some(analysis) = analysis else {
+        return Vec::new();
+    };
+
+    let mut ranges = analysis
+        .claimed_instructions_by_function_start
+        .values()
+        .flat_map(|rows| {
+            rows.iter().map(|row| MemoryRangeSpec {
+                start_rva: row.start_rva,
+                end_rva: row.start_rva.saturating_add(u64::from(row.len)),
+            })
+        })
+        .filter(|range| range.end_rva > range.start_rva)
+        .collect::<Vec<MemoryRangeSpec>>();
+
+    ranges.sort_by_key(|range| range.start_rva);
+    merge_memory_ranges(ranges)
+}
+
+fn build_memory_overview_regions(
+    image_base: u64,
+    start_rva: u64,
+    end_rva: u64,
+    mapped_regions: &[BaseMemoryRegion],
+    discovered_ranges: &[MemoryRangeSpec],
+) -> Vec<MemoryOverviewRegion> {
+    if end_rva <= start_rva {
+        return Vec::new();
+    }
+
+    let mut boundaries = vec![start_rva, end_rva];
+    for region in mapped_regions {
+        boundaries.push(region.start_rva);
+        boundaries.push(region.end_rva);
+    }
+    for range in discovered_ranges {
+        boundaries.push(range.start_rva);
+        boundaries.push(range.end_rva);
+    }
+    boundaries.sort_unstable();
+    boundaries.dedup();
+
+    let mut output = Vec::<MemoryOverviewRegion>::new();
+
+    for window in boundaries.windows(2) {
+        let range_start = window[0];
+        let range_end = window[1];
+        if range_end <= range_start {
+            continue;
+        }
+
+        let mapped_region = mapped_regions
+            .iter()
+            .rev()
+            .find(|region| range_start >= region.start_rva && range_start < region.end_rva);
+        let discovered_instruction = discovered_ranges
+            .iter()
+            .any(|range| range_start >= range.start_rva && range_start < range.end_rva);
+
+        let next_region = match mapped_region {
+            Some(region) => MemoryOverviewRegion {
+                start_va: to_hex(image_base + range_start),
+                end_va: to_hex(image_base + range_end),
+                mapped: true,
+                readable: region.readable,
+                writable: region.writable,
+                executable: region.executable,
+                discovered_instruction: region.executable && discovered_instruction,
+            },
+            None => MemoryOverviewRegion {
+                start_va: to_hex(image_base + range_start),
+                end_va: to_hex(image_base + range_end),
+                mapped: false,
+                readable: false,
+                writable: false,
+                executable: false,
+                discovered_instruction: false,
+            },
+        };
+
+        if let Some(previous) = output.last_mut() {
+            if previous.mapped == next_region.mapped
+                && previous.readable == next_region.readable
+                && previous.writable == next_region.writable
+                && previous.executable == next_region.executable
+                && previous.discovered_instruction == next_region.discovered_instruction
+                && previous.end_va == next_region.start_va
+            {
+                previous.end_va = next_region.end_va;
+                continue;
+            }
+        }
+
+        output.push(next_region);
+    }
+
+    output
+}
+
+fn merge_memory_ranges(sorted_ranges: Vec<MemoryRangeSpec>) -> Vec<MemoryRangeSpec> {
+    let mut merged = Vec::<MemoryRangeSpec>::new();
+
+    for range in sorted_ranges {
+        match merged.last_mut() {
+            Some(previous) if range.start_rva <= previous.end_rva => {
+                if range.end_rva > previous.end_rva {
+                    previous.end_rva = range.end_rva;
+                }
+            }
+            _ => merged.push(range),
+        }
+    }
+
+    merged
 }
 
 fn ready_analysis(snapshot: &BackgroundAnalysisState) -> Result<&ModuleAnalysis, EngineError> {

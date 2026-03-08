@@ -90,6 +90,11 @@ export const desktopApi: DesktopApi = {
     ),
   getModuleInfo: (moduleId: string) =>
     invokeApp<MethodResult["module.info"]>("get_module_info", { moduleId }),
+  getModuleMemoryOverview: (moduleId: string) =>
+    invokeApp<MethodResult["module.getMemoryOverview"]>(
+      "get_module_memory_overview",
+      { moduleId },
+    ),
   listFunctions: (moduleId: string) =>
     invokeApp<MethodResult["function.list"]>("list_functions", { moduleId }),
   getFunctionGraphByVa: (payload) =>

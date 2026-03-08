@@ -67,6 +67,35 @@ pub struct ModuleInfoResult {
     pub exports: Vec<ExportInfo>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ModuleMemoryOverviewParams {
+    #[serde(rename = "moduleId")]
+    pub module_id: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ModuleMemoryOverviewResult {
+    #[serde(rename = "startVa")]
+    pub start_va: String,
+    #[serde(rename = "endVa")]
+    pub end_va: String,
+    pub regions: Vec<MemoryOverviewRegion>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct MemoryOverviewRegion {
+    #[serde(rename = "startVa")]
+    pub start_va: String,
+    #[serde(rename = "endVa")]
+    pub end_va: String,
+    pub mapped: bool,
+    pub readable: bool,
+    pub writable: bool,
+    pub executable: bool,
+    #[serde(rename = "discoveredInstruction")]
+    pub discovered_instruction: bool,
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct SectionInfo {
     pub name: String,

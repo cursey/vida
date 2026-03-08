@@ -1,5 +1,20 @@
 # Work Log
 
+## 2026-03-07 - Add Shell Memory Layout Overview Bar
+
+Summary:
+- Added a new engine memory-overview API that summarizes the loaded image span into compact mapped, unmapped, permission, and discovered-instruction regions so the renderer can paint a full-width overview without walking all linear rows.
+- Added a shell-level memory layout bar above the main panels that scales to the window width, colors regions by access state, and draws a live viewport marker for the current disassembly view.
+- Extended integration and renderer coverage so the new overview payload, non-scrolling bar rendering, and viewport marker behavior are exercised end to end.
+
+Validation commands executed:
+- `just fmt`
+- `just check`
+- `just test`
+
+Changed files index:
+- See `docs/change_files.md` for the detailed file list for this work item.
+
 ## 2026-03-07 - Discover Functions from Direct Call Targets
 
 Summary:

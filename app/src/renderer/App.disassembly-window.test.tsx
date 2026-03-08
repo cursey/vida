@@ -21,6 +21,51 @@ const HUGE_ROW_COUNT = 5_570_947;
 const ROW_HEIGHT = 24;
 const EXPECTED_WINDOW_HEIGHT = 100_000 * ROW_HEIGHT;
 
+function buildMemoryOverview() {
+  return {
+    startVa: "0x140000000",
+    endVa: "0x160000000",
+    regions: [
+      {
+        startVa: "0x140000000",
+        endVa: "0x140001000",
+        mapped: true,
+        readable: true,
+        writable: false,
+        executable: false,
+        discoveredInstruction: false,
+      },
+      {
+        startVa: "0x140001000",
+        endVa: "0x140010000",
+        mapped: true,
+        readable: true,
+        writable: false,
+        executable: true,
+        discoveredInstruction: true,
+      },
+      {
+        startVa: "0x140010000",
+        endVa: "0x140020000",
+        mapped: true,
+        readable: true,
+        writable: false,
+        executable: true,
+        discoveredInstruction: false,
+      },
+      {
+        startVa: "0x140020000",
+        endVa: "0x160000000",
+        mapped: false,
+        readable: false,
+        writable: false,
+        executable: false,
+        discoveredInstruction: false,
+      },
+    ],
+  };
+}
+
 function buildLinearRows(startRow: number, rowCount: number): LinearRow[] {
   return Array.from({ length: rowCount }, (_, index) => {
     const rowIndex = startRow + index;
@@ -79,6 +124,7 @@ describe("App disassembly window virtualization", () => {
         imports: [],
         exports: [],
       }),
+      getModuleMemoryOverview: vi.fn().mockResolvedValue(buildMemoryOverview()),
       listFunctions: vi.fn().mockResolvedValue({
         functions: [{ start: "0x140001000", name: "entry", kind: "entry" }],
       }),
@@ -125,5 +171,23 @@ describe("App disassembly window virtualization", () => {
       `height: ${EXPECTED_WINDOW_HEIGHT}px;`,
     );
     expect(HUGE_ROW_COUNT * ROW_HEIGHT).toBeGreaterThan(EXPECTED_WINDOW_HEIGHT);
+
+    const overviewBar = container.querySelector(".memory-overview-bar");
+    expect(overviewBar).not.toBeNull();
+    expect(
+      container.querySelector(".memory-overview-region.is-discovered"),
+    ).not.toBeNull();
+    expect(
+      container.querySelector(".memory-overview-region.perm-r-x"),
+    ).not.toBeNull();
+    expect(
+      container.querySelector(".memory-overview-region.is-unmapped"),
+    ).not.toBeNull();
+
+    await waitFor(() => {
+      expect(
+        container.querySelector(".memory-overview-viewport"),
+      ).not.toBeNull();
+    });
   });
 });

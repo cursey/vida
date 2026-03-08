@@ -4,11 +4,15 @@ use goblin::pe::exception::RuntimeFunction;
 use crate::error::EngineError;
 
 const IMAGE_SCN_MEM_EXECUTE: u32 = 0x20000000;
+const IMAGE_SCN_MEM_READ: u32 = 0x40000000;
+const IMAGE_SCN_MEM_WRITE: u32 = 0x80000000;
 
 #[derive(Debug, Clone)]
 pub(crate) struct SectionSlice {
     pub(crate) start_rva: u64,
     pub(crate) end_rva: u64,
+    pub(crate) readable: bool,
+    pub(crate) writable: bool,
     pub(crate) executable: bool,
     pub(crate) pointer_to_raw_data: usize,
     pub(crate) size_of_raw_data: u64,
@@ -83,6 +87,8 @@ pub(crate) fn build_section_lookup(pe: &PE<'_>) -> SectionLookup {
             SectionSlice {
                 start_rva,
                 end_rva,
+                readable: section.characteristics & IMAGE_SCN_MEM_READ != 0,
+                writable: section.characteristics & IMAGE_SCN_MEM_WRITE != 0,
                 executable: section.characteristics & IMAGE_SCN_MEM_EXECUTE != 0,
                 pointer_to_raw_data,
                 size_of_raw_data,

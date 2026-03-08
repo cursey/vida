@@ -61,6 +61,20 @@
     --danger-line: oklch(var(--destructive));
     --danger-text: oklch(var(--destructive-foreground));
 
+    --memory-shell-bg: linear-gradient(
+      180deg,
+      oklch(var(--secondary) / 0.55),
+      oklch(var(--background))
+    );
+    --memory-frame: oklch(var(--foreground) / 0.14);
+    --memory-unmapped: oklch(var(--foreground) / 0.18);
+    --memory-r--: hsl(205 16% 72%);
+    --memory-rw-: hsl(28 62% 58%);
+    --memory-r-x: hsl(188 48% 46%);
+    --memory-rwx: hsl(6 72% 56%);
+    --memory-discovered: hsl(156 64% 42%);
+    --memory-viewport: hsl(42 100% 48%);
+
     --mnemonic-call: hsl(222 60% 43%);
     --mnemonic-return: hsl(32 75% 42%);
     --mnemonic-control-flow: hsl(262 42% 45%);
@@ -129,6 +143,20 @@
     --mnemonic-bit-shift: hsl(274 86% 82%);
     --mnemonic-data-transfer: hsl(217 91% 80%);
     --mnemonic-other: oklch(var(--foreground));
+
+    --memory-shell-bg: linear-gradient(
+      180deg,
+      oklch(var(--secondary) / 0.72),
+      oklch(var(--background) / 0.92)
+    );
+    --memory-frame: oklch(var(--foreground) / 0.18);
+    --memory-unmapped: oklch(var(--foreground) / 0.16);
+    --memory-r--: hsl(207 14% 34%);
+    --memory-rw-: hsl(26 70% 47%);
+    --memory-r-x: hsl(192 66% 42%);
+    --memory-rwx: hsl(10 72% 50%);
+    --memory-discovered: hsl(152 72% 40%);
+    --memory-viewport: hsl(44 100% 62%);
   }
 
   * {
@@ -345,6 +373,86 @@
   color: var(--danger-text);
   padding: 8px 10px;
   font-size: 13px;
+}
+
+.memory-overview-shell {
+  flex: 0 0 auto;
+  margin: 0 calc(-1 * var(--space-3));
+  padding: 8px 12px 10px;
+  border-top: var(--line-width-soft) solid var(--line-soft);
+  border-bottom: var(--line-width-soft) solid var(--line-strong);
+  background: var(--memory-shell-bg);
+}
+
+.memory-overview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 7px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.memory-overview-header code {
+  color: var(--text-primary);
+  font-size: 11px;
+}
+
+.memory-overview-bar,
+.memory-overview-empty {
+  display: block;
+  width: 100%;
+  height: 18px;
+  border: 1px solid var(--memory-frame);
+  background: oklch(var(--background));
+  box-shadow: inset 0 0 0 1px oklch(var(--background) / 0.22);
+}
+
+.memory-overview-empty {
+  background: linear-gradient(
+    90deg,
+    oklch(var(--foreground) / 0.06),
+    oklch(var(--foreground) / 0.12),
+    oklch(var(--foreground) / 0.06)
+  );
+}
+
+.memory-overview-region {
+  shape-rendering: crispEdges;
+  fill: var(--memory-r--);
+}
+
+.memory-overview-region.is-unmapped {
+  fill: var(--memory-unmapped);
+}
+
+.memory-overview-region.perm-r-- {
+  fill: var(--memory-r--);
+}
+
+.memory-overview-region.perm-rw- {
+  fill: var(--memory-rw-);
+}
+
+.memory-overview-region.perm-r-x {
+  fill: var(--memory-r-x);
+}
+
+.memory-overview-region.perm-rwx {
+  fill: var(--memory-rwx);
+}
+
+.memory-overview-region.is-discovered {
+  fill: var(--memory-discovered);
+}
+
+.memory-overview-viewport {
+  stroke: var(--memory-viewport);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
 }
 
 .layout {

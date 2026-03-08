@@ -24,6 +24,7 @@
     "allow-unload-module",
     "allow-get-module-analysis-status",
     "allow-get-module-info",
+    "allow-get-module-memory-overview",
     "allow-list-functions",
     "allow-get-function-graph-by-va",
     "allow-disassemble-linear",
