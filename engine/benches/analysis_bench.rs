@@ -7,7 +7,7 @@ use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_ma
 use engine::api::{
     FunctionGraphByVaParams, FunctionListParams, LinearDisassemblyParams, LinearFindRowByVaParams,
     LinearRowsParams, LinearViewInfoParams, ModuleAnalysisStatusParams, ModuleInfoParams,
-    ModuleOpenParams,
+    ModuleMemoryOverviewParams, ModuleOpenParams,
 };
 use engine::{EngineState, fixture_path};
 
@@ -232,6 +232,38 @@ fn bench_function_list(c: &mut Criterion) {
     group.finish();
 }
 
+fn bench_module_memory_overview(c: &mut Criterion) {
+    let mut group = c.benchmark_group("engine/warm/module_memory_overview");
+
+    for fixture in selected_fixtures()
+        .iter()
+        .copied()
+        .filter(|fixture| fixture.supports_warm_benches)
+    {
+        let mut context = open_ready_fixture(fixture);
+        let params = ModuleMemoryOverviewParams {
+            module_id: context.module_id.clone(),
+        };
+
+        group.bench_with_input(
+            BenchmarkId::from_parameter(fixture.label),
+            &fixture.label,
+            |bench, _| {
+                bench.iter(|| {
+                    let overview = context
+                        .state
+                        .get_module_memory_overview(black_box(params.clone()))
+                        .expect("memory overview should load");
+
+                    black_box(overview.regions.len())
+                })
+            },
+        );
+    }
+
+    group.finish();
+}
+
 fn bench_linear_view_info(c: &mut Criterion) {
     let mut group = c.benchmark_group("engine/warm/linear_view_info");
 
@@ -405,6 +437,7 @@ criterion_group! {
         bench_module_open_and_analyze,
         bench_module_info,
         bench_function_list,
+        bench_module_memory_overview,
         bench_linear_view_info,
         bench_find_linear_row_by_va,
         bench_linear_rows_fetch,

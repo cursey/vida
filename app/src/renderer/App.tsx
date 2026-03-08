@@ -160,6 +160,7 @@ export function App() {
   const activeModuleIdRef = useRef("");
   const asyncGenerationRef = useRef(0);
   const analysisPollTimerRef = useRef<number | null>(null);
+  const readySupplementTimerRef = useRef<number | null>(null);
   const preferredNavigationVaRef = useRef("");
   const selectionHistoryRef = useRef<string[]>([]);
   const selectionHistoryIndexRef = useRef(-1);
@@ -175,6 +176,10 @@ export function App() {
       if (analysisPollTimerRef.current !== null) {
         window.clearTimeout(analysisPollTimerRef.current);
         analysisPollTimerRef.current = null;
+      }
+      if (readySupplementTimerRef.current !== null) {
+        window.clearTimeout(readySupplementTimerRef.current);
+        readySupplementTimerRef.current = null;
       }
       if (statusMessageTimerRef.current !== null) {
         window.clearTimeout(statusMessageTimerRef.current);
@@ -293,6 +298,10 @@ export function App() {
   const clearModuleState = useCallback(() => {
     functionSearchJobIdRef.current += 1;
     stopAnalysisPolling();
+    if (readySupplementTimerRef.current !== null) {
+      window.clearTimeout(readySupplementTimerRef.current);
+      readySupplementTimerRef.current = null;
+    }
     if (statusMessageTimerRef.current !== null) {
       window.clearTimeout(statusMessageTimerRef.current);
       statusMessageTimerRef.current = null;
@@ -1061,51 +1070,56 @@ export function App() {
       resetLinearCache();
       setPendingScrollRow(rowLookup.rowIndex);
       stopAnalysisPolling();
-      void desktopApi
-        .listFunctions(currentModuleId)
-        .then((listed) => {
-          if (
-            generation !== asyncGenerationRef.current ||
-            currentModuleId !== activeModuleIdRef.current
-          ) {
-            return;
-          }
+      readySupplementTimerRef.current = window.setTimeout(() => {
+        readySupplementTimerRef.current = null;
 
-          setFunctions(listed.functions);
-          resetFunctionBrowserViewport();
-        })
-        .catch((error: unknown) => {
-          if (
-            generation !== asyncGenerationRef.current ||
-            currentModuleId !== activeModuleIdRef.current
-          ) {
-            return;
-          }
+        void desktopApi
+          .listFunctions(currentModuleId)
+          .then((listed) => {
+            if (
+              generation !== asyncGenerationRef.current ||
+              currentModuleId !== activeModuleIdRef.current
+            ) {
+              return;
+            }
 
-          console.warn("Failed to load function list:", error);
-        });
-      void desktopApi
-        .getModuleMemoryOverview(currentModuleId)
-        .then((overview) => {
-          if (
-            generation !== asyncGenerationRef.current ||
-            currentModuleId !== activeModuleIdRef.current
-          ) {
-            return;
-          }
+            setFunctions(listed.functions);
+            resetFunctionBrowserViewport();
+          })
+          .catch((error: unknown) => {
+            if (
+              generation !== asyncGenerationRef.current ||
+              currentModuleId !== activeModuleIdRef.current
+            ) {
+              return;
+            }
 
-          setMemoryOverview(overview);
-        })
-        .catch((error: unknown) => {
-          if (
-            generation !== asyncGenerationRef.current ||
-            currentModuleId !== activeModuleIdRef.current
-          ) {
-            return;
-          }
+            console.warn("Failed to load function list:", error);
+          });
 
-          console.warn("Failed to load memory overview:", error);
-        });
+        void desktopApi
+          .getModuleMemoryOverview(currentModuleId)
+          .then((overview) => {
+            if (
+              generation !== asyncGenerationRef.current ||
+              currentModuleId !== activeModuleIdRef.current
+            ) {
+              return;
+            }
+
+            setMemoryOverview(overview);
+          })
+          .catch((error: unknown) => {
+            if (
+              generation !== asyncGenerationRef.current ||
+              currentModuleId !== activeModuleIdRef.current
+            ) {
+              return;
+            }
+
+            console.warn("Failed to load memory overview:", error);
+          });
+      }, 0);
       return true;
     },
     [

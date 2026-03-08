@@ -1,5 +1,23 @@
 # Work Log
 
+## 2026-03-08 - Prioritize Ready Disassembly Paint and Cache Memory Overview
+
+Summary:
+- Deferred the ready-state function-list and memory-bar requests until after the disassembly view has a chance to paint, so the first visible linear rows are no longer queued behind nonessential ready-side API calls.
+- Cached both the base and ready memory overview snapshots in the engine and rebuilt discovered coverage from the sorted instruction-owner map, removing the expensive post-ready memory-bar recomputation.
+- Added renderer and engine regression coverage for the deferred ready path and the optimized memory-overview range construction.
+
+Validation commands executed:
+- `cargo bench --manifest-path engine/Cargo.toml --bench analysis_bench -- engine/warm/module_memory_overview --save-baseline memory-overview-baseline-2026-03-08-v2`
+- `cargo fmt --manifest-path engine/Cargo.toml`
+- `npx biome check --write src/renderer/App.tsx` (in `app`)
+- `cargo test --manifest-path engine/Cargo.toml`
+- `npx vitest run src/renderer/App.disassembly-window.test.tsx src/renderer/App.function-browser.test.tsx src/renderer/App.function-browser-window.test.tsx` (in `app`)
+- `cargo bench --manifest-path engine/Cargo.toml --bench analysis_bench -- engine/warm/module_memory_overview --baseline memory-overview-baseline-2026-03-08-v2`
+
+Changed files index:
+- See `docs/change_files.md` for the detailed file list for this work item.
+
 ## 2026-03-08 - Defer Browser List and Memory Bar Until Analysis Ready
 
 Summary:

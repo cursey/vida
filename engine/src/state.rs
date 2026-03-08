@@ -8,8 +8,8 @@ use std::sync::{
 use std::thread;
 
 use crate::analysis::{
-    AnalysisProgressPhase, AnalysisProgressUpdate, FunctionSeedEntry, ModuleAnalysis,
-    build_module_analysis_with_progress, instruction_owner_for_rva,
+    AnalysisProgressPhase, AnalysisProgressUpdate, FunctionSeedEntry, InstructionOwnerRange,
+    ModuleAnalysis, build_module_analysis_with_progress, instruction_owner_for_rva,
 };
 use crate::api::{
     EnginePingParams, EnginePingResult, ExportInfo, FunctionGraphByVaParams,
@@ -51,6 +51,7 @@ struct ModuleState {
     bytes: Arc<Vec<u8>>,
     image_base: u64,
     section_lookup: SectionLookup,
+    base_memory_overview: ModuleMemoryOverviewResult,
     analysis_task: BackgroundAnalysisHandle,
 }
 
@@ -68,6 +69,7 @@ struct BackgroundAnalysisState {
     total_function_count: Option<usize>,
     analyzed_function_count: Option<usize>,
     analysis: Option<ModuleAnalysis>,
+    ready_memory_overview: Option<ModuleMemoryOverviewResult>,
     failure_message: Option<String>,
 }
 
@@ -105,6 +107,7 @@ impl BackgroundAnalysisState {
             total_function_count: None,
             analyzed_function_count: None,
             analysis: None,
+            ready_memory_overview: None,
             failure_message: None,
         }
     }
@@ -130,13 +133,18 @@ impl BackgroundAnalysisState {
         self.failure_message = None;
     }
 
-    fn mark_ready(&mut self, analysis: ModuleAnalysis) {
+    fn mark_ready(
+        &mut self,
+        analysis: ModuleAnalysis,
+        ready_memory_overview: ModuleMemoryOverviewResult,
+    ) {
         self.lifecycle_state = AnalysisLifecycleState::Ready;
         self.message = "Analysis ready.".to_owned();
         self.total_function_count = Some(analysis.functions.len());
         self.analyzed_function_count = Some(analysis.functions.len());
         self.discovered_functions = Arc::new(analysis.functions.clone());
         self.analysis = Some(analysis);
+        self.ready_memory_overview = Some(ready_memory_overview);
         self.failure_message = None;
     }
 
@@ -145,12 +153,14 @@ impl BackgroundAnalysisState {
         self.message = format!("Analysis failed: {message}");
         self.failure_message = Some(message);
         self.analysis = None;
+        self.ready_memory_overview = None;
     }
 
     fn mark_canceled(&mut self) {
         self.lifecycle_state = AnalysisLifecycleState::Canceled;
         self.message = "Analysis canceled.".to_owned();
         self.analysis = None;
+        self.ready_memory_overview = None;
         self.failure_message = None;
     }
 }
@@ -179,10 +189,16 @@ impl EngineState {
         let image_base = pe.image_base as u64;
         let entry_rva = pe.entry as u64;
         let entry_va = image_base + entry_rva;
+        let base_memory_overview = build_memory_overview(image_base, &section_lookup, None);
 
         self.next_module_id += 1;
         let module_id = format!("m{}", self.next_module_id);
-        let analysis_task = spawn_background_analysis(path.clone(), Arc::clone(&bytes));
+        let analysis_task = spawn_background_analysis(
+            path.clone(),
+            Arc::clone(&bytes),
+            image_base,
+            section_lookup.clone(),
+        );
 
         self.modules.insert(
             module_id.clone(),
@@ -190,6 +206,7 @@ impl EngineState {
                 bytes,
                 image_base,
                 section_lookup,
+                base_memory_overview,
                 analysis_task,
             },
         );
@@ -294,11 +311,10 @@ impl EngineState {
             .ok_or(EngineError::ModuleNotFound)?;
         let snapshot = module.analysis_task.lock_state()?;
 
-        Ok(build_memory_overview(
-            module.image_base,
-            &module.section_lookup,
-            snapshot.analysis.as_ref(),
-        ))
+        Ok(snapshot
+            .ready_memory_overview
+            .clone()
+            .unwrap_or_else(|| module.base_memory_overview.clone()))
     }
 
     pub fn list_functions(
@@ -513,7 +529,12 @@ impl BackgroundAnalysisHandle {
     }
 }
 
-fn spawn_background_analysis(path: PathBuf, bytes: Arc<Vec<u8>>) -> BackgroundAnalysisHandle {
+fn spawn_background_analysis(
+    path: PathBuf,
+    bytes: Arc<Vec<u8>>,
+    image_base: u64,
+    section_lookup: SectionLookup,
+) -> BackgroundAnalysisHandle {
     let shared = Arc::new(Mutex::new(BackgroundAnalysisState::queued()));
     let cancel = Arc::new(AtomicBool::new(false));
 
@@ -531,10 +552,29 @@ fn spawn_background_analysis(path: PathBuf, bytes: Arc<Vec<u8>>) -> BackgroundAn
                 worker_cancel.load(Ordering::Relaxed)
             });
 
+        let ready_memory_overview =
+            match &result {
+                Ok(analysis) if !worker_cancel.load(Ordering::Relaxed) => Some(
+                    build_memory_overview(image_base, &section_lookup, Some(analysis)),
+                ),
+                _ => None,
+            };
+
         if let Ok(mut state) = worker_shared.lock() {
             match result {
                 Ok(_analysis) if worker_cancel.load(Ordering::Relaxed) => state.mark_canceled(),
-                Ok(analysis) => state.mark_ready(analysis),
+                Ok(analysis) => {
+                    if worker_cancel.load(Ordering::Relaxed) {
+                        state.mark_canceled();
+                    } else {
+                        state.mark_ready(
+                            analysis,
+                            ready_memory_overview.unwrap_or_else(|| {
+                                build_memory_overview(image_base, &section_lookup, None)
+                            }),
+                        );
+                    }
+                }
                 Err(EngineError::Canceled) => state.mark_canceled(),
                 Err(error) => state.mark_failed(error.to_string()),
             }
@@ -613,20 +653,33 @@ fn collect_discovered_instruction_ranges(
         return Vec::new();
     };
 
-    let mut ranges = analysis
-        .claimed_instructions_by_function_start
-        .values()
-        .flat_map(|rows| {
-            rows.iter().map(|row| MemoryRangeSpec {
-                start_rva: row.start_rva,
-                end_rva: row.start_rva.saturating_add(u64::from(row.len)),
-            })
-        })
-        .filter(|range| range.end_rva > range.start_rva)
-        .collect::<Vec<MemoryRangeSpec>>();
+    merge_instruction_owner_ranges(&analysis.instruction_owner_by_rva)
+}
 
-    ranges.sort_by_key(|range| range.start_rva);
-    merge_memory_ranges(ranges)
+fn merge_instruction_owner_ranges(
+    instruction_owner_by_rva: &std::collections::BTreeMap<u64, InstructionOwnerRange>,
+) -> Vec<MemoryRangeSpec> {
+    let mut ranges = Vec::<MemoryRangeSpec>::new();
+
+    for (&start_rva, range) in instruction_owner_by_rva {
+        if range.end_rva <= start_rva {
+            continue;
+        }
+
+        match ranges.last_mut() {
+            Some(previous) if start_rva <= previous.end_rva => {
+                if range.end_rva > previous.end_rva {
+                    previous.end_rva = range.end_rva;
+                }
+            }
+            _ => ranges.push(MemoryRangeSpec {
+                start_rva,
+                end_rva: range.end_rva,
+            }),
+        }
+    }
+
+    ranges
 }
 
 fn build_memory_overview_regions(
@@ -640,90 +693,195 @@ fn build_memory_overview_regions(
         return Vec::new();
     }
 
-    let mut boundaries = vec![start_rva, end_rva];
-    for region in mapped_regions {
-        boundaries.push(region.start_rva);
-        boundaries.push(region.end_rva);
-    }
-    for range in discovered_ranges {
-        boundaries.push(range.start_rva);
-        boundaries.push(range.end_rva);
-    }
-    boundaries.sort_unstable();
-    boundaries.dedup();
-
     let mut output = Vec::<MemoryOverviewRegion>::new();
 
-    for window in boundaries.windows(2) {
-        let range_start = window[0];
-        let range_end = window[1];
-        if range_end <= range_start {
+    let mut cursor = start_rva;
+    let mut discovered_index = 0usize;
+
+    for region in mapped_regions {
+        if region.end_rva <= start_rva || region.start_rva >= end_rva {
             continue;
         }
 
-        let mapped_region = mapped_regions
-            .iter()
-            .rev()
-            .find(|region| range_start >= region.start_rva && range_start < region.end_rva);
-        let discovered_instruction = discovered_ranges
-            .iter()
-            .any(|range| range_start >= range.start_rva && range_start < range.end_rva);
-
-        let next_region = match mapped_region {
-            Some(region) => MemoryOverviewRegion {
-                start_va: to_hex(image_base + range_start),
-                end_va: to_hex(image_base + range_end),
-                mapped: true,
-                readable: region.readable,
-                writable: region.writable,
-                executable: region.executable,
-                discovered_instruction: region.executable && discovered_instruction,
-            },
-            None => MemoryOverviewRegion {
-                start_va: to_hex(image_base + range_start),
-                end_va: to_hex(image_base + range_end),
-                mapped: false,
-                readable: false,
-                writable: false,
-                executable: false,
-                discovered_instruction: false,
-            },
-        };
-
-        if let Some(previous) = output.last_mut() {
-            if previous.mapped == next_region.mapped
-                && previous.readable == next_region.readable
-                && previous.writable == next_region.writable
-                && previous.executable == next_region.executable
-                && previous.discovered_instruction == next_region.discovered_instruction
-                && previous.end_va == next_region.start_va
-            {
-                previous.end_va = next_region.end_va;
-                continue;
-            }
+        let region_start = region.start_rva.max(start_rva);
+        let region_end = region.end_rva.min(end_rva);
+        if region_end <= region_start {
+            continue;
         }
 
-        output.push(next_region);
+        if cursor < region_start {
+            push_memory_overview_region(
+                &mut output,
+                image_base,
+                cursor,
+                region_start,
+                false,
+                false,
+                false,
+                false,
+                false,
+            );
+        }
+
+        cursor = region_end;
+
+        if !region.executable {
+            push_memory_overview_region(
+                &mut output,
+                image_base,
+                region_start,
+                region_end,
+                true,
+                region.readable,
+                region.writable,
+                region.executable,
+                false,
+            );
+            continue;
+        }
+
+        while discovered_index < discovered_ranges.len()
+            && discovered_ranges[discovered_index].end_rva <= region_start
+        {
+            discovered_index += 1;
+        }
+
+        let mut range_index = discovered_index;
+        let mut mapped_cursor = region_start;
+
+        while mapped_cursor < region_end {
+            while range_index < discovered_ranges.len()
+                && discovered_ranges[range_index].end_rva <= mapped_cursor
+            {
+                range_index += 1;
+            }
+
+            let Some(range) = discovered_ranges.get(range_index) else {
+                push_memory_overview_region(
+                    &mut output,
+                    image_base,
+                    mapped_cursor,
+                    region_end,
+                    true,
+                    region.readable,
+                    region.writable,
+                    region.executable,
+                    false,
+                );
+                break;
+            };
+
+            if range.start_rva >= region_end {
+                push_memory_overview_region(
+                    &mut output,
+                    image_base,
+                    mapped_cursor,
+                    region_end,
+                    true,
+                    region.readable,
+                    region.writable,
+                    region.executable,
+                    false,
+                );
+                break;
+            }
+
+            if mapped_cursor < range.start_rva {
+                let undiscovered_end = range.start_rva.min(region_end);
+                push_memory_overview_region(
+                    &mut output,
+                    image_base,
+                    mapped_cursor,
+                    undiscovered_end,
+                    true,
+                    region.readable,
+                    region.writable,
+                    region.executable,
+                    false,
+                );
+                mapped_cursor = undiscovered_end;
+                continue;
+            }
+
+            let discovered_end = range.end_rva.min(region_end);
+            if discovered_end <= mapped_cursor {
+                range_index += 1;
+                continue;
+            }
+
+            push_memory_overview_region(
+                &mut output,
+                image_base,
+                mapped_cursor,
+                discovered_end,
+                true,
+                region.readable,
+                region.writable,
+                region.executable,
+                true,
+            );
+            mapped_cursor = discovered_end;
+        }
+
+        discovered_index = range_index;
+    }
+
+    if cursor < end_rva {
+        push_memory_overview_region(
+            &mut output,
+            image_base,
+            cursor,
+            end_rva,
+            false,
+            false,
+            false,
+            false,
+            false,
+        );
     }
 
     output
 }
 
-fn merge_memory_ranges(sorted_ranges: Vec<MemoryRangeSpec>) -> Vec<MemoryRangeSpec> {
-    let mut merged = Vec::<MemoryRangeSpec>::new();
+fn push_memory_overview_region(
+    output: &mut Vec<MemoryOverviewRegion>,
+    image_base: u64,
+    start_rva: u64,
+    end_rva: u64,
+    mapped: bool,
+    readable: bool,
+    writable: bool,
+    executable: bool,
+    discovered_instruction: bool,
+) {
+    if end_rva <= start_rva {
+        return;
+    }
 
-    for range in sorted_ranges {
-        match merged.last_mut() {
-            Some(previous) if range.start_rva <= previous.end_rva => {
-                if range.end_rva > previous.end_rva {
-                    previous.end_rva = range.end_rva;
-                }
-            }
-            _ => merged.push(range),
+    let next_region = MemoryOverviewRegion {
+        start_va: to_hex(image_base + start_rva),
+        end_va: to_hex(image_base + end_rva),
+        mapped,
+        readable,
+        writable,
+        executable,
+        discovered_instruction,
+    };
+
+    if let Some(previous) = output.last_mut() {
+        if previous.mapped == next_region.mapped
+            && previous.readable == next_region.readable
+            && previous.writable == next_region.writable
+            && previous.executable == next_region.executable
+            && previous.discovered_instruction == next_region.discovered_instruction
+            && previous.end_va == next_region.start_va
+        {
+            previous.end_va = next_region.end_va;
+            return;
         }
     }
 
-    merged
+    output.push(next_region);
 }
 
 fn ready_analysis(snapshot: &BackgroundAnalysisState) -> Result<&ModuleAnalysis, EngineError> {
@@ -756,4 +914,106 @@ fn find_instruction_index(
         return Ok(index - 1);
     }
     Err(EngineError::InvalidAddress)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        BaseMemoryRegion, MemoryRangeSpec, build_memory_overview_regions,
+        merge_instruction_owner_ranges,
+    };
+    use crate::analysis::InstructionOwnerRange;
+    use std::collections::BTreeMap;
+
+    #[test]
+    fn merge_instruction_owner_ranges_merges_sorted_instruction_ranges() {
+        let instruction_owner_by_rva = [(0x1010, 0x1015), (0x1015, 0x1018), (0x1020, 0x1022)]
+            .into_iter()
+            .map(|(start_rva, end_rva)| {
+                (
+                    start_rva,
+                    InstructionOwnerRange {
+                        end_rva,
+                        function_start_rva: start_rva,
+                    },
+                )
+            })
+            .collect::<BTreeMap<u64, InstructionOwnerRange>>();
+
+        let ranges = merge_instruction_owner_ranges(&instruction_owner_by_rva);
+
+        assert_eq!(ranges.len(), 2);
+        assert_eq!(ranges[0].start_rva, 0x1010);
+        assert_eq!(ranges[0].end_rva, 0x1018);
+        assert_eq!(ranges[1].start_rva, 0x1020);
+        assert_eq!(ranges[1].end_rva, 0x1022);
+    }
+
+    #[test]
+    fn build_memory_overview_regions_splits_executable_regions_by_discovery() {
+        let regions = build_memory_overview_regions(
+            0x140000000,
+            0x1000,
+            0x4000,
+            &[
+                BaseMemoryRegion {
+                    start_rva: 0x1000,
+                    end_rva: 0x1800,
+                    readable: true,
+                    writable: false,
+                    executable: false,
+                },
+                BaseMemoryRegion {
+                    start_rva: 0x2000,
+                    end_rva: 0x4000,
+                    readable: true,
+                    writable: false,
+                    executable: true,
+                },
+            ],
+            &[
+                MemoryRangeSpec {
+                    start_rva: 0x2100,
+                    end_rva: 0x2200,
+                },
+                MemoryRangeSpec {
+                    start_rva: 0x2300,
+                    end_rva: 0x2400,
+                },
+            ],
+        );
+
+        assert_eq!(regions.len(), 7);
+        assert_eq!(regions[0].start_va, "0x140001000");
+        assert_eq!(regions[0].end_va, "0x140001800");
+        assert!(regions[0].mapped);
+        assert!(!regions[0].executable);
+        assert!(!regions[0].discovered_instruction);
+
+        assert_eq!(regions[1].start_va, "0x140001800");
+        assert_eq!(regions[1].end_va, "0x140002000");
+        assert!(!regions[1].mapped);
+
+        assert_eq!(regions[2].start_va, "0x140002000");
+        assert_eq!(regions[2].end_va, "0x140002100");
+        assert!(regions[2].mapped);
+        assert!(regions[2].executable);
+        assert!(!regions[2].discovered_instruction);
+
+        assert_eq!(regions[3].start_va, "0x140002100");
+        assert_eq!(regions[3].end_va, "0x140002200");
+        assert!(regions[3].discovered_instruction);
+
+        assert_eq!(regions[4].start_va, "0x140002200");
+        assert_eq!(regions[4].end_va, "0x140002300");
+        assert!(!regions[4].discovered_instruction);
+
+        assert_eq!(regions[5].start_va, "0x140002300");
+        assert_eq!(regions[5].end_va, "0x140002400");
+        assert!(regions[5].discovered_instruction);
+
+        assert_eq!(regions[6].start_va, "0x140002400");
+        assert_eq!(regions[6].end_va, "0x140004000");
+        assert!(!regions[6].discovered_instruction);
+    }
 }

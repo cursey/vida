@@ -16,6 +16,7 @@ This document defines the engine benchmarking workflow, fixture sets, and result
   - `engine/cold/module_open_and_analyze/*`
   - `engine/warm/module_info/*`
   - `engine/warm/function_list/*`
+  - `engine/warm/module_memory_overview/*`
   - `engine/warm/linear_view_info/*`
   - `engine/warm/find_linear_row_by_va/*`
   - `engine/warm/linear_rows/*`
@@ -126,6 +127,7 @@ The repository's current recorded optimization checkpoints are:
 | 2026-03-07 | all | `engine/cold/module_open_and_analyze/minimal_with_pdb` | ~77.51 ms | ~30.90 ms | ~-60.6% | `engine/src/analysis.rs` |
 | 2026-03-07 | all | `engine/cold/module_open_and_analyze/minimal_without_pdb` | ~75.86 ms | ~30.19 ms | ~-60.1% | `engine/src/analysis.rs` |
 | 2026-03-07 | all | `engine/cold/module_open_and_analyze/overlay_4mb_without_pdb` | ~76.39 ms | ~31.89 ms | ~-58.0% | `engine/src/analysis.rs` |
+| 2026-03-08 | quick | `engine/warm/module_memory_overview/minimal_with_pdb` | ~469.65 us | ~30.75 us | ~-93.6% | `engine/src/state.rs`, `app/src/renderer/App.tsx` |
 | 2026-03-07 | quick | `engine/cold/module_open_and_analyze/minimal_with_pdb` | ~99.56 ms | ~76.54 ms | ~-23% | `engine/src/analysis.rs`, `engine/src/linear.rs` |
 | 2026-03-07 | quick | `engine/warm/linear_rows/minimal_with_pdb` | ~33.74 us | ~26.03 us | ~-23% | `engine/src/linear.rs` |
 | 2026-03-07 | quick | `engine/cold/module_open_and_analyze/minimal_with_pdb` | ~76.54 ms | ~70.27 ms | ~-8.2% | `engine/src/analysis.rs`, `engine/src/state.rs` |
@@ -166,7 +168,33 @@ Change driver: bounded worker-pool CFG/disassembly execution plus canonical sing
 Evidence: `parallel-analysis-baseline-2026-03-07`; `engine/target/criterion/engine_cold_module_open_and_analyze/overlay_4mb_without_pdb/parallel-analysis-baseline-2026-03-07/`; `engine/target/criterion/engine_cold_module_open_and_analyze/overlay_4mb_without_pdb/new/`; `engine/target/criterion/engine_cold_module_open_and_analyze/overlay_4mb_without_pdb/change/`
 Notes: the same compare run also showed warm micro-bench drift on unaffected APIs (`engine/warm/module_info/*`, `engine/warm/function_list/*`, `engine/warm/linear_disassembly/*`), so those should be treated as follow-up profiling signals rather than hidden by the cold-path win
 
+## 2026-03-08 - Cache Ready Memory Overview and Prioritize Ready Paint
+
+Date: 2026-03-08
+Commit: workspace state after caching ready memory-overview results and deferring ready-side browser/bar loads until after disassembly initialization
+Command: `cargo bench --manifest-path engine/Cargo.toml --bench analysis_bench -- engine/warm/module_memory_overview --baseline memory-overview-baseline-2026-03-08-v2`
+Fixture Set: `quick`
+Machine/Profile: Windows, Criterion release bench profile
+Criterion Artifacts: `engine/target/criterion/engine_warm_module_memory_overview/minimal_with_pdb/{memory-overview-baseline-2026-03-08-v2,new,change}/`
+
+Bench: `engine/warm/module_memory_overview/minimal_with_pdb`
+Baseline: `[468.54 us, 469.65 us, 470.60 us]`
+Current: `[30.500 us, 30.749 us, 30.962 us]`
+Delta: `[-93.652%, -93.583%, -93.514%]`
+Change driver: cached base/ready overview snapshots plus linear-sweep discovered coverage in `engine/src/state.rs`, alongside renderer deferral of ready-side browser/bar requests in `app/src/renderer/App.tsx`
+Evidence: `memory-overview-baseline-2026-03-08-v2`; `engine/target/criterion/engine_warm_module_memory_overview/minimal_with_pdb/memory-overview-baseline-2026-03-08-v2/`; `engine/target/criterion/engine_warm_module_memory_overview/minimal_with_pdb/new/`; `engine/target/criterion/engine_warm_module_memory_overview/minimal_with_pdb/change/`
+Notes: this benchmark isolates the memory-bar API cost; the renderer change separately prevents the initial ready disassembly paint from queuing behind the function-list and memory-overview requests
+
 ## Saved Baseline Checkpoints
+
+### 2026-03-08 - `memory-overview-baseline-2026-03-08-v2`
+
+- Commit: workspace state before caching the ready memory-overview result and before deferring ready-side supplemental renderer requests
+- Command: `cargo bench --manifest-path engine/Cargo.toml --bench analysis_bench -- engine/warm/module_memory_overview --save-baseline memory-overview-baseline-2026-03-08-v2`
+- Fixture Set: `quick`
+- Machine/Profile: Windows, Criterion release bench profile
+- Criterion Artifacts: `engine/target/criterion/engine_warm_module_memory_overview/minimal_with_pdb/memory-overview-baseline-2026-03-08-v2/`
+- Notes: captured immediately before removing the post-ready memory-overview rebuild from the user-visible path
 
 ### 2026-03-07 - `parallel-analysis-baseline-2026-03-07`
 

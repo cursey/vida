@@ -1,5 +1,20 @@
 # Change Files
 
+## 2026-03-08 - Prioritize Ready Disassembly Paint and Cache Memory Overview
+
+App:
+- `app/src/renderer/App.tsx`
+
+Engine:
+- `engine/benches/analysis_bench.rs`
+- `engine/src/analysis.rs`
+- `engine/src/state.rs`
+
+Docs:
+- `docs/engine_benchmarking.md`
+- `docs/work_log.md`
+- `docs/change_files.md`
+
 ## 2026-03-08 - Defer Browser List and Memory Bar Until Analysis Ready
 
 App:

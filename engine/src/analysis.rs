@@ -49,8 +49,8 @@ pub(crate) struct CachedFunctionGraph {
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct InstructionOwnerRange {
-    end_rva: u64,
-    function_start_rva: u64,
+    pub(crate) end_rva: u64,
+    pub(crate) function_start_rva: u64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
