@@ -38,6 +38,10 @@ impl SectionLookup {
             .is_some_and(|section| section.executable)
     }
 
+    pub(crate) fn has_mapped_rva(&self, rva: u64) -> bool {
+        rva < self.size_of_headers || self.section_for_rva(rva).is_some()
+    }
+
     pub(crate) fn section_for_rva(&self, rva: u64) -> Option<&SectionSlice> {
         let idx = self
             .sections

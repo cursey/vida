@@ -1,5 +1,22 @@
 # Change Files
 
+## 2026-03-08 - Add Engine Xref Indexing and VA Query Support
+
+Engine:
+- `engine/benches/analysis_bench.rs`
+- `engine/src/analysis.rs`
+- `engine/src/api.rs`
+- `engine/src/cfg.rs`
+- `engine/src/linear.rs`
+- `engine/src/pe_utils.rs`
+- `engine/src/state.rs`
+- `engine/tests/engine_integration.rs`
+
+Docs:
+- `docs/engine_benchmarking.md`
+- `docs/work_log.md`
+- `docs/change_files.md`
+
 ## 2026-03-08 - Remove Native Menu Updates From Custom Chrome App
 
 App:

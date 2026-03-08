@@ -1,5 +1,21 @@
 # Work Log
 
+## 2026-03-08 - Add Engine Xref Indexing and VA Query Support
+
+Summary:
+- Added engine-side xref extraction for direct calls, direct jumps, conditional branch targets, and RIP-relative data references, then indexed canonical inbound xrefs after function ownership is finalized.
+- Added a new `get_xrefs_to_va` engine API so later UI work can query inbound xrefs for any mapped VA without recomputing analysis-time relationships.
+- Extended engine coverage for xref indexing rules, added an integration test for call-derived function xrefs, and added a warm Criterion benchmark for xref lookup alongside a cold analysis benchmark check.
+
+Validation commands executed:
+- `cargo fmt --manifest-path engine/Cargo.toml`
+- `cargo test --manifest-path engine/Cargo.toml`
+- `cargo bench --manifest-path engine/Cargo.toml --bench analysis_bench -- engine/warm/xrefs_to_va`
+- `cargo bench --manifest-path engine/Cargo.toml --bench analysis_bench -- engine/cold/module_open_and_analyze/minimal_with_pdb --baseline hybrid-full-2026-03-07`
+
+Changed files index:
+- See `docs/change_files.md` for the detailed file list for this work item.
+
 ## 2026-03-08 - Remove Native Menu Updates From Custom Chrome App
 
 Summary:

@@ -11,7 +11,9 @@ use std::time::Duration;
 
 use goblin::pe::PE;
 
-use crate::api::{FunctionGraphBlock, FunctionGraphEdge, FunctionGraphInstruction};
+use crate::api::{
+    FunctionGraphBlock, FunctionGraphEdge, FunctionGraphInstruction, XrefKind, XrefTargetKind,
+};
 use crate::cfg::{BasicBlockEdgeKind, FunctionGraphAnalysis, analyze_function_cfg};
 use crate::disasm::{default_function_name, to_hex};
 use crate::error::EngineError;
@@ -36,6 +38,7 @@ pub(crate) struct ModuleAnalysis {
     pub(crate) graphs_by_start: HashMap<u64, CachedFunctionGraph>,
     pub(crate) instruction_owner_by_rva: BTreeMap<u64, InstructionOwnerRange>,
     pub(crate) claimed_instructions_by_function_start: HashMap<u64, Vec<AnalyzedInstructionRow>>,
+    pub(crate) xrefs_to_by_target_rva: HashMap<u64, Vec<CachedXref>>,
 }
 
 #[derive(Debug, Clone)]
@@ -51,6 +54,15 @@ pub(crate) struct CachedFunctionGraph {
 pub(crate) struct InstructionOwnerRange {
     pub(crate) end_rva: u64,
     pub(crate) function_start_rva: u64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct CachedXref {
+    pub(crate) source_instruction_rva: u64,
+    pub(crate) source_function_start_rva: u64,
+    pub(crate) target_rva: u64,
+    pub(crate) kind: XrefKind,
+    pub(crate) target_kind: XrefTargetKind,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -245,6 +257,10 @@ where
         analyzed_function_count: Some(functions.len()),
     });
     let linear_view = build_linear_view(&section_lookup, &claimed_instructions)?;
+    let xrefs_to_by_target_rva = build_xref_indexes(
+        &claimed_instructions_by_function_start,
+        &instruction_owner_by_rva,
+    );
 
     Ok(ModuleAnalysis {
         functions: (*functions).clone(),
@@ -252,6 +268,7 @@ where
         graphs_by_start,
         instruction_owner_by_rva,
         claimed_instructions_by_function_start,
+        xrefs_to_by_target_rva,
     })
 }
 
@@ -265,6 +282,61 @@ pub(crate) fn instruction_owner_for_rva(
         Some(range.function_start_rva)
     } else {
         None
+    }
+}
+
+fn build_xref_indexes(
+    claimed_instructions_by_function_start: &HashMap<u64, Vec<AnalyzedInstructionRow>>,
+    instruction_owner_by_rva: &BTreeMap<u64, InstructionOwnerRange>,
+) -> HashMap<u64, Vec<CachedXref>> {
+    let mut xrefs_to_by_target_rva = HashMap::<u64, Vec<CachedXref>>::new();
+
+    for (&function_start_rva, rows) in claimed_instructions_by_function_start {
+        for row in rows {
+            for xref in &row.xrefs {
+                if matches!(xref.target_kind, XrefTargetKind::Code)
+                    && instruction_owner_for_rva(instruction_owner_by_rva, xref.target_rva)
+                        .is_none()
+                {
+                    continue;
+                }
+
+                let cached = CachedXref {
+                    source_instruction_rva: row.start_rva,
+                    source_function_start_rva: function_start_rva,
+                    target_rva: xref.target_rva,
+                    kind: xref.kind,
+                    target_kind: xref.target_kind,
+                };
+                xrefs_to_by_target_rva
+                    .entry(cached.target_rva)
+                    .or_default()
+                    .push(cached);
+            }
+        }
+    }
+
+    for xrefs in xrefs_to_by_target_rva.values_mut() {
+        xrefs.sort_by_key(|xref| {
+            (
+                xref.source_instruction_rva,
+                xref.source_function_start_rva,
+                xref.kind_sort_key(),
+            )
+        });
+    }
+
+    xrefs_to_by_target_rva
+}
+
+impl CachedXref {
+    fn kind_sort_key(self) -> u8 {
+        match self.kind {
+            XrefKind::Call => 0,
+            XrefKind::Jump => 1,
+            XrefKind::Branch => 2,
+            XrefKind::Data => 3,
+        }
     }
 }
 
@@ -746,6 +818,7 @@ fn build_cached_function_graph(
                         instruction_category: instruction.instruction_category,
                         branch_target_rva: instruction.branch_target_rva,
                         call_target_rva: instruction.call_target_rva,
+                        xrefs: instruction.xrefs.clone(),
                     });
                     FunctionGraphInstruction {
                         mnemonic: instruction.mnemonic.clone(),
@@ -798,12 +871,13 @@ fn build_cached_function_graph(
 #[cfg(test)]
 mod tests {
     use super::{
-        CachedFunctionGraph, CompletedFunctionAnalysis, FunctionSeedCandidate,
-        InstructionOwnerRange, build_module_analysis_with_progress, claim_function_rows_for_owner,
-        discover_call_target_seeds, instruction_owner_for_rva, instruction_range_overlaps,
-        merge_completed_function_analysis, register_seed, seed_priority,
+        CachedFunctionGraph, CachedXref, CompletedFunctionAnalysis, FunctionSeedCandidate,
+        InstructionOwnerRange, build_module_analysis_with_progress, build_xref_indexes,
+        claim_function_rows_for_owner, discover_call_target_seeds, instruction_owner_for_rva,
+        instruction_range_overlaps, merge_completed_function_analysis, register_seed,
+        seed_priority,
     };
-    use crate::api::InstructionCategory;
+    use crate::api::{InstructionCategory, XrefKind, XrefTargetKind};
     use crate::linear::AnalyzedInstructionRow;
     use crate::pe_utils::{build_section_lookup, parse_pe64};
     use crate::{EngineError, fixture_path};
@@ -821,6 +895,7 @@ mod tests {
             instruction_category: InstructionCategory::Other,
             branch_target_rva: None,
             call_target_rva: None,
+            xrefs: Vec::new(),
         }
     }
 
@@ -832,6 +907,26 @@ mod tests {
         AnalyzedInstructionRow {
             instruction_category: InstructionCategory::Call,
             call_target_rva: Some(call_target_rva),
+            xrefs: vec![crate::linear::InstructionXref {
+                target_rva: call_target_rva,
+                kind: XrefKind::Call,
+                target_kind: XrefTargetKind::Code,
+            }],
+            ..instruction_row(start_rva, len)
+        }
+    }
+
+    fn data_instruction_row(
+        start_rva: u64,
+        len: u8,
+        data_target_rva: u64,
+    ) -> AnalyzedInstructionRow {
+        AnalyzedInstructionRow {
+            xrefs: vec![crate::linear::InstructionXref {
+                target_rva: data_target_rva,
+                kind: XrefKind::Data,
+                target_kind: XrefTargetKind::Data,
+            }],
             ..instruction_row(start_rva, len)
         }
     }
@@ -1058,6 +1153,62 @@ mod tests {
             .expect("stronger static seed should remain registered");
         assert_eq!(seed.seed.kind, "export");
         assert_eq!(seed.seed.name, "exported_name");
+    }
+
+    #[test]
+    fn build_xref_indexes_keeps_canonical_code_and_data_xrefs() {
+        let mut claimed = HashMap::new();
+        claimed.insert(
+            0x1000,
+            vec![
+                call_instruction_row(0x1000, 5, 0x2000),
+                data_instruction_row(0x1005, 7, 0x3000),
+            ],
+        );
+        let owners = [(0x1000, 0x1005, 0x1000), (0x2000, 0x2004, 0x2000)]
+            .into_iter()
+            .map(|(start_rva, end_rva, function_start_rva)| {
+                (
+                    start_rva,
+                    InstructionOwnerRange {
+                        end_rva,
+                        function_start_rva,
+                    },
+                )
+            })
+            .collect::<BTreeMap<_, _>>();
+
+        let xrefs_to = build_xref_indexes(&claimed, &owners);
+
+        assert_eq!(xrefs_to.get(&0x2000).map(Vec::len), Some(1));
+        assert_eq!(xrefs_to.get(&0x3000).map(Vec::len), Some(1));
+
+        assert_eq!(
+            xrefs_to
+                .get(&0x2000)
+                .and_then(|xrefs| xrefs.first())
+                .copied(),
+            Some(CachedXref {
+                source_instruction_rva: 0x1000,
+                source_function_start_rva: 0x1000,
+                target_rva: 0x2000,
+                kind: XrefKind::Call,
+                target_kind: XrefTargetKind::Code,
+            })
+        );
+        assert_eq!(
+            xrefs_to
+                .get(&0x3000)
+                .and_then(|xrefs| xrefs.first())
+                .copied(),
+            Some(CachedXref {
+                source_instruction_rva: 0x1005,
+                source_function_start_rva: 0x1000,
+                target_rva: 0x3000,
+                kind: XrefKind::Data,
+                target_kind: XrefTargetKind::Data,
+            })
+        );
     }
 
     #[test]

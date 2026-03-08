@@ -19,7 +19,7 @@ use crate::api::{
     LinearViewInfoResult, MemoryOverviewSliceKind, ModuleAnalysisStatusParams,
     ModuleAnalysisStatusResult, ModuleInfoParams, ModuleInfoResult, ModuleMemoryOverviewParams,
     ModuleMemoryOverviewResult, ModuleOpenParams, ModuleOpenResult, ModuleUnloadParams,
-    ModuleUnloadResult, SectionInfo,
+    ModuleUnloadResult, SectionInfo, XrefRecord, XrefsToVaParams, XrefsToVaResult,
 };
 use crate::disasm::{parse_hex_u64, to_hex};
 use crate::error::EngineError;
@@ -518,6 +518,58 @@ impl EngineState {
         let target_rva = target_va - image_base;
         let row_index = find_row_by_rva(&analysis.linear_view, target_rva)?;
         Ok(LinearFindRowByVaResult { row_index })
+    }
+
+    pub fn get_xrefs_to_va(
+        &mut self,
+        params: XrefsToVaParams,
+    ) -> Result<XrefsToVaResult, EngineError> {
+        let module = self
+            .modules
+            .get(&params.module_id)
+            .ok_or(EngineError::ModuleNotFound)?;
+        let snapshot = module.analysis_task.lock_state()?;
+        let analysis = ready_analysis(&snapshot)?;
+        let image_base = module.image_base;
+        let target_va = parse_hex_u64(&params.va)?;
+        if target_va < image_base {
+            return Err(EngineError::InvalidAddress);
+        }
+        let target_rva = target_va - image_base;
+        if !module.section_lookup.has_mapped_rva(target_rva) {
+            return Err(EngineError::InvalidAddress);
+        }
+
+        let xrefs = analysis
+            .xrefs_to_by_target_rva
+            .get(&target_rva)
+            .into_iter()
+            .flat_map(|entries| entries.iter())
+            .map(|xref| {
+                let source_graph = analysis
+                    .graphs_by_start
+                    .get(&xref.source_function_start_rva)
+                    .ok_or_else(|| {
+                        EngineError::Internal(format!(
+                            "Missing graph for xref source function {:X}",
+                            xref.source_function_start_rva
+                        ))
+                    })?;
+                Ok(XrefRecord {
+                    source_va: to_hex(image_base + xref.source_instruction_rva),
+                    source_function_start_va: to_hex(image_base + xref.source_function_start_rva),
+                    source_function_name: source_graph.function_name.clone(),
+                    kind: xref.kind,
+                    target_va: to_hex(image_base + xref.target_rva),
+                    target_kind: xref.target_kind,
+                })
+            })
+            .collect::<Result<Vec<_>, EngineError>>()?;
+
+        Ok(XrefsToVaResult {
+            target_va: to_hex(target_va),
+            xrefs,
+        })
     }
 }
 

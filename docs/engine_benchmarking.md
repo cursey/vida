@@ -22,6 +22,7 @@ This document defines the engine benchmarking workflow, fixture sets, and result
   - `engine/warm/linear_rows/*`
   - `engine/warm/function_graph_by_va/*`
   - `engine/warm/linear_disassembly/*`
+  - `engine/warm/xrefs_to_va/*`
 - Raw Criterion artifacts: `engine/target/criterion/`
 
 Cold benches measure module open plus background analysis completion. Warm benches measure API calls against an already-ready module state.
@@ -125,6 +126,7 @@ The repository's current recorded optimization checkpoints are:
 | Date | Fixture Set | Bench | Baseline | Current | Delta | Change driver |
 | --- | --- | --- | --- | --- | --- | --- |
 | 2026-03-08 | quick | `engine/warm/module_memory_overview/minimal_with_pdb` | ~39.36 us | ~105.09 ns | ~-99.7% | `engine/src/api.rs`, `engine/src/state.rs`, `app/src/renderer/features/disassembly/memory-overview-bar.tsx` |
+| 2026-03-08 | quick | `engine/warm/xrefs_to_va/minimal_with_pdb` | n/a (new benchmark) | ~664.52 ns | n/a | `engine/src/cfg.rs`, `engine/src/analysis.rs`, `engine/src/state.rs`, `engine/benches/analysis_bench.rs` |
 | 2026-03-08 | quick | `engine/cold/module_open_and_analyze/minimal_with_pdb` | ~36.75 ms | ~34.48 ms | no significant change | `engine/src/state.rs` |
 | 2026-03-07 | all | `engine/cold/module_open_and_analyze/minimal_with_pdb` | ~77.51 ms | ~30.90 ms | ~-60.6% | `engine/src/analysis.rs` |
 | 2026-03-07 | all | `engine/cold/module_open_and_analyze/minimal_without_pdb` | ~75.86 ms | ~30.19 ms | ~-60.1% | `engine/src/analysis.rs` |
@@ -214,6 +216,35 @@ Delta: `[-93.652%, -93.583%, -93.514%]`
 Change driver: cached base/ready overview snapshots plus linear-sweep discovered coverage in `engine/src/state.rs`, alongside renderer deferral of ready-side browser/bar requests in `app/src/renderer/App.tsx`
 Evidence: `memory-overview-baseline-2026-03-08-v2`; `engine/target/criterion/engine_warm_module_memory_overview/minimal_with_pdb/memory-overview-baseline-2026-03-08-v2/`; `engine/target/criterion/engine_warm_module_memory_overview/minimal_with_pdb/new/`; `engine/target/criterion/engine_warm_module_memory_overview/minimal_with_pdb/change/`
 Notes: this benchmark isolates the memory-bar API cost; the renderer change separately prevents the initial ready disassembly paint from queuing behind the function-list and memory-overview requests
+
+## 2026-03-08 - Add Engine Xref Indexing and Query Benchmark
+
+Date: 2026-03-08
+Commit: workspace state after adding engine xref indexing and VA query support
+Commands:
+- `cargo bench --manifest-path engine/Cargo.toml --bench analysis_bench -- engine/warm/xrefs_to_va`
+- `cargo bench --manifest-path engine/Cargo.toml --bench analysis_bench -- engine/cold/module_open_and_analyze/minimal_with_pdb --baseline hybrid-full-2026-03-07`
+Fixture Set: `quick`
+Machine/Profile: Windows, Criterion release bench profile
+Criterion Artifacts:
+- `engine/target/criterion/engine_warm_xrefs_to_va/minimal_with_pdb/`
+- `engine/target/criterion/engine_cold_module_open_and_analyze/minimal_with_pdb/{hybrid-full-2026-03-07,new,change}/`
+
+Bench: `engine/warm/xrefs_to_va/minimal_with_pdb`
+Baseline: `n/a (new benchmark)`
+Current: `[655.95 ns, 664.52 ns, 670.18 ns]`
+Delta: `n/a (new benchmark)`
+Change driver: direct call/jump/branch plus RIP-relative data xref extraction in `engine/src/cfg.rs`, canonical incoming xref indexing in `engine/src/analysis.rs`, and warm VA lookup materialization in `engine/src/state.rs`
+Evidence: `engine/target/criterion/engine_warm_xrefs_to_va/minimal_with_pdb/new/`; `engine/target/criterion/engine_warm_xrefs_to_va/minimal_with_pdb/report/`
+Notes: warm xref lookup uses an analysis-ready module and reports the cost to materialize the inbound xref list for a stable function VA with at least one inbound reference
+
+Bench: `engine/cold/module_open_and_analyze/minimal_with_pdb`
+Baseline: `[70.520 ms, 71.511 ms, 72.486 ms]`
+Current: `[36.993 ms, 37.485 ms, 38.038 ms]`
+Delta: `[-49.064%, -48.174%, -47.184%]`
+Change driver: same xref indexing work above, measured against the saved `hybrid-full-2026-03-07` baseline to keep cold analysis benchmarkable after the new indexing pass
+Evidence: `hybrid-full-2026-03-07`; `engine/target/criterion/engine_cold_module_open_and_analyze/minimal_with_pdb/hybrid-full-2026-03-07/`; `engine/target/criterion/engine_cold_module_open_and_analyze/minimal_with_pdb/new/`; `engine/target/criterion/engine_cold_module_open_and_analyze/minimal_with_pdb/change/`
+Notes: this comparison is against an older saved baseline that predates several unrelated engine improvements, so it mainly confirms the cold path remains comfortably benchmarkable after adding xref indexing rather than isolating the xref pass alone
 
 ## Saved Baseline Checkpoints
 

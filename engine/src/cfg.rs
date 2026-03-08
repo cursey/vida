@@ -4,9 +4,10 @@ use iced_x86::{
     Decoder, DecoderOptions, FlowControl, Formatter, Instruction, IntelFormatter, Mnemonic,
 };
 
-use crate::api::InstructionCategory;
+use crate::api::{InstructionCategory, XrefKind, XrefTargetKind};
 use crate::disasm::{bytes_to_hex, categorize_instruction, split_instruction_text};
 use crate::error::EngineError;
+use crate::linear::InstructionXref;
 use crate::pe_utils::SectionLookup;
 
 pub(crate) const MAX_CFG_BLOCKS: usize = 2048;
@@ -35,6 +36,7 @@ pub(crate) struct BasicBlockInstructionAnalysis {
     pub(crate) instruction_category: InstructionCategory,
     pub(crate) branch_target_rva: Option<u64>,
     pub(crate) call_target_rva: Option<u64>,
+    pub(crate) xrefs: Vec<InstructionXref>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -61,6 +63,7 @@ struct DecodedInstruction {
     flow_control: FlowControl,
     branch_target_rva: Option<u64>,
     call_target_rva: Option<u64>,
+    xrefs: Vec<InstructionXref>,
 }
 
 pub(crate) fn analyze_function_cfg(
@@ -137,6 +140,7 @@ pub(crate) fn analyze_function_cfg(
                 instruction_category: decoded.instruction_category,
                 branch_target_rva: decoded.branch_target_rva,
                 call_target_rva: decoded.call_target_rva,
+                xrefs: decoded.xrefs,
             });
             total_instructions += 1;
 
@@ -292,6 +296,43 @@ fn decode_instruction_at_rva(
         }
         _ => None,
     };
+    let mut xrefs = Vec::new();
+    if let Some(target_rva) =
+        call_target_rva.filter(|target| section_lookup.has_mapped_rva(*target))
+    {
+        xrefs.push(InstructionXref {
+            target_rva,
+            kind: XrefKind::Call,
+            target_kind: XrefTargetKind::Code,
+        });
+    }
+    if let Some(target_rva) =
+        branch_target_rva.filter(|target| section_lookup.has_mapped_rva(*target))
+    {
+        let kind = match instruction.flow_control() {
+            FlowControl::UnconditionalBranch => XrefKind::Jump,
+            FlowControl::ConditionalBranch => XrefKind::Branch,
+            _ => unreachable!("branch target only exists for direct branch flow control"),
+        };
+        xrefs.push(InstructionXref {
+            target_rva,
+            kind,
+            target_kind: XrefTargetKind::Code,
+        });
+    }
+    if instruction.is_ip_rel_memory_operand() {
+        let target_va = instruction.ip_rel_memory_address();
+        if target_va >= image_base {
+            let target_rva = target_va - image_base;
+            if section_lookup.has_mapped_rva(target_rva) {
+                xrefs.push(InstructionXref {
+                    target_rva,
+                    kind: XrefKind::Data,
+                    target_kind: XrefTargetKind::Data,
+                });
+            }
+        }
+    }
 
     Ok(Some(DecodedInstruction {
         len: instruction.len().min(u8::MAX as usize) as u8,
@@ -302,6 +343,7 @@ fn decode_instruction_at_rva(
         flow_control: instruction.flow_control(),
         branch_target_rva,
         call_target_rva,
+        xrefs,
     }))
 }
 

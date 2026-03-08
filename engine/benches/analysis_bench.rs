@@ -7,7 +7,7 @@ use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_ma
 use engine::api::{
     FunctionGraphByVaParams, FunctionListParams, LinearDisassemblyParams, LinearFindRowByVaParams,
     LinearRowsParams, LinearViewInfoParams, ModuleAnalysisStatusParams, ModuleInfoParams,
-    ModuleMemoryOverviewParams, ModuleOpenParams,
+    ModuleMemoryOverviewParams, ModuleOpenParams, XrefsToVaParams,
 };
 use engine::{EngineState, fixture_path};
 
@@ -430,6 +430,65 @@ fn bench_linear_disassembly(c: &mut Criterion) {
     group.finish();
 }
 
+fn bench_xrefs_to_va(c: &mut Criterion) {
+    let mut group = c.benchmark_group("engine/warm/xrefs_to_va");
+
+    for fixture in selected_fixtures()
+        .iter()
+        .copied()
+        .filter(|fixture| fixture.supports_warm_benches)
+    {
+        let mut context = open_ready_fixture(fixture);
+        let xref_target_va =
+            select_xref_target_va(&mut context).unwrap_or_else(|| context.entry_va.clone());
+        let params = XrefsToVaParams {
+            module_id: context.module_id.clone(),
+            va: xref_target_va,
+        };
+
+        group.bench_with_input(
+            BenchmarkId::from_parameter(fixture.label),
+            &fixture.label,
+            |bench, _| {
+                bench.iter(|| {
+                    let xrefs = context
+                        .state
+                        .get_xrefs_to_va(black_box(params.clone()))
+                        .expect("xrefs should load");
+
+                    black_box(xrefs.xrefs.len())
+                })
+            },
+        );
+    }
+
+    group.finish();
+}
+
+fn select_xref_target_va(context: &mut ReadyFixtureContext) -> Option<String> {
+    let functions = context
+        .state
+        .list_functions(FunctionListParams {
+            module_id: context.module_id.clone(),
+        })
+        .expect("function list should load");
+
+    for function in functions.functions {
+        let xrefs = context
+            .state
+            .get_xrefs_to_va(XrefsToVaParams {
+                module_id: context.module_id.clone(),
+                va: function.start.clone(),
+            })
+            .expect("xref lookup should load");
+        if !xrefs.xrefs.is_empty() {
+            return Some(function.start);
+        }
+    }
+
+    None
+}
+
 criterion_group! {
     name = analysis_benches;
     config = benchmark_config();
@@ -442,6 +501,7 @@ criterion_group! {
         bench_find_linear_row_by_va,
         bench_linear_rows_fetch,
         bench_function_graph_by_va,
-        bench_linear_disassembly
+        bench_linear_disassembly,
+        bench_xrefs_to_va
 }
 criterion_main!(analysis_benches);

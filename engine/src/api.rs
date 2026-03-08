@@ -175,6 +175,51 @@ pub struct FunctionGraphByVaResult {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct XrefsToVaParams {
+    #[serde(rename = "moduleId")]
+    pub module_id: String,
+    pub va: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum XrefKind {
+    Call,
+    Jump,
+    Branch,
+    Data,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum XrefTargetKind {
+    Code,
+    Data,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct XrefRecord {
+    #[serde(rename = "sourceVa")]
+    pub source_va: String,
+    #[serde(rename = "sourceFunctionStartVa")]
+    pub source_function_start_va: String,
+    #[serde(rename = "sourceFunctionName")]
+    pub source_function_name: String,
+    pub kind: XrefKind,
+    #[serde(rename = "targetVa")]
+    pub target_va: String,
+    #[serde(rename = "targetKind")]
+    pub target_kind: XrefTargetKind,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct XrefsToVaResult {
+    #[serde(rename = "targetVa")]
+    pub target_va: String,
+    pub xrefs: Vec<XrefRecord>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LinearDisassemblyParams {
     #[serde(rename = "moduleId")]
     pub module_id: String,

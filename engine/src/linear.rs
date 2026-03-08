@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::fmt::Write as FmtWrite;
 
-use crate::api::{InstructionCategory, LinearViewRow};
+use crate::api::{InstructionCategory, LinearViewRow, XrefKind, XrefTargetKind};
 use crate::disasm::{bytes_to_hex, to_hex};
 use crate::error::EngineError;
 use crate::pe_utils::SectionLookup;
@@ -9,6 +9,13 @@ use crate::pe_utils::SectionLookup;
 pub(crate) const DATA_GROUP_SIZE: u64 = 16;
 pub(crate) const LINEAR_ROW_HEIGHT: u64 = 24;
 pub(crate) const MAX_LINEAR_PAGE_ROWS: usize = 4096;
+
+#[derive(Debug, Clone)]
+pub(crate) struct InstructionXref {
+    pub(crate) target_rva: u64,
+    pub(crate) kind: XrefKind,
+    pub(crate) target_kind: XrefTargetKind,
+}
 
 #[derive(Debug, Clone)]
 pub(crate) struct AnalyzedInstructionRow {
@@ -20,6 +27,7 @@ pub(crate) struct AnalyzedInstructionRow {
     pub(crate) instruction_category: InstructionCategory,
     pub(crate) branch_target_rva: Option<u64>,
     pub(crate) call_target_rva: Option<u64>,
+    pub(crate) xrefs: Vec<InstructionXref>,
 }
 
 impl AnalyzedInstructionRow {

@@ -7,9 +7,86 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use engine::api::{
     FunctionGraphByVaParams, FunctionListParams, LinearDisassemblyParams, LinearFindRowByVaParams,
     LinearRowsParams, LinearViewInfoParams, MemoryOverviewSliceKind, ModuleAnalysisStatusParams,
-    ModuleMemoryOverviewParams, ModuleOpenParams, ModuleUnloadParams,
+    ModuleMemoryOverviewParams, ModuleOpenParams, ModuleUnloadParams, XrefKind, XrefTargetKind,
+    XrefsToVaParams,
 };
 use engine::{EngineError, EngineState, fixture_path};
+use goblin::pe::PE;
+use iced_x86::{Decoder, DecoderOptions, Mnemonic};
+
+fn rip_relative_references(path: &Path) -> Vec<(String, String)> {
+    let bytes = fs::read(path).expect("fixture bytes should load");
+    let pe = PE::parse(&bytes).expect("fixture should parse as PE64");
+    let image_base = pe.image_base as u64;
+    let size_of_headers = pe
+        .header
+        .optional_header
+        .as_ref()
+        .expect("PE should have optional header")
+        .windows_fields
+        .size_of_headers as u64;
+    let mut output = Vec::new();
+
+    for section in &pe.sections {
+        if section.characteristics & 0x20000000 == 0 {
+            continue;
+        }
+
+        let start_rva = section.virtual_address as u64;
+        let size = u64::from(section.virtual_size.max(section.size_of_raw_data));
+        if size == 0 {
+            continue;
+        }
+        let file_offset = section.pointer_to_raw_data as usize;
+        let file_size = section.size_of_raw_data as usize;
+        let end_offset = file_offset.saturating_add(file_size).min(bytes.len());
+        if file_offset >= end_offset {
+            continue;
+        }
+
+        let section_bytes = &bytes[file_offset..end_offset];
+        let mut decoder = Decoder::with_ip(
+            64,
+            section_bytes,
+            image_base + start_rva,
+            DecoderOptions::NONE,
+        );
+
+        while decoder.can_decode() {
+            let instruction = decoder.decode();
+            if instruction.mnemonic() == Mnemonic::INVALID || instruction.len() == 0 {
+                break;
+            }
+            if !instruction.is_ip_rel_memory_operand() {
+                continue;
+            }
+
+            let target_va = instruction.ip_rel_memory_address();
+            if target_va < image_base {
+                continue;
+            }
+            let target_rva = target_va - image_base;
+            let mapped = target_rva < size_of_headers
+                || pe.sections.iter().any(|candidate| {
+                    let candidate_start = candidate.virtual_address as u64;
+                    let candidate_size =
+                        u64::from(candidate.virtual_size.max(candidate.size_of_raw_data));
+                    let candidate_end = candidate_start.saturating_add(candidate_size);
+                    target_rva >= candidate_start && target_rva < candidate_end
+                });
+            if !mapped {
+                continue;
+            }
+
+            output.push((
+                format!("0x{:x}", instruction.ip()),
+                format!("0x{:x}", target_va),
+            ));
+        }
+    }
+
+    output
+}
 
 fn wait_for_analysis_ready(
     state: &mut EngineState,
@@ -304,6 +381,70 @@ fn discovers_internal_functions_from_direct_call_targets_without_pdb() {
     assert_eq!(graph.function_start_va, call_seed.start);
     assert_eq!(graph.function_name, call_seed.name);
     assert!(!graph.blocks.is_empty());
+
+    let xrefs = state
+        .get_xrefs_to_va(XrefsToVaParams {
+            module_id: open_result.module_id,
+            va: call_seed.start.clone(),
+        })
+        .expect("call-discovered function xrefs should load");
+
+    assert!(!xrefs.xrefs.is_empty());
+    assert!(xrefs.xrefs.iter().any(|xref| xref.kind == XrefKind::Call));
+    assert!(
+        xrefs
+            .xrefs
+            .iter()
+            .all(|xref| xref.target_kind == XrefTargetKind::Code)
+    );
+    assert!(
+        xrefs
+            .xrefs
+            .iter()
+            .all(|xref| xref.target_va == call_seed.start)
+    );
+}
+
+#[test]
+fn discovers_rip_relative_data_xrefs() {
+    let fixture = fixture_path("minimal_x64.exe");
+    let candidates = rip_relative_references(&fixture);
+    assert!(
+        !candidates.is_empty(),
+        "fixture should contain at least one RIP-relative mapped data reference"
+    );
+
+    let mut state = EngineState::default();
+    let open_result = state
+        .open_module(ModuleOpenParams {
+            path: fixture.to_string_lossy().into_owned(),
+        })
+        .expect("module should open");
+    let module_id = open_result.module_id;
+
+    let ready_status = wait_for_analysis_ready(&mut state, &module_id);
+    assert_eq!(ready_status.state, "ready");
+
+    let found = candidates.into_iter().any(|(source_va, target_va)| {
+        let xrefs = state
+            .get_xrefs_to_va(XrefsToVaParams {
+                module_id: module_id.clone(),
+                va: target_va.clone(),
+            })
+            .expect("data xrefs should load");
+
+        xrefs.xrefs.iter().any(|xref| {
+            xref.kind == XrefKind::Data
+                && xref.target_kind == XrefTargetKind::Data
+                && xref.source_va == source_va
+                && xref.target_va == target_va
+        })
+    });
+
+    assert!(
+        found,
+        "expected at least one analyzed RIP-relative data xref"
+    );
 }
 
 #[test]
