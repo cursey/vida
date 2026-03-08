@@ -9,6 +9,9 @@ export function createMockDesktopApi(
     onMenuOpenExecutable: vi.fn(() => () => {}),
     onMenuOpenRecentExecutable: vi.fn(() => () => {}),
     onMenuUnloadModule: vi.fn(() => () => {}),
+    onDragEnter: vi.fn(() => () => {}),
+    onDragLeave: vi.fn(() => () => {}),
+    onDragDrop: vi.fn(() => () => {}),
     addRecentExecutable: vi.fn().mockResolvedValue(undefined),
     getWindowChromeState: vi.fn().mockResolvedValue({
       useCustomChrome: true,

@@ -128,6 +128,7 @@ export function App() {
   const [isSearchingFunctions, setIsSearchingFunctions] = useState(false);
   const [isBuildingGraph, setIsBuildingGraph] = useState(false);
   const [isLoadingXrefs, setIsLoadingXrefs] = useState(false);
+  const [isDraggingFile, setIsDraggingFile] = useState(false);
 
   const [errorText, setErrorText] = useState<string>("");
   const [transientStatusMessage, setTransientStatusMessage] = useState("");
@@ -411,6 +412,27 @@ export function App() {
       unsubscribe();
     };
   }, [unloadCurrentModule]);
+
+  useEffect(() => {
+    const unlistenDragEnter = desktopApi.onDragEnter(() => {
+      setIsDraggingFile(true);
+    });
+    const unlistenDragLeave = desktopApi.onDragLeave(() => {
+      setIsDraggingFile(false);
+    });
+    const unlistenDragDrop = desktopApi.onDragDrop((payload) => {
+      setIsDraggingFile(false);
+      if (payload.paths.length > 0) {
+        void openModuleFromPath(payload.paths[0]);
+      }
+    });
+
+    return () => {
+      unlistenDragEnter();
+      unlistenDragLeave();
+      unlistenDragDrop();
+    };
+  }, []);
 
   const showTransientStatusMessage = useCallback((message: string) => {
     if (statusMessageTimerRef.current !== null) {

@@ -2,6 +2,11 @@ export type HexAddress = string;
 export type ModuleOpenParams = {
   path: string;
 };
+
+export type DragDropPayload = {
+  paths: string[];
+  position: { x: number; y: number };
+};
 export type ModuleInfoParams = {
   moduleId: string;
 };
@@ -283,6 +288,9 @@ export type DesktopApi = {
   onMenuOpenExecutable: (callback: () => void) => () => void;
   onMenuOpenRecentExecutable: (callback: (path: string) => void) => () => void;
   onMenuUnloadModule: (callback: () => void) => () => void;
+  onDragEnter: (callback: (payload: DragDropPayload) => void) => () => void;
+  onDragLeave: (callback: () => void) => () => void;
+  onDragDrop: (callback: (payload: DragDropPayload) => void) => () => void;
   addRecentExecutable: (path: string) => Promise<void>;
   getWindowChromeState: () => Promise<WindowChromeState>;
   onWindowChromeStateChanged: (

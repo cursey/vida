@@ -8,11 +8,20 @@ import type {
   WindowControlAction,
 } from "../shared/protocol";
 
+export type DragDropPayload = {
+  paths: string[];
+  position: { x: number; y: number };
+};
+
 const WINDOW_CHROME_STATE_CHANGED_EVENT = "app://window-chrome-state-changed";
 const TITLE_BAR_MENU_MODEL_CHANGED_EVENT = "app://title-bar-menu-model-changed";
 const MENU_OPEN_EXECUTABLE_EVENT = "app://menu-open-executable";
 const MENU_OPEN_RECENT_EXECUTABLE_EVENT = "app://menu-open-recent-executable";
 const MENU_UNLOAD_MODULE_EVENT = "app://menu-unload-module";
+
+const TAURI_DRAG_ENTER_EVENT = "tauri://drag-enter";
+const TAURI_DRAG_LEAVE_EVENT = "tauri://drag-leave";
+const TAURI_DRAG_DROP_EVENT = "tauri://drag-drop";
 
 function subscribe<T>(
   eventName: string,
@@ -78,6 +87,14 @@ export const desktopApi: DesktopApi = {
     subscribe<null>(MENU_UNLOAD_MODULE_EVENT, () => {
       callback();
     }),
+  onDragEnter: (callback: (payload: DragDropPayload) => void) =>
+    subscribe<DragDropPayload>(TAURI_DRAG_ENTER_EVENT, callback),
+  onDragLeave: (callback: () => void) =>
+    subscribe<null>(TAURI_DRAG_LEAVE_EVENT, () => {
+      callback();
+    }),
+  onDragDrop: (callback: (payload: DragDropPayload) => void) =>
+    subscribe<DragDropPayload>(TAURI_DRAG_DROP_EVENT, callback),
   openModule: (path: string) =>
     invokeApp<MethodResult["module.open"]>("open_module", { path }),
   unloadModule: (moduleId: string) =>

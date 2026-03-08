@@ -1,5 +1,17 @@
 # Change Files
 
+## 2026-03-08 - Add Drag-and-Drop Workspace Import
+
+App:
+- `app/src/renderer/App.tsx`
+- `app/src/renderer/desktop-api.ts`
+- `app/src/shared/protocol.ts`
+- `app/src/renderer/test/mock-desktop-api.ts`
+
+Docs:
+- `docs/work_log.md`
+- `docs/change_files.md`
+
 ## 2026-03-08 - Add Idle Workspace Prompt
 
 App:

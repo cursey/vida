@@ -1,5 +1,21 @@
 # Work Log
 
+## 2026-03-08 - Add Drag-and-Drop Workspace Import
+
+Summary:
+- Added `onDragEnter`, `onDragLeave`, and `onDragDrop` wrappers to the `desktopApi` so the UI can listen to Tauri's native full-window drag events.
+- Updated `App.tsx` to render a centered, full-screen overlay drop indicator when a drag starts, suggesting the user should drop an executable.
+- Wired the `onDragDrop` handler to pass the first dropped file path straight into `openModuleFromPath`.
+
+Validation commands executed:
+- `just check`
+- `just test`
+- `cargo fmt --manifest-path app/src-tauri/Cargo.toml`
+- Checked `npm run check` in `app` (type safety of the new protocol entries)
+
+Changed files index:
+- See `docs/change_files.md` for the detailed file list for this work item.
+
 ## 2026-03-08 - Add Idle Workspace Prompt
 
 Summary:
