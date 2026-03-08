@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-get-xrefs-to-va"
+description = "Enables the get_xrefs_to_va command without any pre-configured scope."
+commands.allow = ["get_xrefs_to_va"]
+
+[[permission]]
+identifier = "deny-get-xrefs-to-va"
+description = "Denies the get_xrefs_to_va command without any pre-configured scope."
+commands.deny = ["get_xrefs_to_va"]

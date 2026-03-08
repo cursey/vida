@@ -53,6 +53,10 @@ export function createMockDesktopApi(
       blocks: [],
       edges: [],
     }),
+    getXrefsToVa: vi.fn().mockResolvedValue({
+      targetVa: "0x140001000",
+      xrefs: [],
+    }),
     disassembleLinear: vi.fn().mockResolvedValue({
       instructions: [],
       stopReason: "end_of_data",

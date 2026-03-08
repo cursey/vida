@@ -16,6 +16,7 @@ use engine::{
         LinearViewInfoResult, ModuleAnalysisStatusParams, ModuleAnalysisStatusResult,
         ModuleInfoParams, ModuleInfoResult, ModuleMemoryOverviewParams, ModuleMemoryOverviewResult,
         ModuleOpenParams, ModuleOpenResult, ModuleUnloadParams, ModuleUnloadResult,
+        XrefsToVaParams, XrefsToVaResult,
     },
 };
 use serde::{Deserialize, Serialize};
@@ -259,6 +260,15 @@ async fn get_function_graph_by_va(
 }
 
 #[tauri::command]
+async fn get_xrefs_to_va(
+    state: State<'_, AppState>,
+    payload: XrefsToVaParams,
+) -> Result<XrefsToVaResult, String> {
+    let engine = Arc::clone(&state.engine);
+    run_engine(engine, move |engine| engine.get_xrefs_to_va(payload)).await
+}
+
+#[tauri::command]
 async fn disassemble_linear(
     state: State<'_, AppState>,
     payload: LinearDisassemblyParams,
@@ -338,6 +348,7 @@ fn main() {
             get_module_memory_overview,
             list_functions,
             get_function_graph_by_va,
+            get_xrefs_to_va,
             disassemble_linear,
             get_linear_view_info,
             get_linear_rows,

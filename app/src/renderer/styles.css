@@ -1162,6 +1162,131 @@
   margin-top: 0;
 }
 
+.xrefs-modal {
+  width: min(560px, calc(100vw - 32px));
+  padding: 12px;
+  gap: 10px;
+}
+
+.xrefs-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.xrefs-description {
+  margin: 0;
+  font-size: 12px;
+}
+
+.xrefs-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  max-height: min(52vh, 420px);
+  overflow-y: auto;
+  border-top: 1px solid var(--line-soft);
+}
+
+.xrefs-list li {
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.xrefs-item {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  justify-content: flex-start;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-primary);
+  text-align: left;
+  box-shadow: none;
+  transition: background-color 120ms ease;
+}
+
+.xrefs-item:hover,
+.xrefs-item:focus-visible {
+  background: oklch(var(--accent));
+}
+
+.xrefs-item:disabled {
+  opacity: 0.7;
+  cursor: wait;
+}
+
+.xrefs-item-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  width: 100%;
+}
+
+.xrefs-item-line code,
+.xrefs-function-name {
+  font-family: var(--font-mono);
+}
+
+.xrefs-item-line code {
+  color: var(--text-muted);
+  font-size: 11px;
+  flex: 0 0 auto;
+}
+
+.xrefs-function-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+.xrefs-kind {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 52px;
+  height: 18px;
+  padding: 0 7px;
+  border: 1px solid oklch(var(--border));
+  border-radius: 9999px;
+  background: oklch(var(--secondary));
+  color: var(--text-secondary);
+  font-size: 10px;
+  line-height: 1;
+  text-transform: lowercase;
+  flex: 0 0 auto;
+}
+
+.xrefs-kind.kind-call {
+  border-color: oklch(var(--chart-2) / 0.45);
+  color: oklch(var(--chart-2));
+}
+
+.xrefs-kind.kind-jump,
+.xrefs-kind.kind-branch {
+  border-color: oklch(var(--chart-3) / 0.45);
+  color: oklch(var(--chart-3));
+}
+
+.xrefs-kind.kind-data {
+  border-color: oklch(var(--chart-5) / 0.45);
+  color: oklch(var(--chart-5));
+}
+
+.xrefs-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: 0;
+}
+
 @keyframes fade-in-up {
   from {
     opacity: 0;

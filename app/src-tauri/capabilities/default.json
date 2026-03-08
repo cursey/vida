@@ -27,6 +27,7 @@
     "allow-get-module-memory-overview",
     "allow-list-functions",
     "allow-get-function-graph-by-va",
+    "allow-get-xrefs-to-va",
     "allow-disassemble-linear",
     "allow-get-linear-view-info",
     "allow-get-linear-rows",

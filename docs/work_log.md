@@ -1,5 +1,20 @@
 # Work Log
 
+## 2026-03-08 - Add Disassembly Xref Modal Shortcut and Navigation
+
+Summary:
+- Added renderer and host plumbing for `xref.getXrefsToVa`, then wired an `X` disassembly hotkey that opens an xref modal for the highlighted VA.
+- Reused the existing VA navigation flow so clicking an xref in the modal jumps the disassembly view to the xref source and preserves selection history behavior.
+- Added the no-xrefs status-bar path, modal styling, and renderer regression coverage for opening the modal, jumping from it, and reporting empty xref results.
+
+Validation commands executed:
+- `cargo test --manifest-path app/src-tauri/Cargo.toml`
+- `npx vitest run src/renderer/App.xrefs-modal.test.tsx src/renderer/App.graph-view.test.tsx` (in `app`)
+- `npm run check` (in `app`)
+
+Changed files index:
+- See `docs/change_files.md` for the detailed file list for this work item.
+
 ## 2026-03-08 - Add Engine Xref Indexing and VA Query Support
 
 Summary:

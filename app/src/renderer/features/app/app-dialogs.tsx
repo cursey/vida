@@ -8,7 +8,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import type { FormEvent, RefObject } from "react";
+import { type FormEvent, type RefObject, useRef } from "react";
+import type { XrefRecord } from "../../../shared/protocol";
 
 type LoadingDialogProps = {
   isLoading: boolean;
@@ -94,6 +95,81 @@ export function GoToDialog({
             </Button>
           </DialogFooter>
         </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+type XrefsDialogProps = {
+  isOpen: boolean;
+  isLoading: boolean;
+  targetVa: string;
+  xrefs: XrefRecord[];
+  onOpenChange: (nextOpen: boolean) => void;
+  onNavigateToXref: (xref: XrefRecord) => void;
+};
+
+export function XrefsDialog({
+  isOpen,
+  isLoading,
+  targetVa,
+  xrefs,
+  onOpenChange,
+  onNavigateToXref,
+}: XrefsDialogProps) {
+  const contentRef = useRef<HTMLDivElement | null>(null);
+
+  return (
+    <Dialog onOpenChange={onOpenChange} open={isOpen}>
+      <DialogContent
+        className="xrefs-modal"
+        onOpenAutoFocus={(event) => {
+          event.preventDefault();
+          contentRef.current?.focus();
+        }}
+        ref={contentRef}
+        tabIndex={-1}
+      >
+        <DialogHeader>
+          <DialogTitle className="xrefs-title">Xrefs To {targetVa}</DialogTitle>
+          <DialogDescription className="xrefs-description">
+            Select an xref to jump to its source in Disassembly.
+          </DialogDescription>
+        </DialogHeader>
+        <ul className="xrefs-list">
+          {xrefs.map((xref) => (
+            <li key={`${xref.sourceVa}-${xref.kind}-${xref.targetVa}`}>
+              <Button
+                className="xrefs-item"
+                disabled={isLoading}
+                onClick={() => onNavigateToXref(xref)}
+                size="sm"
+                type="button"
+                variant="ghost"
+              >
+                <div className="xrefs-item-line">
+                  <code>{xref.sourceVa}</code>
+                  <span className="xrefs-function-name">
+                    {xref.sourceFunctionName}
+                  </span>
+                  <code>{xref.sourceFunctionStartVa}</code>
+                  <span className={`xrefs-kind kind-${xref.kind}`}>
+                    {xref.kind}
+                  </span>
+                </div>
+              </Button>
+            </li>
+          ))}
+        </ul>
+        <DialogFooter className="xrefs-modal-actions">
+          <Button
+            onClick={() => onOpenChange(false)}
+            type="button"
+            variant="outline"
+          >
+            Close
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

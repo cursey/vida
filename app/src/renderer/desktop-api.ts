@@ -101,6 +101,10 @@ export const desktopApi: DesktopApi = {
       "get_function_graph_by_va",
       { payload },
     ),
+  getXrefsToVa: (payload) =>
+    invokeApp<MethodResult["xref.getXrefsToVa"]>("get_xrefs_to_va", {
+      payload,
+    }),
   disassembleLinear: (payload) =>
     invokeApp<MethodResult["function.disassembleLinear"]>(
       "disassemble_linear",

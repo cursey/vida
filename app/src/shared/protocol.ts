@@ -12,6 +12,10 @@ export type FunctionGraphByVaParams = {
   moduleId: string;
   va: HexAddress;
 };
+export type XrefsToVaParams = {
+  moduleId: string;
+  va: HexAddress;
+};
 export type LinearDisassemblyParams = {
   moduleId: string;
   start: HexAddress;
@@ -26,6 +30,7 @@ export type EngineMethod =
   | "module.getMemoryOverview"
   | "function.list"
   | "function.getGraphByVa"
+  | "xref.getXrefsToVa"
   | "function.disassembleLinear"
   | "linear.getViewInfo"
   | "linear.getRows"
@@ -45,6 +50,7 @@ export type MethodParams = {
   };
   "function.list": FunctionListParams;
   "function.getGraphByVa": FunctionGraphByVaParams;
+  "xref.getXrefsToVa": XrefsToVaParams;
   "function.disassembleLinear": LinearDisassemblyParams;
   "linear.getViewInfo": {
     moduleId: string;
@@ -147,6 +153,19 @@ export type FunctionGraphEdge = {
   kind: "conditional" | "unconditional" | "fallthrough";
 };
 
+export type XrefKind = "call" | "jump" | "branch" | "data";
+
+export type XrefTargetKind = "code" | "data";
+
+export type XrefRecord = {
+  sourceVa: HexAddress;
+  sourceFunctionStartVa: HexAddress;
+  sourceFunctionName: string;
+  kind: XrefKind;
+  targetVa: HexAddress;
+  targetKind: XrefTargetKind;
+};
+
 export type LinearInstruction = {
   address: HexAddress;
   bytes: string;
@@ -198,6 +217,10 @@ export type MethodResult = {
     focusBlockId: string;
     blocks: FunctionGraphBlock[];
     edges: FunctionGraphEdge[];
+  };
+  "xref.getXrefsToVa": {
+    targetVa: HexAddress;
+    xrefs: XrefRecord[];
   };
   "function.disassembleLinear": {
     instructions: LinearInstruction[];
@@ -284,6 +307,9 @@ export type DesktopApi = {
   getFunctionGraphByVa: (
     payload: MethodParams["function.getGraphByVa"],
   ) => Promise<MethodResult["function.getGraphByVa"]>;
+  getXrefsToVa: (
+    payload: MethodParams["xref.getXrefsToVa"],
+  ) => Promise<MethodResult["xref.getXrefsToVa"]>;
   disassembleLinear: (
     payload: MethodParams["function.disassembleLinear"],
   ) => Promise<MethodResult["function.disassembleLinear"]>;

@@ -1,6 +1,10 @@
 import { WindowChrome } from "@/components/window-chrome";
 import { desktopApi } from "@/desktop-api";
-import { GoToDialog, LoadingDialog } from "@/features/app/app-dialogs";
+import {
+  GoToDialog,
+  LoadingDialog,
+  XrefsDialog,
+} from "@/features/app/app-dialogs";
 import { AppStatusBar } from "@/features/app/status-bar";
 import { BrowserPanel } from "@/features/browser/browser-panel";
 import { DisassemblyPanel } from "@/features/disassembly/disassembly-panel";
@@ -32,6 +36,7 @@ import type {
   TitleBarMenuModel,
   WindowChromeState,
   WindowControlAction,
+  XrefRecord,
 } from "../shared/protocol";
 
 type DragState = {
@@ -113,6 +118,9 @@ export function App() {
     MethodResult["function.getGraphByVa"] | null
   >(null);
   const [isGoToModalOpen, setIsGoToModalOpen] = useState(false);
+  const [isXrefsModalOpen, setIsXrefsModalOpen] = useState(false);
+  const [xrefsTargetVa, setXrefsTargetVa] = useState("");
+  const [xrefs, setXrefs] = useState<XrefRecord[]>([]);
   const [goToInputValue, setGoToInputValue] = useState("");
   const [isBrowserSearchVisible, setIsBrowserSearchVisible] = useState(false);
   const [functionSearchQuery, setFunctionSearchQuery] = useState("");
@@ -123,6 +131,7 @@ export function App() {
     useState("");
   const [isSearchingFunctions, setIsSearchingFunctions] = useState(false);
   const [isBuildingGraph, setIsBuildingGraph] = useState(false);
+  const [isLoadingXrefs, setIsLoadingXrefs] = useState(false);
 
   const [errorText, setErrorText] = useState<string>("");
   const [transientStatusMessage, setTransientStatusMessage] = useState("");
@@ -186,6 +195,53 @@ export function App() {
       }
     };
   }, []);
+
+  const fetchLinearPage = useCallback(
+    async (currentModuleId: string, page: number) => {
+      if (
+        pageCacheRef.current.has(page) ||
+        inflightPagesRef.current.has(page)
+      ) {
+        return;
+      }
+
+      inflightPagesRef.current.add(page);
+
+      try {
+        const payload = {
+          moduleId: currentModuleId,
+          startRow: page * PAGE_SIZE,
+          rowCount: PAGE_SIZE,
+        };
+        const response = await desktopApi.getLinearRows(payload);
+        if (currentModuleId !== activeModuleIdRef.current) {
+          return;
+        }
+
+        if (pageCacheRef.current.has(page)) {
+          pageCacheRef.current.delete(page);
+        }
+        pageCacheRef.current.set(page, response.rows);
+
+        while (pageCacheRef.current.size > MAX_CACHED_PAGES) {
+          const oldestKey = pageCacheRef.current.keys().next().value;
+          if (oldestKey === undefined) {
+            break;
+          }
+          pageCacheRef.current.delete(oldestKey);
+        }
+
+        setCacheEpoch((value) => value + 1);
+      } catch (error: unknown) {
+        setErrorText(
+          error instanceof Error ? error.message : "Failed to load linear rows",
+        );
+      } finally {
+        inflightPagesRef.current.delete(page);
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
     document.title = modulePath ? `${modulePath} - V.ıDA Pro` : "V.ıDA Pro";
@@ -297,6 +353,9 @@ export function App() {
     setIsLoading(false);
     setLoadingPath("");
     setIsGoToModalOpen(false);
+    setIsXrefsModalOpen(false);
+    setXrefsTargetVa("");
+    setXrefs([]);
     setGoToInputValue("");
     setIsBrowserSearchVisible(false);
     setFunctionSearchQuery("");
@@ -304,6 +363,7 @@ export function App() {
     setAppliedFunctionSearchQuery("");
     setIsSearchingFunctions(false);
     setIsBuildingGraph(false);
+    setIsLoadingXrefs(false);
     setModulePath("");
     setModuleId("");
     setEntryVa("");
@@ -777,6 +837,7 @@ export function App() {
       void fetchLinearPage(moduleId, page);
     }
   }, [
+    fetchLinearPage,
     moduleId,
     linearInfo,
     rowCount,
@@ -907,6 +968,7 @@ export function App() {
   }, [
     activePanel,
     centerView,
+    fetchLinearPage,
     moduleId,
     readRow,
     selectedRowIndex,
@@ -938,47 +1000,6 @@ export function App() {
 
     selectionHistoryIndexRef.current = history.length - 1;
   }, []);
-
-  async function fetchLinearPage(currentModuleId: string, page: number) {
-    if (pageCacheRef.current.has(page) || inflightPagesRef.current.has(page)) {
-      return;
-    }
-
-    inflightPagesRef.current.add(page);
-
-    try {
-      const payload = {
-        moduleId: currentModuleId,
-        startRow: page * PAGE_SIZE,
-        rowCount: PAGE_SIZE,
-      };
-      const response = await desktopApi.getLinearRows(payload);
-      if (currentModuleId !== activeModuleIdRef.current) {
-        return;
-      }
-
-      if (pageCacheRef.current.has(page)) {
-        pageCacheRef.current.delete(page);
-      }
-      pageCacheRef.current.set(page, response.rows);
-
-      while (pageCacheRef.current.size > MAX_CACHED_PAGES) {
-        const oldestKey = pageCacheRef.current.keys().next().value;
-        if (oldestKey === undefined) {
-          break;
-        }
-        pageCacheRef.current.delete(oldestKey);
-      }
-
-      setCacheEpoch((value) => value + 1);
-    } catch (error: unknown) {
-      setErrorText(
-        error instanceof Error ? error.message : "Failed to load linear rows",
-      );
-    } finally {
-      inflightPagesRef.current.delete(page);
-    }
-  }
 
   function startResizing(event: PointerEvent<HTMLDivElement>) {
     if (window.innerWidth <= 1250) {
@@ -1308,6 +1329,76 @@ export function App() {
     setIsGoToModalOpen(true);
   }, [moduleId, goToAddress, entryVa]);
 
+  const openXrefsForSelection = useCallback(async () => {
+    if (
+      !moduleId ||
+      activePanel !== "disassembly" ||
+      centerView !== "disassembly"
+    ) {
+      return;
+    }
+
+    if (selectedRowIndex === null) {
+      showTransientStatusMessage(
+        "Select a row in Disassembly before listing xrefs.",
+      );
+      return;
+    }
+
+    let selectedRow = readRow(selectedRowIndex);
+    if (!selectedRow) {
+      await fetchLinearPage(moduleId, makePageKey(selectedRowIndex, PAGE_SIZE));
+      selectedRow = readRow(selectedRowIndex);
+    }
+    if (!selectedRow) {
+      showTransientStatusMessage("The highlighted VA is not available yet.");
+      return;
+    }
+
+    try {
+      setIsLoadingXrefs(true);
+      const result = await desktopApi.getXrefsToVa({
+        moduleId,
+        va: selectedRow.address,
+      });
+      if (result.xrefs.length === 0) {
+        showTransientStatusMessage(
+          "No xrefs are available for the highlighted VA.",
+        );
+        return;
+      }
+      setErrorText("");
+      setXrefsTargetVa(result.targetVa);
+      setXrefs(result.xrefs);
+      setIsXrefsModalOpen(true);
+    } catch (error: unknown) {
+      setErrorText(
+        error instanceof Error ? error.message : "Failed to load xrefs",
+      );
+    } finally {
+      setIsLoadingXrefs(false);
+    }
+  }, [
+    activePanel,
+    centerView,
+    fetchLinearPage,
+    moduleId,
+    readRow,
+    selectedRowIndex,
+    showTransientStatusMessage,
+  ]);
+
+  const navigateToXref = useCallback(
+    (xref: XrefRecord) => {
+      void navigateToVa(xref.sourceVa).then((navigated) => {
+        if (navigated) {
+          setIsXrefsModalOpen(false);
+        }
+      });
+    },
+    [navigateToVa],
+  );
+
   useEffect(() => {
     function handleMouseHistoryButtons(event: MouseEvent) {
       if (!moduleId) {
@@ -1354,6 +1445,12 @@ export function App() {
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape" && isXrefsModalOpen) {
+        event.preventDefault();
+        setIsXrefsModalOpen(false);
+        return;
+      }
+
       if (event.key === "Escape" && isGoToModalOpen) {
         event.preventDefault();
         setIsGoToModalOpen(false);
@@ -1406,6 +1503,27 @@ export function App() {
         return;
       }
 
+      if (event.key.toLowerCase() === "x" && !event.repeat) {
+        if (event.ctrlKey || event.metaKey || event.altKey) {
+          return;
+        }
+        if (
+          isEditableTarget(event.target) ||
+          isGoToModalOpen ||
+          isXrefsModalOpen ||
+          !moduleId
+        ) {
+          return;
+        }
+        if (activePanel !== "disassembly" || centerView !== "disassembly") {
+          return;
+        }
+
+        event.preventDefault();
+        void openXrefsForSelection();
+        return;
+      }
+
       if (event.key.toLowerCase() !== "g" || event.repeat) {
         return;
       }
@@ -1439,8 +1557,10 @@ export function App() {
     activePanel,
     centerView,
     isBrowserSearchVisible,
+    isXrefsModalOpen,
     moduleId,
     isGoToModalOpen,
+    openXrefsForSelection,
     openGoToModal,
     toggleGraphViewForSelection,
   ]);
@@ -1596,6 +1716,15 @@ export function App() {
         onSubmit={(event) => {
           void handleGoToSubmit(event);
         }}
+      />
+
+      <XrefsDialog
+        isOpen={isXrefsModalOpen}
+        isLoading={isLoadingXrefs}
+        targetVa={xrefsTargetVa}
+        xrefs={xrefs}
+        onOpenChange={setIsXrefsModalOpen}
+        onNavigateToXref={navigateToXref}
       />
     </div>
   );
