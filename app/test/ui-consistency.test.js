@@ -32,6 +32,9 @@ function lineNumbers(content, pattern) {
 
 const RAW_CONTROL_ALLOWLIST = new Set([
   "features\\disassembly\\memory-overview-bar.tsx",
+  // Graph operand overlays are canvas-positioned hotspots; the shared Button
+  // primitive cannot express that layout without breaking hit-testing/alignment.
+  "features\\graph\\graph-panel.tsx",
 ]);
 
 test("renderer feature components do not use raw button/input elements", () => {

@@ -670,6 +670,10 @@ export function App() {
       return null;
     }
 
+    if (centerView === "graph") {
+      return parseHexVa(goToAddress);
+    }
+
     if (virtualItems.length > 0) {
       const startVa = parseHexVa(readRow(visibleStart)?.address ?? "");
       const endVa = parseHexVa(readRow(visibleEnd)?.address ?? "");
@@ -680,6 +684,7 @@ export function App() {
 
     return parseHexVa(goToAddress);
   }, [
+    centerView,
     goToAddress,
     memoryOverview,
     readRow,
@@ -713,6 +718,70 @@ export function App() {
 
     selectionHistoryIndexRef.current = history.length - 1;
   }, []);
+
+  const focusVa = useCallback(
+    async (
+      va: string,
+      options: {
+        recordHistory?: boolean;
+        syncViewport?: boolean;
+        targetView?: CenterView;
+        missingLinearMessage?: string;
+        lookupErrorMessage: string;
+      },
+    ) => {
+      if (!moduleId) {
+        return false;
+      }
+
+      setErrorText("");
+      preferredNavigationVaRef.current = va;
+      setGoToAddress(va);
+
+      if (!linearInfo) {
+        if (options.targetView) {
+          setCenterView(options.targetView);
+        }
+        if (options.missingLinearMessage) {
+          showTransientStatusMessage(options.missingLinearMessage);
+        }
+        return false;
+      }
+
+      try {
+        const found = await desktopApi.findLinearRowByVa({
+          moduleId,
+          va,
+        });
+        if (moduleId !== activeModuleIdRef.current) {
+          return false;
+        }
+
+        if (options.recordHistory !== false) {
+          pushSelectionHistory(va);
+        }
+
+        setSelectedRowIndex(found.rowIndex);
+        if (options.syncViewport) {
+          setPendingScrollRow(found.rowIndex);
+        }
+        if (options.targetView) {
+          setCenterView(options.targetView);
+        }
+        return true;
+      } catch (error: unknown) {
+        if (moduleId !== activeModuleIdRef.current) {
+          return false;
+        }
+
+        setErrorText(
+          error instanceof Error ? error.message : options.lookupErrorMessage,
+        );
+        return false;
+      }
+    },
+    [linearInfo, moduleId, pushSelectionHistory, showTransientStatusMessage],
+  );
 
   const applyReadyModuleAnalysis = useCallback(
     async (
@@ -967,40 +1036,15 @@ export function App() {
     async (
       va: string,
       options: { recordHistory?: boolean } = { recordHistory: true },
-    ) => {
-      if (!moduleId) {
-        return false;
-      }
-
-      setErrorText("");
-      preferredNavigationVaRef.current = va;
-
-      if (!linearInfo) {
-        setGoToAddress(va);
-        showTransientStatusMessage("Disassembly is still being prepared.");
-        return false;
-      }
-
-      try {
-        const found = await desktopApi.findLinearRowByVa({
-          moduleId,
-          va,
-        });
-        if (options.recordHistory !== false) {
-          pushSelectionHistory(va);
-        }
-        setGoToAddress(va);
-        setCenterView("disassembly");
-        setPendingScrollRow(found.rowIndex);
-        return true;
-      } catch (error: unknown) {
-        setErrorText(
-          error instanceof Error ? error.message : "Address lookup failed",
-        );
-        return false;
-      }
-    },
-    [linearInfo, moduleId, pushSelectionHistory, showTransientStatusMessage],
+    ) =>
+      focusVa(va, {
+        recordHistory: options.recordHistory,
+        syncViewport: true,
+        targetView: "disassembly",
+        missingLinearMessage: "Disassembly is still being prepared.",
+        lookupErrorMessage: "Address lookup failed",
+      }),
+    [focusVa],
   );
 
   const handleMemoryOverviewNavigate = useCallback(
@@ -1023,45 +1067,13 @@ export function App() {
 
   const syncSelectionToVa = useCallback(
     async (va: string, options: { syncViewport?: boolean } = {}) => {
-      if (!moduleId) {
-        return false;
-      }
-
-      setErrorText("");
-      preferredNavigationVaRef.current = va;
-      setGoToAddress(va);
-
-      if (!linearInfo) {
-        return true;
-      }
-
-      try {
-        const found = await desktopApi.findLinearRowByVa({
-          moduleId,
-          va,
-        });
-        if (moduleId !== activeModuleIdRef.current) {
-          return false;
-        }
-        if (options.syncViewport) {
-          setPendingScrollRow(found.rowIndex);
-        } else {
-          setSelectedRowIndex(found.rowIndex);
-        }
-        return true;
-      } catch (error: unknown) {
-        if (moduleId !== activeModuleIdRef.current) {
-          return false;
-        }
-        setErrorText(
-          error instanceof Error
-            ? error.message
-            : "Failed to synchronize graph selection",
-        );
-        return false;
-      }
+      return focusVa(va, {
+        recordHistory: false,
+        syncViewport: options.syncViewport,
+        lookupErrorMessage: "Failed to synchronize graph selection",
+      });
     },
-    [linearInfo, moduleId],
+    [focusVa],
   );
 
   const openGraphAtVa = useCallback(
@@ -1118,6 +1130,9 @@ export function App() {
     }
 
     if (centerView === "graph") {
+      if (goToAddress) {
+        await syncSelectionToVa(goToAddress, { syncViewport: true });
+      }
       setCenterView("disassembly");
       return;
     }
@@ -1149,16 +1164,18 @@ export function App() {
     activePanel,
     centerView,
     fetchLinearPage,
+    goToAddress,
     moduleId,
     openGraphAtVa,
     readRow,
     selectedRowIndex,
     showTransientStatusMessage,
+    syncSelectionToVa,
   ]);
 
   const handleGraphInstructionSelect = useCallback(
     async (va: string) => {
-      await syncSelectionToVa(va);
+      await syncSelectionToVa(va, { syncViewport: true });
     },
     [syncSelectionToVa],
   );

@@ -1490,3 +1490,15 @@ Engine:
 - `engine/tests/contract_schema_tests.rs`
 - `engine/tests/engine_integration.rs`
 - `engine/tests/fixtures/minimal_x64.exe`
+
+## 2026-03-09 - Navigation Coherence Across Linear, Graph, and Memory Overview
+
+Docs:
+- `docs/work_log.md`
+- `docs/change_files.md`
+
+App:
+- `app/src/renderer/shell/App.tsx`
+- `app/src/renderer/features/disassembly/disassembly-panel.tsx`
+- `app/src/renderer/shell/app.graph-view.test.tsx`
+- `app/test/ui-consistency.test.js`

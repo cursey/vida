@@ -53,6 +53,14 @@ function buildRows(): LinearRow[] {
   ];
 }
 
+function buildMemoryOverview() {
+  return {
+    startVa: "0x140001000",
+    endVa: "0x140003000",
+    slices: ["explored", "explored", "unexplored", "unmapped"] as const,
+  };
+}
+
 describe("App graph view", () => {
   let menuOpenHandler: (() => void) | null = null;
   let rectSpy: ReturnType<typeof vi.spyOn>;
@@ -99,6 +107,7 @@ describe("App graph view", () => {
           },
         ],
       }),
+      getModuleMemoryOverview: vi.fn().mockResolvedValue(buildMemoryOverview()),
       getFunctionGraphByVa,
       getLinearViewInfo: vi.fn().mockResolvedValue({
         rowCount: rows.length,
@@ -388,6 +397,27 @@ describe("App graph view", () => {
       });
       expect(screen.getByText("Graph View")).toBeInTheDocument();
       expect(screen.getByText("0x140001020 | 0x140001020")).toBeInTheDocument();
+    });
+
+    await waitFor(() => {
+      expect(
+        Number(
+          screen.getByTestId("memory-overview-viewport").getAttribute("x1"),
+        ),
+      ).toBeCloseTo(3.90625, 3);
+    });
+
+    fireEvent.keyDown(window, { key: " ", code: "Space" });
+
+    await waitFor(() => {
+      expect(screen.getByText("Disassembly")).toBeInTheDocument();
+    });
+
+    fireEvent.keyDown(window, { key: "g", code: "KeyG" });
+
+    await waitFor(() => {
+      expect(screen.getByText("Go To Address")).toBeInTheDocument();
+      expect(screen.getByDisplayValue("0x140001020")).toBeInTheDocument();
     });
   });
 

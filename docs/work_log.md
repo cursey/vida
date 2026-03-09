@@ -1464,3 +1464,19 @@ Validation commands executed:
 
 Changed files index:
 - See `docs/change_files.md` for the detailed file list for this work item.
+
+## 2026-03-09 - Navigation Coherence Across Linear, Graph, and Memory Overview
+
+Summary:
+- Unified renderer-side VA focus updates so graph selection/jumps, linear navigation, and memory-overview jumps all flow through the same lookup and selection path.
+- Kept the memory overview marker pinned to the focused instruction while Graph View is active instead of leaving it on the last visible linear viewport midpoint.
+- Re-synchronized disassembly selection/viewport from the focused VA when toggling back from Graph View so returning to Linear View lands on the graph-focused instruction.
+- Added renderer regression coverage for graph operand jumps preserving the returned linear focus and documented the graph operand overlay control as an explicit shared-UI exception.
+
+Validation commands executed:
+- `just app-fmt`
+- `just app-test`
+- `just app-check`
+
+Changed files index:
+- See `docs/change_files.md` for the detailed file list for this work item.

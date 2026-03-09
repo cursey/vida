@@ -206,6 +206,10 @@ export function DisassemblyPanel({
                       selectedRowIndex === logicalRowIndex &&
                         "bg-primary/16 shadow-[inset_0_0_0_1px_oklch(var(--primary)/0.35)] hover:bg-primary/16",
                     )}
+                    data-address={row.address}
+                    data-selected={
+                      selectedRowIndex === logicalRowIndex ? "true" : "false"
+                    }
                     style={{
                       transform: `translateY(${top}px)`,
                       gridTemplateColumns: "var(--disassembly-columns)",
