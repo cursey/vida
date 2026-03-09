@@ -139,10 +139,15 @@ pub struct FunctionGraphByVaParams {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct FunctionGraphInstruction {
+    pub address: String,
     pub mnemonic: String,
     pub operands: String,
     #[serde(rename = "instructionCategory")]
     pub instruction_category: InstructionCategory,
+    #[serde(skip_serializing_if = "Option::is_none", rename = "branchTarget")]
+    pub branch_target: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", rename = "callTarget")]
+    pub call_target: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -150,16 +155,27 @@ pub struct FunctionGraphBlock {
     pub id: String,
     #[serde(rename = "startVa")]
     pub start_va: String,
+    #[serde(rename = "endVa")]
+    pub end_va: String,
+    #[serde(rename = "isEntry")]
+    pub is_entry: bool,
+    #[serde(rename = "isExit")]
+    pub is_exit: bool,
     pub instructions: Vec<FunctionGraphInstruction>,
 }
 
 #[derive(Debug, Clone, Serialize)]
 pub struct FunctionGraphEdge {
+    pub id: String,
     #[serde(rename = "fromBlockId")]
     pub from_block_id: String,
     #[serde(rename = "toBlockId")]
     pub to_block_id: String,
     pub kind: &'static str,
+    #[serde(rename = "sourceInstructionVa")]
+    pub source_instruction_va: String,
+    #[serde(rename = "isBackEdge")]
+    pub is_back_edge: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]

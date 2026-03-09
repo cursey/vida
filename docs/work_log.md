@@ -1,5 +1,22 @@
 # Work Log
 
+## 2026-03-09 - Replace Cytoscape Graph View With Custom Canvas Renderer
+
+Summary:
+- Replaced the Cytoscape-based graph panel with a custom canvas CFG viewer that owns layered layout, orthogonal edge routing, viewport controls, hit testing, and block/instruction rendering inside the renderer.
+- Added graph-local instruction selection and keyboard/pointer interactions so Graph View can sync the selected VA without leaving the graph, while `Enter` and double-click still reuse the existing disassembly navigation path.
+- Expanded the graph payload contract with instruction addresses and targets, block bounds/entry-exit flags, and edge ids/source metadata so the renderer no longer has to infer navigation behavior from formatted strings.
+- Removed the obsolete Cytoscape runtime dependencies and added renderer and engine regression coverage for the richer graph contract and custom graph interactions.
+
+Validation commands executed:
+- `cd app && npm run test:renderer -- graph-panel app.graph-view`
+- `cd app && npm run check`
+- `cargo fmt --manifest-path engine/Cargo.toml -- --check`
+- `cargo test --manifest-path engine/Cargo.toml`
+
+Changed files index:
+- See `docs/change_files.md` for the detailed file list for this work item.
+
 ## 2026-03-08 - Add Clickable Linear Operand Navigation
 
 Summary:

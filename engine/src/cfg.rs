@@ -45,6 +45,7 @@ pub(crate) enum BasicBlockEdgeKind {
 pub(crate) struct BasicBlockEdgeAnalysis {
     pub(crate) from_rva: u64,
     pub(crate) to_rva: u64,
+    pub(crate) source_instruction_rva: u64,
     pub(crate) kind: BasicBlockEdgeKind,
 }
 
@@ -75,7 +76,7 @@ pub(crate) fn analyze_function_cfg(
     enqueued.insert(start_rva);
 
     let mut blocks = BTreeMap::<u64, BasicBlockAnalysis>::new();
-    let mut edge_set = BTreeSet::<(u64, u64, BasicBlockEdgeKind)>::new();
+    let mut edge_set = BTreeSet::<(u64, u64, u64, BasicBlockEdgeKind)>::new();
     let mut total_instructions = 0usize;
 
     while let Some(block_start) = queue.pop_front() {
@@ -94,6 +95,7 @@ pub(crate) fn analyze_function_cfg(
 
         let mut current_rva = block_start;
         let mut instructions = Vec::<BasicBlockInstructionAnalysis>::new();
+        let mut previous_instruction_rva = None;
 
         loop {
             if is_canceled() {
@@ -106,7 +108,14 @@ pub(crate) fn analyze_function_cfg(
             }
 
             if current_rva != block_start && enqueued.contains(&current_rva) {
-                edge_set.insert((block_start, current_rva, BasicBlockEdgeKind::Fallthrough));
+                if let Some(source_instruction_rva) = previous_instruction_rva {
+                    edge_set.insert((
+                        block_start,
+                        current_rva,
+                        source_instruction_rva,
+                        BasicBlockEdgeKind::Fallthrough,
+                    ));
+                }
                 break;
             }
 
@@ -125,6 +134,7 @@ pub(crate) fn analyze_function_cfg(
                 xrefs: decoded.xrefs,
             });
             total_instructions += 1;
+            previous_instruction_rva = Some(current_rva);
 
             let next_rva = current_rva.saturating_add(u64::from(decoded.len));
             match decoded.flow_control {
@@ -137,6 +147,7 @@ pub(crate) fn analyze_function_cfg(
                         edge_set.insert((
                             block_start,
                             target_rva,
+                            current_rva,
                             BasicBlockEdgeKind::Unconditional,
                         ));
                         if enqueued.insert(target_rva) {
@@ -150,13 +161,23 @@ pub(crate) fn analyze_function_cfg(
                         .branch_target_rva
                         .filter(|value| section_lookup.is_executable_rva(*value))
                     {
-                        edge_set.insert((block_start, target_rva, BasicBlockEdgeKind::Conditional));
+                        edge_set.insert((
+                            block_start,
+                            target_rva,
+                            current_rva,
+                            BasicBlockEdgeKind::Conditional,
+                        ));
                         if enqueued.insert(target_rva) {
                             queue.push_back(target_rva);
                         }
                     }
                     if section_lookup.is_executable_rva(next_rva) {
-                        edge_set.insert((block_start, next_rva, BasicBlockEdgeKind::Fallthrough));
+                        edge_set.insert((
+                            block_start,
+                            next_rva,
+                            current_rva,
+                            BasicBlockEdgeKind::Fallthrough,
+                        ));
                         if enqueued.insert(next_rva) {
                             queue.push_back(next_rva);
                         }
@@ -190,14 +211,17 @@ pub(crate) fn analyze_function_cfg(
     let block_starts = blocks.keys().copied().collect::<BTreeSet<u64>>();
     let edges = edge_set
         .into_iter()
-        .filter(|(from_rva, to_rva, _)| {
+        .filter(|(from_rva, to_rva, _, _)| {
             block_starts.contains(from_rva) && block_starts.contains(to_rva)
         })
-        .map(|(from_rva, to_rva, kind)| BasicBlockEdgeAnalysis {
-            from_rva,
-            to_rva,
-            kind,
-        })
+        .map(
+            |(from_rva, to_rva, source_instruction_rva, kind)| BasicBlockEdgeAnalysis {
+                from_rva,
+                to_rva,
+                source_instruction_rva,
+                kind,
+            },
+        )
         .collect::<Vec<BasicBlockEdgeAnalysis>>();
 
     Ok(FunctionGraphAnalysis {

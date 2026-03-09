@@ -370,14 +370,40 @@ fn opens_module_lists_functions_and_disassembles() {
         focus_block.start_va.starts_with("0x"),
         "Graph blocks should include a startVa label"
     );
+    assert!(
+        focus_block.end_va.starts_with("0x"),
+        "Graph blocks should include an endVa label"
+    );
+    assert!(
+        focus_block.is_entry,
+        "entry block should be marked as entry"
+    );
     let first_instruction = focus_block
         .instructions
         .first()
         .expect("graph blocks should include instruction rows");
     assert!(!first_instruction.mnemonic.is_empty());
     assert_eq!(
+        first_instruction.address,
+        disassembly_result.instructions[0].address
+    );
+    assert_eq!(
         first_instruction.mnemonic,
         disassembly_result.instructions[0].mnemonic
+    );
+    assert_eq!(
+        first_instruction.branch_target,
+        disassembly_result.instructions[0].branch_target
+    );
+    assert_eq!(
+        first_instruction.call_target,
+        disassembly_result.instructions[0].call_target
+    );
+    assert!(
+        graph_result
+            .edges
+            .iter()
+            .all(|edge| edge.id.starts_with("e_") && edge.source_instruction_va.starts_with("0x"))
     );
     assert!(matches!(
         state.get_function_graph_by_va(FunctionGraphByVaParams {
@@ -743,14 +769,20 @@ fn repeated_analysis_runs_keep_function_and_graph_output_stable() {
                     (
                         block.id.clone(),
                         block.start_va.clone(),
+                        block.end_va.clone(),
+                        block.is_entry,
+                        block.is_exit,
                         block
                             .instructions
                             .iter()
                             .map(|instruction| {
                                 (
+                                    instruction.address.clone(),
                                     instruction.mnemonic.clone(),
                                     instruction.operands.clone(),
                                     instruction.instruction_category,
+                                    instruction.branch_target.clone(),
+                                    instruction.call_target.clone(),
                                 )
                             })
                             .collect::<Vec<_>>(),
@@ -762,9 +794,12 @@ fn repeated_analysis_runs_keep_function_and_graph_output_stable() {
                 .iter()
                 .map(|edge| {
                     (
+                        edge.id.clone(),
                         edge.from_block_id.clone(),
                         edge.to_block_id.clone(),
                         edge.kind.to_owned(),
+                        edge.source_instruction_va.clone(),
+                        edge.is_back_edge,
                     )
                 })
                 .collect::<Vec<_>>(),

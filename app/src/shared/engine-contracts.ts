@@ -142,21 +142,30 @@ export type InstructionCategory =
   | "other";
 
 export type FunctionGraphInstruction = {
+  address: HexAddress;
   mnemonic: string;
   operands: string;
   instructionCategory: InstructionCategory;
+  branchTarget?: HexAddress;
+  callTarget?: HexAddress;
 };
 
 export type FunctionGraphBlock = {
   id: string;
   startVa: HexAddress;
+  endVa: HexAddress;
+  isEntry: boolean;
+  isExit: boolean;
   instructions: FunctionGraphInstruction[];
 };
 
 export type FunctionGraphEdge = {
+  id: string;
   fromBlockId: string;
   toBlockId: string;
   kind: "conditional" | "unconditional" | "fallthrough";
+  sourceInstructionVa: HexAddress;
+  isBackEdge: boolean;
 };
 
 export type XrefKind = "call" | "jump" | "branch" | "data";

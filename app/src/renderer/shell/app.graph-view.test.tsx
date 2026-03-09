@@ -15,21 +15,6 @@ vi.mock("@/components/mode-toggle", () => ({
   ModeToggle: () => <div data-testid="mode-toggle" />,
 }));
 
-vi.mock("cytoscape", () => ({
-  default: vi.fn(() => ({
-    getElementById: vi.fn(() => ({
-      nonempty: () => true,
-    })),
-    zoom: vi.fn(),
-    center: vi.fn(),
-    destroy: vi.fn(),
-  })),
-}));
-
-vi.mock("cytoscape-node-html-label", () => ({
-  default: vi.fn(),
-}));
-
 let mockDesktopApi: DesktopApi;
 
 vi.mock("@/platform/desktop-api", () => ({
@@ -141,13 +126,18 @@ describe("App graph view", () => {
         {
           id: "b_1000",
           startVa: "0x140001000",
+          endVa: "0x140001003",
+          isEntry: true,
+          isExit: true,
           instructions: [
             {
+              address: "0x140001000",
               mnemonic: "push",
               operands: "rbp",
               instructionCategory: "stack",
             },
             {
+              address: "0x140001001",
               mnemonic: "mov",
               operands: "rbp,rsp",
               instructionCategory: "data_transfer",
@@ -184,6 +174,58 @@ describe("App graph view", () => {
     });
 
     fireEvent.keyDown(window, { key: " ", code: "Space" });
+
+    await waitFor(() => {
+      expect(screen.getByText("Disassembly")).toBeInTheDocument();
+      expect(screen.queryByText("Graph View")).not.toBeInTheDocument();
+    });
+  });
+
+  it("navigates back to disassembly when an instruction is activated from graph view", async () => {
+    const graph = {
+      functionStartVa: "0x140001000",
+      functionName: "sub_140001000",
+      focusBlockId: "b_1000",
+      blocks: [
+        {
+          id: "b_1000",
+          startVa: "0x140001000",
+          endVa: "0x140001003",
+          isEntry: true,
+          isExit: true,
+          instructions: [
+            {
+              address: "0x140001000",
+              mnemonic: "push",
+              operands: "rbp",
+              instructionCategory: "stack" as const,
+            },
+          ],
+        },
+      ],
+      edges: [],
+    };
+    const getFunctionGraphByVa = vi.fn().mockResolvedValue(graph);
+    installMockApi(getFunctionGraphByVa);
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(menuOpenHandler).toBeTypeOf("function");
+    });
+
+    await act(async () => {
+      menuOpenHandler?.();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("Disassembly")).toBeInTheDocument();
+    });
+
+    fireEvent.keyDown(window, { key: " ", code: "Space" });
+
+    const graphCanvas = await screen.findByTestId("graph-canvas");
+    fireEvent.keyDown(graphCanvas, { key: "Enter" });
 
     await waitFor(() => {
       expect(screen.getByText("Disassembly")).toBeInTheDocument();

@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::ops::Bound::{Excluded, Unbounded};
 use std::path::Path;
 use std::sync::{
@@ -11,7 +11,7 @@ use std::time::Duration;
 
 use goblin::pe::PE;
 
-use crate::api::{FunctionGraphEdge, InstructionCategory, XrefKind, XrefTargetKind};
+use crate::api::{InstructionCategory, XrefKind, XrefTargetKind};
 use crate::cfg::{BasicBlockEdgeKind, FunctionGraphAnalysis, analyze_function_cfg};
 use crate::disasm::default_function_name;
 use crate::error::EngineError;
@@ -45,14 +45,27 @@ pub(crate) struct CachedFunctionGraph {
     pub(crate) function_start_rva: u64,
     pub(crate) function_name: String,
     pub(crate) blocks: Vec<CachedFunctionGraphBlock>,
-    pub(crate) edges: Vec<FunctionGraphEdge>,
+    pub(crate) edges: Vec<CachedFunctionGraphEdge>,
     pub(crate) instruction_block_id_by_rva: HashMap<u64, String>,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct CachedFunctionGraphEdge {
+    pub(crate) id: String,
+    pub(crate) from_block_id: String,
+    pub(crate) to_block_id: String,
+    pub(crate) kind: &'static str,
+    pub(crate) source_instruction_rva: u64,
+    pub(crate) is_back_edge: bool,
 }
 
 #[derive(Debug, Clone)]
 pub(crate) struct CachedFunctionGraphBlock {
     pub(crate) id: String,
     pub(crate) start_rva: u64,
+    pub(crate) end_rva: u64,
+    pub(crate) is_entry: bool,
+    pub(crate) is_exit: bool,
     pub(crate) instructions: Vec<CachedFunctionGraphInstruction>,
 }
 
@@ -61,6 +74,8 @@ pub(crate) struct CachedFunctionGraphInstruction {
     pub(crate) start_rva: u64,
     pub(crate) len: u8,
     pub(crate) instruction_category: InstructionCategory,
+    pub(crate) branch_target_rva: Option<u64>,
+    pub(crate) call_target_rva: Option<u64>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -800,6 +815,21 @@ fn build_cached_function_graph(
     analysis: FunctionGraphAnalysis,
     function_name: String,
 ) -> (CachedFunctionGraph, Vec<AnalyzedInstructionRow>) {
+    let exit_block_starts = analysis
+        .blocks
+        .iter()
+        .filter(|block| {
+            block.instructions.last().is_some_and(|instruction| {
+                instruction.instruction_category == InstructionCategory::Return
+            })
+        })
+        .map(|block| block.start_rva)
+        .collect::<HashSet<u64>>();
+    let outgoing_block_starts = analysis
+        .edges
+        .iter()
+        .map(|edge| edge.from_rva)
+        .collect::<HashSet<u64>>();
     let block_id_by_start_rva = analysis
         .blocks
         .iter()
@@ -837,13 +867,24 @@ fn build_cached_function_graph(
                         start_rva: instruction.start_rva,
                         len: instruction.len,
                         instruction_category: instruction.instruction_category,
+                        branch_target_rva: instruction.branch_target_rva,
+                        call_target_rva: instruction.call_target_rva,
                     }
                 })
                 .collect();
+            let end_rva = block
+                .instructions
+                .last()
+                .map(|instruction| instruction.start_rva + u64::from(instruction.len))
+                .unwrap_or(block.start_rva);
 
             CachedFunctionGraphBlock {
                 id: block_id,
                 start_rva: block.start_rva,
+                end_rva,
+                is_entry: block.start_rva == analysis.start_rva,
+                is_exit: exit_block_starts.contains(&block.start_rva)
+                    || !outgoing_block_starts.contains(&block.start_rva),
                 instructions,
             }
         })
@@ -857,7 +898,11 @@ fn build_cached_function_graph(
         .filter_map(|edge| {
             let from_block_id = block_id_by_start_rva.get(&edge.from_rva)?;
             let to_block_id = block_id_by_start_rva.get(&edge.to_rva)?;
-            Some(FunctionGraphEdge {
+            Some(CachedFunctionGraphEdge {
+                id: format!(
+                    "e_{:X}_{:X}_{:X}",
+                    edge.from_rva, edge.to_rva, edge.source_instruction_rva
+                ),
                 from_block_id: from_block_id.clone(),
                 to_block_id: to_block_id.clone(),
                 kind: match edge.kind {
@@ -865,9 +910,11 @@ fn build_cached_function_graph(
                     BasicBlockEdgeKind::Unconditional => "unconditional",
                     BasicBlockEdgeKind::Fallthrough => "fallthrough",
                 },
+                source_instruction_rva: edge.source_instruction_rva,
+                is_back_edge: edge.to_rva <= edge.from_rva,
             })
         })
-        .collect::<Vec<FunctionGraphEdge>>();
+        .collect::<Vec<CachedFunctionGraphEdge>>();
 
     (
         CachedFunctionGraph {

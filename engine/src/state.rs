@@ -387,24 +387,47 @@ impl EngineState {
                 )?;
 
                 instructions.push(crate::api::FunctionGraphInstruction {
+                    address: to_hex(image_base + cached_inst.start_rva),
                     mnemonic: rendered.mnemonic,
                     operands: rendered.operands,
                     instruction_category: cached_inst.instruction_category,
+                    branch_target: cached_inst
+                        .branch_target_rva
+                        .map(|target| to_hex(image_base + target)),
+                    call_target: cached_inst
+                        .call_target_rva
+                        .map(|target| to_hex(image_base + target)),
                 });
             }
             blocks.push(crate::api::FunctionGraphBlock {
                 id: block.id.clone(),
                 start_va: to_hex(image_base + block.start_rva),
+                end_va: to_hex(image_base + block.end_rva),
+                is_entry: block.is_entry,
+                is_exit: block.is_exit,
                 instructions,
             });
         }
+
+        let edges = graph
+            .edges
+            .iter()
+            .map(|edge| crate::api::FunctionGraphEdge {
+                id: edge.id.clone(),
+                from_block_id: edge.from_block_id.clone(),
+                to_block_id: edge.to_block_id.clone(),
+                kind: edge.kind,
+                source_instruction_va: to_hex(image_base + edge.source_instruction_rva),
+                is_back_edge: edge.is_back_edge,
+            })
+            .collect();
 
         Ok(FunctionGraphByVaResult {
             function_start_va: to_hex(image_base + graph.function_start_rva),
             function_name: graph.function_name.clone(),
             focus_block_id,
             blocks,
-            edges: graph.edges.clone(),
+            edges,
         })
     }
 

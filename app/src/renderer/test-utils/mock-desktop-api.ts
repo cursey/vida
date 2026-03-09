@@ -53,7 +53,23 @@ export function createMockDesktopApi(
       functionStartVa: "0x140001000",
       functionName: "sub_140001000",
       focusBlockId: "b_1000",
-      blocks: [],
+      blocks: [
+        {
+          id: "b_1000",
+          startVa: "0x140001000",
+          endVa: "0x140001003",
+          isEntry: true,
+          isExit: true,
+          instructions: [
+            {
+              address: "0x140001000",
+              mnemonic: "ret",
+              operands: "",
+              instructionCategory: "return",
+            },
+          ],
+        },
+      ],
       edges: [],
     }),
     getXrefsToVa: vi.fn().mockResolvedValue({

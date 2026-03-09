@@ -1088,6 +1088,48 @@ export function App() {
     [navigateToVa, pushSelectionHistory],
   );
 
+  const handleGraphInstructionSelect = useCallback(
+    async (va: string) => {
+      if (!moduleId) {
+        return;
+      }
+
+      setErrorText("");
+      preferredNavigationVaRef.current = va;
+      setGoToAddress(va);
+
+      if (!linearInfo) {
+        return;
+      }
+
+      try {
+        const found = await desktopApi.findLinearRowByVa({
+          moduleId,
+          va,
+        });
+        if (moduleId !== activeModuleIdRef.current) {
+          return;
+        }
+        setSelectedRowIndex(found.rowIndex);
+      } catch (error: unknown) {
+        if (moduleId !== activeModuleIdRef.current) {
+          return;
+        }
+        setErrorText(
+          error instanceof Error
+            ? error.message
+            : "Failed to synchronize graph selection",
+        );
+      }
+    },
+    [linearInfo, moduleId],
+  );
+
+  const handleGraphInstructionNavigate = useCallback(
+    (va: string) => navigateToVa(va),
+    [navigateToVa],
+  );
+
   const navigateSelectionHistory = useCallback(
     async (direction: -1 | 1) => {
       if (!moduleId) {
@@ -1495,7 +1537,10 @@ export function App() {
                 isActive={activePanel === "disassembly"}
                 moduleId={moduleId}
                 graph={graphData}
+                selectedVa={goToAddress}
                 onActivate={() => setActivePanel("disassembly")}
+                onNavigateToInstruction={handleGraphInstructionNavigate}
+                onSelectInstruction={handleGraphInstructionSelect}
               />
             )}
           </>

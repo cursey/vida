@@ -1,5 +1,30 @@
 # Change Files
 
+## 2026-03-09 - Replace Cytoscape Graph View With Custom Canvas Renderer
+
+App:
+- `app/package.json`
+- `app/package-lock.json`
+- `app/src/renderer/features/graph/graph-layout.ts`
+- `app/src/renderer/features/graph/graph-panel.tsx`
+- `app/src/renderer/features/graph/graph-panel.test.tsx`
+- `app/src/renderer/shell/App.tsx`
+- `app/src/renderer/shell/app.graph-view.test.tsx`
+- `app/src/renderer/test-utils/mock-desktop-api.ts`
+- `app/src/renderer/test-utils/setup.ts`
+- `app/src/shared/engine-contracts.ts`
+
+Engine:
+- `engine/src/analysis.rs`
+- `engine/src/api.rs`
+- `engine/src/cfg.rs`
+- `engine/src/state.rs`
+- `engine/tests/engine_integration.rs`
+
+Docs:
+- `docs/work_log.md`
+- `docs/change_files.md`
+
 ## 2026-03-08 - Add Clickable Linear Operand Navigation
 
 App:
