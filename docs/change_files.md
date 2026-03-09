@@ -1,5 +1,18 @@
 # Change Files
 
+## 2026-03-08 - Add Clickable Linear Operand Navigation
+
+App:
+- `app/src/renderer/features/disassembly/disassembly-panel.test.tsx`
+- `app/src/renderer/features/disassembly/disassembly-panel.tsx`
+- `app/src/renderer/shell/App.tsx`
+- `app/src/renderer/shell/operand-navigation.test.ts`
+- `app/src/renderer/shell/operand-navigation.ts`
+
+Docs:
+- `docs/work_log.md`
+- `docs/change_files.md`
+
 ## 2026-03-08 - Shorten Synthetic Branch Labels
 
 App:

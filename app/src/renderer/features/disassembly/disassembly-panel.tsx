@@ -76,7 +76,19 @@ type DisassemblyPanelProps = {
   selectedRowIndex: number | null;
   onSelectRow: (rowIndex: number, address: string) => void;
   findSectionName: (address: string) => string;
+  onNavigateToOperandTarget: (
+    sourceVa: string,
+    targetVa: string,
+  ) => Promise<boolean>;
 };
+
+function operandTargetForRow(row: LinearRow): string | null {
+  if (row.kind !== "instruction" || !row.operands) {
+    return null;
+  }
+
+  return row.callTarget ?? row.branchTarget ?? null;
+}
 
 export function DisassemblyPanel({
   isActive,
@@ -95,6 +107,7 @@ export function DisassemblyPanel({
   selectedRowIndex,
   onSelectRow,
   findSectionName,
+  onNavigateToOperandTarget,
 }: DisassemblyPanelProps) {
   return (
     <AppPanel
@@ -181,6 +194,8 @@ export function DisassemblyPanel({
                   );
                 }
 
+                const operandTarget = operandTargetForRow(row);
+
                 return (
                   <div
                     key={`${logicalRowIndex}-${cacheEpoch}-${row.address}`}
@@ -220,7 +235,27 @@ export function DisassemblyPanel({
                         {row.mnemonic}
                       </span>
                       {row.operands ? (
-                        <span className="ml-[1ch]">{row.operands}</span>
+                        operandTarget ? (
+                          <a
+                            className="ml-[1ch] min-w-0 truncate cursor-pointer text-primary underline decoration-primary/45 underline-offset-2 hover:decoration-primary focus-visible:outline focus-visible:outline-1 focus-visible:outline-ring focus-visible:outline-offset-1"
+                            href={`#${operandTarget}`}
+                            onClick={(event) => {
+                              event.preventDefault();
+                              event.stopPropagation();
+                              void onNavigateToOperandTarget(
+                                row.address,
+                                operandTarget,
+                              );
+                            }}
+                            onPointerDown={(event) => {
+                              event.stopPropagation();
+                            }}
+                          >
+                            {row.operands}
+                          </a>
+                        ) : (
+                          <span className="ml-[1ch]">{row.operands}</span>
+                        )
                       ) : null}
                     </div>
                     <div className={cn(cellClassName, "text-muted-foreground")}>

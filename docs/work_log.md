@@ -1,5 +1,21 @@
 # Work Log
 
+## 2026-03-08 - Add Clickable Linear Operand Navigation
+
+Summary:
+- Added hyperlink-style operand rendering for symbolized direct call and branch targets in the linear disassembly view.
+- Reused the existing VA navigation flow so clicking a named operand follows the target without selecting the current row first, while recording the source instruction VA in selection history for Back navigation.
+- Added renderer coverage for linked operand rendering, click-to-follow behavior, source-aware history behavior, and the removal of generated branch/call comment links from the linear view.
+
+Validation commands executed:
+- `just fmt`
+- `npm run test:renderer -- disassembly-panel` (in `app`)
+- `npm run test:renderer -- operand-navigation` (in `app`)
+- `npm run check` (in `app`)
+
+Changed files index:
+- See `docs/change_files.md` for the detailed file list for this work item.
+
 ## 2026-03-08 - Shorten Synthetic Branch Labels
 
 Summary:

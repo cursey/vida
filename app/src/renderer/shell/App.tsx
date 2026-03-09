@@ -11,6 +11,7 @@ import { AppStatusBar } from "@/shell/components/status-bar";
 import { WindowChrome } from "@/shell/components/window-chrome";
 import { usePanelLayout } from "@/shell/hooks/use-panel-layout";
 import { useShellChrome } from "@/shell/hooks/use-shell-chrome";
+import { navigateFromDisassemblyOperand } from "@/shell/operand-navigation";
 import {
   resetDeferredEdgeRebaseState,
   setupDeferredEdgeRebase,
@@ -1076,6 +1077,17 @@ export function App() {
     [navigateToVa],
   );
 
+  const handleDisassemblyOperandNavigate = useCallback(
+    async (sourceVa: string, targetVa: string) =>
+      navigateFromDisassemblyOperand(
+        sourceVa,
+        targetVa,
+        pushSelectionHistory,
+        navigateToVa,
+      ),
+    [navigateToVa, pushSelectionHistory],
+  );
+
   const navigateSelectionHistory = useCallback(
     async (direction: -1 | 1) => {
       if (!moduleId) {
@@ -1476,6 +1488,7 @@ export function App() {
                   pushSelectionHistory(address);
                 }}
                 findSectionName={findSectionName}
+                onNavigateToOperandTarget={handleDisassemblyOperandNavigate}
               />
             ) : (
               <GraphPanel
