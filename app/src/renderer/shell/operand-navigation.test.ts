@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import { navigateFromDisassemblyOperand } from "./operand-navigation";
+import {
+  navigateFromDisassemblyOperand,
+  navigateFromGraphOperand,
+} from "./operand-navigation";
 
 describe("navigateFromDisassemblyOperand", () => {
   it("records the source VA before following the target VA", async () => {
@@ -23,5 +26,30 @@ describe("navigateFromDisassemblyOperand", () => {
     expect(pushSelectionHistory).toHaveBeenCalledWith("0x140001000");
     expect(navigateToVa).toHaveBeenCalledWith("0x140002000");
     expect(events).toEqual(["push:0x140001000", "navigate:0x140002000"]);
+  });
+});
+
+describe("navigateFromGraphOperand", () => {
+  it("records the source VA before following the target inside graph view", async () => {
+    const events: string[] = [];
+    const pushSelectionHistory = vi.fn((va: string) => {
+      events.push(`push:${va}`);
+    });
+    const navigateToTarget = vi.fn(async (va: string) => {
+      events.push(`navigate:${va}`);
+      return true;
+    });
+
+    const result = await navigateFromGraphOperand(
+      "0x140001000",
+      "0x140001020",
+      pushSelectionHistory,
+      navigateToTarget,
+    );
+
+    expect(result).toBe(true);
+    expect(pushSelectionHistory).toHaveBeenCalledWith("0x140001000");
+    expect(navigateToTarget).toHaveBeenCalledWith("0x140001020");
+    expect(events).toEqual(["push:0x140001000", "navigate:0x140001020"]);
   });
 });

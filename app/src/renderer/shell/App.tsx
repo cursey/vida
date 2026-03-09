@@ -11,7 +11,10 @@ import { AppStatusBar } from "@/shell/components/status-bar";
 import { WindowChrome } from "@/shell/components/window-chrome";
 import { usePanelLayout } from "@/shell/hooks/use-panel-layout";
 import { useShellChrome } from "@/shell/hooks/use-shell-chrome";
-import { navigateFromDisassemblyOperand } from "@/shell/operand-navigation";
+import {
+  navigateFromDisassemblyOperand,
+  navigateFromGraphOperand,
+} from "@/shell/operand-navigation";
 import {
   resetDeferredEdgeRebaseState,
   setupDeferredEdgeRebase,
@@ -685,76 +688,6 @@ export function App() {
     visibleStart,
   ]);
 
-  const toggleGraphViewForSelection = useCallback(async () => {
-    if (!moduleId || activePanel !== "disassembly") {
-      return;
-    }
-
-    if (centerView === "graph") {
-      setCenterView("disassembly");
-      return;
-    }
-
-    if (selectedRowIndex === null) {
-      showTransientStatusMessage(
-        "Select an instruction in Disassembly before opening Graph View.",
-      );
-      return;
-    }
-
-    let selectedRow = readRow(selectedRowIndex);
-    if (!selectedRow) {
-      await fetchLinearPage(moduleId, makePageKey(selectedRowIndex, PAGE_SIZE));
-      selectedRow = readRow(selectedRowIndex);
-    }
-    if (!selectedRow || selectedRow.kind !== "instruction") {
-      showTransientStatusMessage(
-        "The highlighted row is not a function instruction.",
-      );
-      return;
-    }
-
-    try {
-      setIsBuildingGraph(true);
-      const graph = await desktopApi.getFunctionGraphByVa({
-        moduleId,
-        va: selectedRow.address,
-      });
-      setGraphData(graph);
-      setCenterView("graph");
-      setErrorText("");
-      if (statusMessageTimerRef.current !== null) {
-        window.clearTimeout(statusMessageTimerRef.current);
-        statusMessageTimerRef.current = null;
-      }
-      setTransientStatusMessage("");
-    } catch (error: unknown) {
-      if (
-        error instanceof Error &&
-        error.message.toUpperCase().includes("INVALID_ADDRESS")
-      ) {
-        showTransientStatusMessage(
-          "The highlighted instruction does not belong to a discovered function.",
-        );
-        return;
-      }
-
-      setErrorText(
-        error instanceof Error ? error.message : "Failed to open graph view",
-      );
-    } finally {
-      setIsBuildingGraph(false);
-    }
-  }, [
-    activePanel,
-    centerView,
-    fetchLinearPage,
-    moduleId,
-    readRow,
-    selectedRowIndex,
-    showTransientStatusMessage,
-  ]);
-
   const pushSelectionHistory = useCallback((va: string) => {
     if (!va) {
       return;
@@ -1088,10 +1021,10 @@ export function App() {
     [navigateToVa, pushSelectionHistory],
   );
 
-  const handleGraphInstructionSelect = useCallback(
-    async (va: string) => {
+  const syncSelectionToVa = useCallback(
+    async (va: string, options: { syncViewport?: boolean } = {}) => {
       if (!moduleId) {
-        return;
+        return false;
       }
 
       setErrorText("");
@@ -1099,7 +1032,7 @@ export function App() {
       setGoToAddress(va);
 
       if (!linearInfo) {
-        return;
+        return true;
       }
 
       try {
@@ -1108,26 +1041,150 @@ export function App() {
           va,
         });
         if (moduleId !== activeModuleIdRef.current) {
-          return;
+          return false;
         }
-        setSelectedRowIndex(found.rowIndex);
+        if (options.syncViewport) {
+          setPendingScrollRow(found.rowIndex);
+        } else {
+          setSelectedRowIndex(found.rowIndex);
+        }
+        return true;
       } catch (error: unknown) {
         if (moduleId !== activeModuleIdRef.current) {
-          return;
+          return false;
         }
         setErrorText(
           error instanceof Error
             ? error.message
             : "Failed to synchronize graph selection",
         );
+        return false;
       }
     },
     [linearInfo, moduleId],
   );
 
+  const openGraphAtVa = useCallback(
+    async (
+      va: string,
+      invalidAddressMessage = "The linked target does not belong to a discovered function.",
+    ) => {
+      if (!moduleId) {
+        return false;
+      }
+
+      try {
+        setIsBuildingGraph(true);
+        const graph = await desktopApi.getFunctionGraphByVa({
+          moduleId,
+          va,
+        });
+        if (moduleId !== activeModuleIdRef.current) {
+          return false;
+        }
+
+        setGraphData(graph);
+        setCenterView("graph");
+        setErrorText("");
+        if (statusMessageTimerRef.current !== null) {
+          window.clearTimeout(statusMessageTimerRef.current);
+          statusMessageTimerRef.current = null;
+        }
+        setTransientStatusMessage("");
+        return true;
+      } catch (error: unknown) {
+        if (
+          error instanceof Error &&
+          error.message.toUpperCase().includes("INVALID_ADDRESS")
+        ) {
+          showTransientStatusMessage(invalidAddressMessage);
+          return false;
+        }
+
+        setErrorText(
+          error instanceof Error ? error.message : "Failed to open graph view",
+        );
+        return false;
+      } finally {
+        setIsBuildingGraph(false);
+      }
+    },
+    [moduleId, showTransientStatusMessage],
+  );
+
+  const toggleGraphViewForSelection = useCallback(async () => {
+    if (!moduleId || activePanel !== "disassembly") {
+      return;
+    }
+
+    if (centerView === "graph") {
+      setCenterView("disassembly");
+      return;
+    }
+
+    if (selectedRowIndex === null) {
+      showTransientStatusMessage(
+        "Select an instruction in Disassembly before opening Graph View.",
+      );
+      return;
+    }
+
+    let selectedRow = readRow(selectedRowIndex);
+    if (!selectedRow) {
+      await fetchLinearPage(moduleId, makePageKey(selectedRowIndex, PAGE_SIZE));
+      selectedRow = readRow(selectedRowIndex);
+    }
+    if (!selectedRow || selectedRow.kind !== "instruction") {
+      showTransientStatusMessage(
+        "The highlighted row is not a function instruction.",
+      );
+      return;
+    }
+
+    await openGraphAtVa(
+      selectedRow.address,
+      "The highlighted instruction does not belong to a discovered function.",
+    );
+  }, [
+    activePanel,
+    centerView,
+    fetchLinearPage,
+    moduleId,
+    openGraphAtVa,
+    readRow,
+    selectedRowIndex,
+    showTransientStatusMessage,
+  ]);
+
+  const handleGraphInstructionSelect = useCallback(
+    async (va: string) => {
+      await syncSelectionToVa(va);
+    },
+    [syncSelectionToVa],
+  );
+
   const handleGraphInstructionNavigate = useCallback(
     (va: string) => navigateToVa(va),
     [navigateToVa],
+  );
+
+  const handleGraphOperandNavigate = useCallback(
+    async (sourceVa: string, targetVa: string) =>
+      navigateFromGraphOperand(
+        sourceVa,
+        targetVa,
+        pushSelectionHistory,
+        async (va) => {
+          const synchronized = await syncSelectionToVa(va, {
+            syncViewport: true,
+          });
+          if (!synchronized) {
+            return false;
+          }
+          return openGraphAtVa(va);
+        },
+      ),
+    [openGraphAtVa, pushSelectionHistory, syncSelectionToVa],
   );
 
   const navigateSelectionHistory = useCallback(
@@ -1540,6 +1597,7 @@ export function App() {
                 selectedVa={goToAddress}
                 onActivate={() => setActivePanel("disassembly")}
                 onNavigateToInstruction={handleGraphInstructionNavigate}
+                onNavigateToOperandTarget={handleGraphOperandNavigate}
                 onSelectInstruction={handleGraphInstructionSelect}
               />
             )}

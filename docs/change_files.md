@@ -1,5 +1,29 @@
 # Change Files
 
+## 2026-03-09 - Fix Graph Operand Overlay Viewport Alignment
+
+App:
+- `app/src/renderer/features/graph/graph-panel.test.tsx`
+- `app/src/renderer/features/graph/graph-panel.tsx`
+
+Docs:
+- `docs/work_log.md`
+- `docs/change_files.md`
+
+## 2026-03-09 - Add Clickable Graph Operand Navigation
+
+App:
+- `app/src/renderer/features/graph/graph-panel.test.tsx`
+- `app/src/renderer/features/graph/graph-panel.tsx`
+- `app/src/renderer/shell/App.tsx`
+- `app/src/renderer/shell/app.graph-view.test.tsx`
+- `app/src/renderer/shell/operand-navigation.test.ts`
+- `app/src/renderer/shell/operand-navigation.ts`
+
+Docs:
+- `docs/work_log.md`
+- `docs/change_files.md`
+
 ## 2026-03-09 - Simplify Graph Cache Boundaries and Xref Name Lookup
 
 Engine:

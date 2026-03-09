@@ -304,6 +304,7 @@ describe("GraphPanel", () => {
     const graph = buildDiamondGraph();
     const onSelectInstruction = vi.fn();
     const onNavigateToInstruction = vi.fn().mockResolvedValue(true);
+    const onNavigateToOperandTarget = vi.fn().mockResolvedValue(true);
 
     render(
       <div style={{ height: 640, width: 960 }}>
@@ -313,6 +314,7 @@ describe("GraphPanel", () => {
           moduleId="m1"
           onActivate={() => {}}
           onNavigateToInstruction={onNavigateToInstruction}
+          onNavigateToOperandTarget={onNavigateToOperandTarget}
           onSelectInstruction={onSelectInstruction}
           selectedVa="0x140001000"
         />
@@ -347,5 +349,68 @@ describe("GraphPanel", () => {
     });
 
     expect(onNavigateToInstruction).toHaveBeenCalledWith("0x140001000");
+  });
+
+  it("renders operand targets as clickable links over the graph canvas", () => {
+    const graph = buildLoopGraph();
+    const onNavigateToOperandTarget = vi.fn().mockResolvedValue(true);
+
+    render(
+      <div style={{ height: 640, width: 960 }}>
+        <GraphPanel
+          graph={graph}
+          isActive
+          moduleId="m1"
+          onActivate={() => {}}
+          onNavigateToInstruction={vi.fn().mockResolvedValue(true)}
+          onNavigateToOperandTarget={onNavigateToOperandTarget}
+          onSelectInstruction={vi.fn()}
+          selectedVa="0x140002000"
+        />
+      </div>,
+    );
+
+    fireEvent.click(
+      screen.getAllByRole("button", {
+        name: "Follow graph operand lbl_140002010 to 0x140002010",
+      })[0],
+    );
+
+    expect(onNavigateToOperandTarget).toHaveBeenCalledWith(
+      "0x140002000",
+      "0x140002010",
+    );
+  });
+
+  it("keeps the operand link layer aligned with viewport zoom changes", () => {
+    const graph = buildLoopGraph();
+
+    render(
+      <div style={{ height: 640, width: 960 }}>
+        <GraphPanel
+          graph={graph}
+          isActive
+          moduleId="m1"
+          onActivate={() => {}}
+          onNavigateToInstruction={vi.fn().mockResolvedValue(true)}
+          onNavigateToOperandTarget={vi.fn().mockResolvedValue(true)}
+          onSelectInstruction={vi.fn()}
+          selectedVa="0x140002000"
+        />
+      </div>,
+    );
+
+    const canvas = screen.getByTestId("graph-canvas");
+    const linkScene = screen.getByTestId("graph-operand-link-scene");
+    const initialTransform = linkScene.style.transform;
+
+    fireEvent.wheel(canvas, {
+      clientX: 480,
+      clientY: 320,
+      deltaY: -240,
+    });
+
+    expect(linkScene.style.transform).not.toBe(initialTransform);
+    expect(linkScene.style.transform).toContain("scale(");
   });
 });

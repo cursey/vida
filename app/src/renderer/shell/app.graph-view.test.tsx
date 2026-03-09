@@ -28,10 +28,27 @@ function buildRows(): LinearRow[] {
     {
       kind: "instruction",
       address: "0x140001000",
-      bytes: "55",
-      mnemonic: "push",
-      operands: "rbp",
-      instructionCategory: "stack",
+      bytes: "eb 1e",
+      mnemonic: "jmp",
+      operands: "lbl_140001020",
+      instructionCategory: "control_flow",
+      branchTarget: "0x140001020",
+    },
+    {
+      kind: "instruction",
+      address: "0x140001020",
+      bytes: "c3",
+      mnemonic: "ret",
+      operands: "",
+      instructionCategory: "return",
+    },
+    {
+      kind: "instruction",
+      address: "0x140002000",
+      bytes: "c3",
+      mnemonic: "ret",
+      operands: "",
+      instructionCategory: "return",
     },
   ];
 }
@@ -43,6 +60,11 @@ describe("App graph view", () => {
   function installMockApi(
     getFunctionGraphByVa: DesktopApi["getFunctionGraphByVa"],
   ): DesktopApi {
+    const rows = buildRows();
+    const rowIndexByVa = new Map(
+      rows.map((row, index) => [row.address, index] as const),
+    );
+
     mockDesktopApi = createMockDesktopApi({
       pickExecutable: vi.fn().mockResolvedValue("C:\\fixtures\\sample.exe"),
       onMenuOpenExecutable: vi.fn((callback: () => void) => {
@@ -60,7 +82,7 @@ describe("App graph view", () => {
           {
             name: ".text",
             startVa: "0x140001000",
-            endVa: "0x140002000",
+            endVa: "0x140003000",
             rawOffset: 0,
             rawSize: 0,
           },
@@ -79,18 +101,18 @@ describe("App graph view", () => {
       }),
       getFunctionGraphByVa,
       getLinearViewInfo: vi.fn().mockResolvedValue({
-        rowCount: 1,
+        rowCount: rows.length,
         minVa: "0x140001000",
-        maxVa: "0x140001000",
+        maxVa: "0x140002000",
         rowHeight: 24,
         dataGroupSize: 16,
       }),
       getLinearRows: vi.fn().mockResolvedValue({
-        rows: buildRows(),
+        rows,
       }),
-      findLinearRowByVa: vi.fn().mockResolvedValue({
-        rowIndex: 0,
-      }),
+      findLinearRowByVa: vi.fn().mockImplementation(async ({ va }) => ({
+        rowIndex: rowIndexByVa.get(va) ?? 0,
+      })),
     });
 
     return mockDesktopApi;
@@ -230,6 +252,230 @@ describe("App graph view", () => {
     await waitFor(() => {
       expect(screen.getByText("Disassembly")).toBeInTheDocument();
       expect(screen.queryByText("Graph View")).not.toBeInTheDocument();
+    });
+  });
+
+  it("focuses the target basic block when a branch operand is clicked in graph view", async () => {
+    const getFunctionGraphByVa = vi.fn().mockImplementation(async ({ va }) => {
+      if (va === "0x140001000") {
+        return {
+          functionStartVa: "0x140001000",
+          functionName: "sub_140001000",
+          focusBlockId: "b_1000",
+          blocks: [
+            {
+              id: "b_1000",
+              startVa: "0x140001000",
+              endVa: "0x140001003",
+              isEntry: true,
+              isExit: false,
+              instructions: [
+                {
+                  address: "0x140001000",
+                  mnemonic: "jmp",
+                  operands: "lbl_140001020",
+                  instructionCategory: "control_flow" as const,
+                  branchTarget: "0x140001020",
+                },
+              ],
+            },
+            {
+              id: "b_1020",
+              startVa: "0x140001020",
+              endVa: "0x140001021",
+              isEntry: false,
+              isExit: true,
+              instructions: [
+                {
+                  address: "0x140001020",
+                  mnemonic: "ret",
+                  operands: "",
+                  instructionCategory: "return" as const,
+                },
+              ],
+            },
+          ],
+          edges: [
+            {
+              id: "e_1000_1020",
+              fromBlockId: "b_1000",
+              toBlockId: "b_1020",
+              kind: "unconditional" as const,
+              sourceInstructionVa: "0x140001000",
+              isBackEdge: false,
+            },
+          ],
+        };
+      }
+
+      return {
+        functionStartVa: "0x140001000",
+        functionName: "sub_140001000",
+        focusBlockId: "b_1020",
+        blocks: [
+          {
+            id: "b_1000",
+            startVa: "0x140001000",
+            endVa: "0x140001003",
+            isEntry: true,
+            isExit: false,
+            instructions: [
+              {
+                address: "0x140001000",
+                mnemonic: "jmp",
+                operands: "lbl_140001020",
+                instructionCategory: "control_flow" as const,
+                branchTarget: "0x140001020",
+              },
+            ],
+          },
+          {
+            id: "b_1020",
+            startVa: "0x140001020",
+            endVa: "0x140001021",
+            isEntry: false,
+            isExit: true,
+            instructions: [
+              {
+                address: "0x140001020",
+                mnemonic: "ret",
+                operands: "",
+                instructionCategory: "return" as const,
+              },
+            ],
+          },
+        ],
+        edges: [
+          {
+            id: "e_1000_1020",
+            fromBlockId: "b_1000",
+            toBlockId: "b_1020",
+            kind: "unconditional" as const,
+            sourceInstructionVa: "0x140001000",
+            isBackEdge: false,
+          },
+        ],
+      };
+    });
+    installMockApi(getFunctionGraphByVa);
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(menuOpenHandler).toBeTypeOf("function");
+    });
+
+    await act(async () => {
+      menuOpenHandler?.();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("Disassembly")).toBeInTheDocument();
+    });
+
+    fireEvent.keyDown(window, { key: " ", code: "Space" });
+
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "Follow graph operand lbl_140001020 to 0x140001020",
+      }),
+    );
+
+    await waitFor(() => {
+      expect(getFunctionGraphByVa).toHaveBeenNthCalledWith(2, {
+        moduleId: "m1",
+        va: "0x140001020",
+      });
+      expect(screen.getByText("Graph View")).toBeInTheDocument();
+      expect(screen.getByText("0x140001020 | 0x140001020")).toBeInTheDocument();
+    });
+  });
+
+  it("switches graph view to another function when a call operand is clicked", async () => {
+    const getFunctionGraphByVa = vi.fn().mockImplementation(async ({ va }) => {
+      if (va === "0x140001000") {
+        return {
+          functionStartVa: "0x140001000",
+          functionName: "sub_140001000",
+          focusBlockId: "b_1000",
+          blocks: [
+            {
+              id: "b_1000",
+              startVa: "0x140001000",
+              endVa: "0x140001005",
+              isEntry: true,
+              isExit: true,
+              instructions: [
+                {
+                  address: "0x140001000",
+                  mnemonic: "call",
+                  operands: "sub_140002000",
+                  instructionCategory: "call" as const,
+                  callTarget: "0x140002000",
+                },
+              ],
+            },
+          ],
+          edges: [],
+        };
+      }
+
+      return {
+        functionStartVa: "0x140002000",
+        functionName: "sub_140002000",
+        focusBlockId: "b_2000",
+        blocks: [
+          {
+            id: "b_2000",
+            startVa: "0x140002000",
+            endVa: "0x140002001",
+            isEntry: true,
+            isExit: true,
+            instructions: [
+              {
+                address: "0x140002000",
+                mnemonic: "ret",
+                operands: "",
+                instructionCategory: "return" as const,
+              },
+            ],
+          },
+        ],
+        edges: [],
+      };
+    });
+    installMockApi(getFunctionGraphByVa);
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(menuOpenHandler).toBeTypeOf("function");
+    });
+
+    await act(async () => {
+      menuOpenHandler?.();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("Disassembly")).toBeInTheDocument();
+    });
+
+    fireEvent.keyDown(window, { key: " ", code: "Space" });
+
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "Follow graph operand sub_140002000 to 0x140002000",
+      }),
+    );
+
+    await waitFor(() => {
+      expect(getFunctionGraphByVa).toHaveBeenNthCalledWith(2, {
+        moduleId: "m1",
+        va: "0x140002000",
+      });
+      expect(
+        screen.getByText("sub_140002000 @ 0x140002000"),
+      ).toBeInTheDocument();
     });
   });
 

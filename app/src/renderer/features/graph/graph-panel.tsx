@@ -6,6 +6,7 @@ import {
   AppPanelTitle,
 } from "@/shell/components/panel";
 import {
+  type CSSProperties,
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
@@ -15,7 +16,7 @@ import {
   useRef,
   useState,
 } from "react";
-import type { MethodResult } from "../../../shared";
+import type { FunctionGraphInstruction, MethodResult } from "../../../shared";
 import {
   type GraphBlockScene,
   type GraphHit,
@@ -41,6 +42,10 @@ type GraphPanelProps = {
   onActivate: () => void;
   onSelectInstruction: (va: string) => void;
   onNavigateToInstruction: (va: string) => Promise<boolean>;
+  onNavigateToOperandTarget: (
+    sourceVa: string,
+    targetVa: string,
+  ) => Promise<boolean>;
 };
 
 type GraphTheme = {
@@ -65,6 +70,21 @@ const BADGE_FONT = '600 10px "Geist Sans", "Inter", sans-serif';
 const BLOCK_RADIUS = 12;
 const EDGE_WIDTH = 1.6;
 const FALLTHROUGH_DASH = [8, 6];
+const GRAPH_TEXT_FALLBACK_WIDTH = {
+  badge: 6.1,
+  body: 6.8,
+  mnemonic: 7,
+};
+
+type GraphOperandLink = {
+  key: string;
+  label: string;
+  sourceVa: string;
+  targetVa: string;
+  style: CSSProperties;
+};
+
+let graphTextMeasureContext: CanvasRenderingContext2D | null | undefined;
 
 function readCssVar(
   styles: CSSStyleDeclaration,
@@ -454,7 +474,7 @@ function drawBlock(
       40,
     );
     context.fillStyle = theme.textSecondary;
-    if (instruction.operands) {
+    if (instruction.operands && !operandTargetForInstruction(instruction)) {
       context.fillText(
         instruction.operands,
         row.rect.x + mnemonicWidth + 12,
@@ -463,6 +483,37 @@ function drawBlock(
     }
   }
   context.restore();
+}
+
+function operandTargetForInstruction(
+  instruction: FunctionGraphInstruction,
+): string | null {
+  return instruction.callTarget ?? instruction.branchTarget ?? null;
+}
+
+function measureGraphText(
+  text: string,
+  font: string,
+  fallbackCharWidth: number,
+): number {
+  if (!text) {
+    return 0;
+  }
+
+  if (typeof document === "undefined") {
+    return text.length * fallbackCharWidth;
+  }
+
+  if (graphTextMeasureContext === undefined) {
+    graphTextMeasureContext = document.createElement("canvas").getContext("2d");
+  }
+
+  if (!graphTextMeasureContext) {
+    return text.length * fallbackCharWidth;
+  }
+
+  graphTextMeasureContext.font = font;
+  return graphTextMeasureContext.measureText(text).width;
 }
 
 function drawGraph(
@@ -523,6 +574,7 @@ export function GraphPanel({
   onActivate,
   onSelectInstruction,
   onNavigateToInstruction,
+  onNavigateToOperandTarget,
 }: GraphPanelProps) {
   const viewportRef = useRef<GraphViewport | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -537,6 +589,87 @@ export function GraphPanel({
   const [hoverHit, setHoverHit] = useState<GraphHit | null>(null);
 
   const scene = useMemo(() => (graph ? buildGraphScene(graph) : null), [graph]);
+  const operandLinks = useMemo(() => {
+    if (!graph || !scene || size.width <= 0 || size.height <= 0) {
+      return [];
+    }
+
+    const links: GraphOperandLink[] = [];
+    for (const block of scene.blocks) {
+      const graphBlock = graph.blocks.find(
+        (candidate) => candidate.id === block.id,
+      );
+      if (!graphBlock) {
+        continue;
+      }
+
+      for (const row of block.rowRects) {
+        const instruction = graphBlock.instructions[row.index];
+        const targetVa = instruction
+          ? operandTargetForInstruction(instruction)
+          : null;
+        if (!instruction || !instruction.operands || !targetVa) {
+          continue;
+        }
+
+        const mnemonicWidth = Math.max(
+          measureGraphText(
+            instruction.mnemonic,
+            BODY_FONT,
+            GRAPH_TEXT_FALLBACK_WIDTH.mnemonic,
+          ),
+          40,
+        );
+        const width = Math.max(
+          0,
+          Math.min(
+            row.rect.width - mnemonicWidth - 12,
+            measureGraphText(
+              instruction.operands,
+              BODY_FONT,
+              GRAPH_TEXT_FALLBACK_WIDTH.body,
+            ) + 8,
+          ),
+        );
+        const height = row.rect.height;
+
+        if (width <= 0 || height <= 0) {
+          continue;
+        }
+
+        links.push({
+          key: `${instruction.address}:${targetVa}`,
+          label: instruction.operands,
+          sourceVa: instruction.address,
+          targetVa,
+          style: {
+            left: `${row.rect.x + mnemonicWidth + 12}px`,
+            top: `${row.rect.y}px`,
+            width: `${width}px`,
+            height: `${height}px`,
+            fontSize: "11px",
+            lineHeight: `${height}px`,
+          },
+        });
+      }
+    }
+
+    return links;
+  }, [graph, scene, size.height, size.width]);
+
+  const operandLayerStyle = useMemo<CSSProperties>(() => {
+    if (!viewport) {
+      return {
+        transform: "translate(0px, 0px) scale(1)",
+        transformOrigin: "0 0",
+      };
+    }
+
+    return {
+      transform: `translate(${viewport.offsetX}px, ${viewport.offsetY}px) scale(${viewport.zoom})`,
+      transformOrigin: "0 0",
+    };
+  }, [viewport]);
 
   useEffect(() => {
     viewportRef.current = viewport;
@@ -843,6 +976,39 @@ export function GraphPanel({
               ref={canvasRef}
               tabIndex={0}
             />
+            <div
+              className="pointer-events-none absolute inset-0 overflow-hidden"
+              data-testid="graph-operand-links"
+            >
+              <div
+                className="absolute left-0 top-0"
+                data-testid="graph-operand-link-scene"
+                style={operandLayerStyle}
+              >
+                {operandLinks.map((link) => (
+                  <button
+                    aria-label={`Follow graph operand ${link.label} to ${link.targetVa}`}
+                    className="pointer-events-auto absolute m-0 truncate border-0 bg-transparent p-0 text-left font-mono text-primary underline decoration-primary/45 underline-offset-2 hover:decoration-primary focus-visible:outline focus-visible:outline-1 focus-visible:outline-ring focus-visible:outline-offset-1"
+                    key={link.key}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      void onNavigateToOperandTarget(
+                        link.sourceVa,
+                        link.targetVa,
+                      );
+                    }}
+                    onPointerDown={(event) => {
+                      event.stopPropagation();
+                    }}
+                    style={link.style}
+                    type="button"
+                  >
+                    {link.label}
+                  </button>
+                ))}
+              </div>
+            </div>
             <div className="pointer-events-none absolute bottom-3 left-3 rounded-md border border-border/70 bg-card/90 px-2.5 py-1.5 text-[11px] text-muted-foreground shadow-sm backdrop-blur">
               <span>
                 Wheel zooms. Drag empty space to pan. <kbd>F</kbd> fits.{" "}

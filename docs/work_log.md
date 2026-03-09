@@ -1,5 +1,36 @@
 # Work Log
 
+## 2026-03-09 - Fix Graph Operand Overlay Viewport Alignment
+
+Summary:
+- Reworked the graph operand link overlay to position links in graph scene coordinates and apply a single shared viewport transform, instead of individually projecting every link into screen space.
+- Eliminated the graph-view failure mode where operand links could appear stuck to the viewport during pan, zoom, or reset interactions because the overlay no longer drifts independently from the canvas transform.
+- Added renderer regression coverage to verify the graph operand link layer updates when the viewport transform changes.
+
+Validation commands executed:
+- `just app-fmt`
+- `cd app && npm run test:renderer -- graph-panel app.graph-view`
+- `just app-check`
+
+Changed files index:
+- See `docs/change_files.md` for the detailed file list for this work item.
+
+## 2026-03-09 - Add Clickable Graph Operand Navigation
+
+Summary:
+- Added hyperlink-style operand overlays for direct call and branch targets inside the custom graph view so target-bearing instructions read and behave like the linked operands in linear disassembly.
+- Routed graph operand clicks through a graph-local navigation path that records the source VA in selection history, synchronizes the selected VA/linear row, and reloads the graph by target VA without leaving Graph View.
+- Made same-function branch links recenter the graph on the target basic block via the returned `focusBlockId`, while cross-function call links switch the graph to the callee function.
+- Added renderer regression coverage for graph operand link rendering, same-function branch focus behavior, cross-function call switching, and graph-specific operand history handling.
+
+Validation commands executed:
+- `just app-fmt`
+- `cd app && npm run test:renderer -- graph-panel app.graph-view operand-navigation`
+- `just app-check`
+
+Changed files index:
+- See `docs/change_files.md` for the detailed file list for this work item.
+
 ## 2026-03-09 - Simplify Graph Cache Boundaries and Xref Name Lookup
 
 Summary:
