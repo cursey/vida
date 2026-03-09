@@ -1,5 +1,34 @@
 # Work Log
 
+## 2026-03-08 - Shorten Synthetic Branch Labels
+
+Summary:
+- Renamed synthetic direct-branch operand labels from `label_<va>` to `lbl_<va>`.
+- Updated engine and renderer regression coverage to match the shorter label prefix.
+
+Validation commands executed:
+- `cargo test --manifest-path engine/Cargo.toml`
+- `npm run test -- --run src/renderer/features/disassembly/disassembly-panel.test.tsx src/renderer/features/graph/graph-panel.test.ts` (in `app`)
+
+Changed files index:
+- See `docs/change_files.md` for the detailed file list for this work item.
+
+## 2026-03-08 - Symbolize Direct Call and Branch Operands
+
+Summary:
+- Rewrote lazy-rendered direct `call` operands to show known function names from the analyzed function cache instead of raw target VAs.
+- Rewrote direct `jmp` and conditional-branch operands to use synthetic `lbl_<va>` names while leaving indirect control-flow operands unchanged.
+- Removed linear-view branch and call comment annotations so disassembly rows rely on operand text alone, while preserving target metadata for later clickable-operand work.
+- Added engine and renderer regression coverage for operand symbolization across linear rows, linear disassembly, and graph output.
+
+Validation commands executed:
+- `just fmt`
+- `just check`
+- `just test`
+
+Changed files index:
+- See `docs/change_files.md` for the detailed file list for this work item.
+
 ## 2026-03-08 - Reorganize Renderer Shell, Platform, and Shared Contracts
 
 Summary:

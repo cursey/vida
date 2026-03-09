@@ -1476,7 +1476,6 @@ export function App() {
                   pushSelectionHistory(address);
                 }}
                 findSectionName={findSectionName}
-                onNavigateToVa={navigateToVa}
               />
             ) : (
               <GraphPanel

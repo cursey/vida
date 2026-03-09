@@ -383,6 +383,7 @@ impl EngineState {
                     cached_inst.start_rva,
                     cached_inst.len,
                     false,
+                    &analysis.function_names_by_start_rva,
                 )?;
 
                 instructions.push(crate::api::FunctionGraphInstruction {
@@ -450,6 +451,7 @@ impl EngineState {
                 row.start_rva,
                 row.len,
                 true,
+                &analysis.function_names_by_start_rva,
             )?;
 
             instructions.push(InstructionRow {
@@ -529,6 +531,7 @@ impl EngineState {
                 &module.section_lookup,
                 image_base,
                 row_index,
+                &analysis.function_names_by_start_rva,
             )?);
         }
 

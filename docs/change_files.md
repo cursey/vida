@@ -1,5 +1,40 @@
 # Change Files
 
+## 2026-03-08 - Shorten Synthetic Branch Labels
+
+App:
+- `app/src/renderer/features/disassembly/disassembly-panel.test.tsx`
+- `app/src/renderer/features/graph/graph-panel.test.ts`
+
+Engine:
+- `engine/src/disasm.rs`
+- `engine/src/tests.rs`
+- `engine/tests/engine_integration.rs`
+
+Docs:
+- `docs/work_log.md`
+- `docs/change_files.md`
+
+## 2026-03-08 - Symbolize Direct Call and Branch Operands
+
+App:
+- `app/src/renderer/features/disassembly/disassembly-panel.tsx`
+- `app/src/renderer/features/disassembly/disassembly-panel.test.tsx`
+- `app/src/renderer/features/graph/graph-panel.test.ts`
+- `app/src/renderer/shell/App.tsx`
+
+Engine:
+- `engine/src/analysis.rs`
+- `engine/src/disasm.rs`
+- `engine/src/linear.rs`
+- `engine/src/state.rs`
+- `engine/src/tests.rs`
+- `engine/tests/engine_integration.rs`
+
+Docs:
+- `docs/work_log.md`
+- `docs/change_files.md`
+
 ## 2026-03-08 - Reorganize Renderer Shell, Platform, and Shared Contracts
 
 App:

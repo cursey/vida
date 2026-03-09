@@ -1,18 +1,29 @@
 use crate::api::InstructionCategory;
-use crate::disasm::{categorize_instruction, parse_hex_u64};
+use crate::disasm::{
+    categorize_instruction, parse_hex_u64, split_instruction_text, symbolize_operand_text,
+};
 use crate::pe_utils::{
     collect_exception_function_starts_from_entries, collect_tls_callback_starts_from_vas,
     is_valid_exception_function_range,
 };
 use crate::{EngineError, EngineState};
 use goblin::pe::exception::RuntimeFunction;
-use iced_x86::{Decoder, DecoderOptions, Instruction};
+use iced_x86::{Decoder, DecoderOptions, Formatter, Instruction};
+use std::collections::HashMap;
 
 fn decode_instruction(bytes: &[u8]) -> Instruction {
     let mut decoder = Decoder::with_ip(64, bytes, 0x140001000, DecoderOptions::NONE);
     let mut instruction = Instruction::default();
     decoder.decode_out(&mut instruction);
     instruction
+}
+
+fn instruction_operands(instruction: &Instruction) -> String {
+    let mut formatter = iced_x86::IntelFormatter::new();
+    let mut instruction_text = String::new();
+    Formatter::format(&mut formatter, instruction, &mut instruction_text);
+    let (_, operands) = split_instruction_text(&instruction_text);
+    operands
 }
 
 #[test]
@@ -162,4 +173,77 @@ fn categorizes_mnemonic_families_without_eager_instruction_text() {
         categorize_instruction(&prefetchnta),
         InstructionCategory::DataTransfer
     );
+}
+
+#[test]
+fn symbolizes_known_direct_call_targets() {
+    let instruction = decode_instruction(&[0xE8, 0xFB, 0x0F, 0x00, 0x00]);
+    let raw_operands = instruction_operands(&instruction);
+    let mut function_names = HashMap::new();
+    function_names.insert(0x2000, "target_function".to_owned());
+
+    let operands = symbolize_operand_text(&instruction, 0x140000000, raw_operands, &function_names);
+
+    assert_eq!(operands, "target_function");
+}
+
+#[test]
+fn preserves_unknown_direct_call_targets() {
+    let instruction = decode_instruction(&[0xE8, 0xFB, 0x0F, 0x00, 0x00]);
+    let raw_operands = instruction_operands(&instruction);
+
+    let operands = symbolize_operand_text(
+        &instruction,
+        0x140000000,
+        raw_operands.clone(),
+        &HashMap::new(),
+    );
+
+    assert_eq!(operands, raw_operands);
+}
+
+#[test]
+fn symbolizes_direct_jumps_and_conditional_branches_as_labels() {
+    let jmp = decode_instruction(&[0xEB, 0x00]);
+    let jne = decode_instruction(&[0x75, 0x00]);
+
+    let jmp_operands = symbolize_operand_text(
+        &jmp,
+        0x140000000,
+        instruction_operands(&jmp),
+        &HashMap::new(),
+    );
+    let jne_operands = symbolize_operand_text(
+        &jne,
+        0x140000000,
+        instruction_operands(&jne),
+        &HashMap::new(),
+    );
+
+    assert_eq!(jmp_operands, "lbl_140001002");
+    assert_eq!(jne_operands, "lbl_140001002");
+}
+
+#[test]
+fn leaves_indirect_control_flow_operands_unchanged() {
+    let indirect_call = decode_instruction(&[0xFF, 0xD0]);
+    let indirect_jmp = decode_instruction(&[0xFF, 0xE0]);
+    let call_operands = instruction_operands(&indirect_call);
+    let jmp_operands = instruction_operands(&indirect_jmp);
+
+    let symbolized_call = symbolize_operand_text(
+        &indirect_call,
+        0x140000000,
+        call_operands.clone(),
+        &HashMap::new(),
+    );
+    let symbolized_jmp = symbolize_operand_text(
+        &indirect_jmp,
+        0x140000000,
+        jmp_operands.clone(),
+        &HashMap::new(),
+    );
+
+    assert_eq!(symbolized_call, call_operands);
+    assert_eq!(symbolized_jmp, jmp_operands);
 }

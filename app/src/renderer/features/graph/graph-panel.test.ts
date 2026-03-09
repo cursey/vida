@@ -19,6 +19,16 @@ describe("renderGraphNodeHtml", () => {
           operands: "rbp, rsp",
           instructionCategory: "data_transfer",
         },
+        {
+          mnemonic: "call",
+          operands: "target_function",
+          instructionCategory: "call",
+        },
+        {
+          mnemonic: "jne",
+          operands: "lbl_140001020",
+          instructionCategory: "control_flow",
+        },
       ],
     } as Parameters<typeof renderGraphNodeHtml>[0]);
 
@@ -28,6 +38,12 @@ describe("renderGraphNodeHtml", () => {
     );
     expect(html).toContain(
       '<span class="mnemonic mnemonic-data_transfer">mov</span><span class="operands">rbp, rsp</span>',
+    );
+    expect(html).toContain(
+      '<span class="mnemonic mnemonic-call">call</span><span class="operands">target_function</span>',
+    );
+    expect(html).toContain(
+      '<span class="mnemonic mnemonic-control_flow">jne</span><span class="operands">lbl_140001020</span>',
     );
   });
 });

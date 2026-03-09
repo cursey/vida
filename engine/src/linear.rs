@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::collections::HashMap;
 use std::fmt::Write as FmtWrite;
 
 use crate::api::{InstructionCategory, LinearViewRow, XrefKind, XrefTargetKind};
@@ -298,6 +299,7 @@ pub(crate) fn materialize_linear_row(
     section_lookup: &SectionLookup,
     image_base: u64,
     row_index: u64,
+    function_names_by_start_rva: &HashMap<u64, String>,
 ) -> Result<LinearViewRow, EngineError> {
     let segment = find_segment_by_row(view, row_index)?;
     let row_offset = row_index.saturating_sub(segment.start_row);
@@ -363,6 +365,7 @@ pub(crate) fn materialize_linear_row(
                 row.start_rva,
                 row.len,
                 true,
+                function_names_by_start_rva,
             )?;
 
             Ok(LinearViewRow {

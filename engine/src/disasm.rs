@@ -1,4 +1,5 @@
 use iced_x86::{Decoder, DecoderOptions, FlowControl, Formatter, Instruction, Mnemonic};
+use std::collections::HashMap;
 
 use crate::api::InstructionCategory;
 use crate::error::EngineError;
@@ -136,6 +137,7 @@ pub(crate) fn render_instruction(
     start_rva: u64,
     len: u8,
     include_bytes: bool,
+    function_names_by_start_rva: &HashMap<u64, String>,
 ) -> Result<RenderedInstruction, EngineError> {
     if len == 0 {
         return Err(EngineError::Internal(
@@ -170,6 +172,12 @@ pub(crate) fn render_instruction(
     let mut instruction_text = String::new();
     Formatter::format(&mut formatter, &instruction, &mut instruction_text);
     let (mnemonic, operands) = split_instruction_text(&instruction_text);
+    let operands = symbolize_operand_text(
+        &instruction,
+        image_base,
+        operands,
+        function_names_by_start_rva,
+    );
 
     Ok(RenderedInstruction {
         bytes: include_bytes.then(|| bytes_to_hex(&decode_window)),
@@ -204,6 +212,40 @@ pub(crate) fn to_hex(value: u64) -> String {
     format!("0x{value:X}")
 }
 
+pub(crate) fn symbolize_operand_text(
+    instruction: &Instruction,
+    image_base: u64,
+    operands: String,
+    function_names_by_start_rva: &HashMap<u64, String>,
+) -> String {
+    match instruction.flow_control() {
+        FlowControl::Call => {
+            let target_va = instruction.near_branch_target();
+            if target_va < image_base {
+                return operands;
+            }
+
+            function_names_by_start_rva
+                .get(&(target_va - image_base))
+                .cloned()
+                .unwrap_or(operands)
+        }
+        FlowControl::ConditionalBranch | FlowControl::UnconditionalBranch => {
+            let target_va = instruction.near_branch_target();
+            if target_va < image_base {
+                return operands;
+            }
+
+            default_label_name(target_va)
+        }
+        _ => operands,
+    }
+}
+
 pub(crate) fn default_function_name(va: u64) -> String {
     format!("sub_{va:x}")
+}
+
+pub(crate) fn default_label_name(va: u64) -> String {
+    format!("lbl_{va:x}")
 }

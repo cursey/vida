@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::thread;
@@ -107,6 +108,26 @@ fn wait_for_analysis_ready(
     }
 
     panic!("Timed out waiting for analysis to become ready");
+}
+
+fn load_all_linear_rows(
+    state: &mut EngineState,
+    module_id: &str,
+) -> Vec<engine::api::LinearViewRow> {
+    let view = state
+        .get_linear_view_info(LinearViewInfoParams {
+            module_id: module_id.to_owned(),
+        })
+        .expect("linear view info should load");
+
+    state
+        .get_linear_rows(LinearRowsParams {
+            module_id: module_id.to_owned(),
+            start_row: 0,
+            row_count: view.row_count,
+        })
+        .expect("linear rows should load")
+        .rows
 }
 
 #[test]
@@ -429,6 +450,112 @@ fn discovers_internal_functions_from_direct_call_targets_without_pdb() {
             .xrefs
             .iter()
             .all(|xref| xref.target_va == call_seed.start)
+    );
+}
+
+#[test]
+fn symbolizes_direct_call_and_branch_operands_in_linear_and_graph_views() {
+    let fixture = fixture_path("minimal_x64.exe");
+    let mut state = EngineState::default();
+    let open_result = state
+        .open_module(ModuleOpenParams {
+            path: fixture.to_string_lossy().into_owned(),
+        })
+        .expect("module should open");
+    let module_id = open_result.module_id.clone();
+
+    let ready_status = wait_for_analysis_ready(&mut state, &module_id);
+    assert_eq!(ready_status.state, "ready");
+
+    let functions = state
+        .list_functions(FunctionListParams {
+            module_id: module_id.clone(),
+        })
+        .expect("function list should load")
+        .functions
+        .into_iter()
+        .map(|function| (function.start, function.name))
+        .collect::<HashMap<String, String>>();
+    let rows = load_all_linear_rows(&mut state, &module_id);
+
+    let call_row = rows
+        .iter()
+        .find(|row| {
+            row.call_target
+                .as_ref()
+                .and_then(|target| functions.get(target))
+                .is_some()
+        })
+        .expect("fixture should contain a direct call to a known function");
+    let call_target = call_row
+        .call_target
+        .as_ref()
+        .expect("call row should expose callTarget");
+    assert_eq!(
+        call_row.operands,
+        *functions
+            .get(call_target)
+            .expect("call target should map to a known function")
+    );
+
+    let branch_rows = rows
+        .iter()
+        .filter(|row| row.branch_target.is_some())
+        .collect::<Vec<_>>();
+    assert!(
+        !branch_rows.is_empty(),
+        "fixture should contain at least one direct branch"
+    );
+    for row in &branch_rows {
+        let branch_target = row
+            .branch_target
+            .as_ref()
+            .expect("branch row should expose branchTarget");
+        assert_eq!(
+            row.operands,
+            format!(
+                "lbl_{}",
+                branch_target.trim_start_matches("0x").to_lowercase()
+            )
+        );
+    }
+
+    let call_graph = state
+        .get_function_graph_by_va(FunctionGraphByVaParams {
+            module_id: module_id.clone(),
+            va: call_row.address.clone(),
+        })
+        .expect("graph should load");
+    let call_graph_operands = call_graph
+        .blocks
+        .iter()
+        .flat_map(|block| block.instructions.iter())
+        .map(|instruction| instruction.operands.clone())
+        .collect::<Vec<_>>();
+    assert!(
+        call_graph_operands
+            .iter()
+            .any(|operands| operands == &call_row.operands),
+        "graph should reuse symbolized call operands for the owning function"
+    );
+
+    let branch_graph = state
+        .get_function_graph_by_va(FunctionGraphByVaParams {
+            module_id,
+            va: branch_rows[0].address.clone(),
+        })
+        .expect("graph should load");
+    let branch_graph_operands = branch_graph
+        .blocks
+        .iter()
+        .flat_map(|block| block.instructions.iter())
+        .map(|instruction| instruction.operands.clone())
+        .collect::<Vec<_>>();
+    assert!(
+        branch_graph_operands
+            .iter()
+            .any(|operands| operands == &branch_rows[0].operands),
+        "graph should reuse symbolized branch operands for the owning function"
     );
 }
 

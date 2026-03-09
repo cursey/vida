@@ -34,6 +34,7 @@ pub(crate) struct ModuleAnalysis {
     pub(crate) functions: Vec<FunctionSeedEntry>,
     pub(crate) linear_view: LinearView,
     pub(crate) graphs_by_start: HashMap<u64, CachedFunctionGraph>,
+    pub(crate) function_names_by_start_rva: HashMap<u64, String>,
     pub(crate) instruction_owner_by_rva: BTreeMap<u64, InstructionOwnerRange>,
     pub(crate) claimed_instructions_by_function_start: HashMap<u64, Vec<AnalyzedInstructionRow>>,
     pub(crate) xrefs_to_by_target_rva: HashMap<u64, Vec<CachedXref>>,
@@ -273,11 +274,16 @@ where
         &claimed_instructions_by_function_start,
         &instruction_owner_by_rva,
     );
+    let function_names_by_start_rva = graphs_by_start
+        .iter()
+        .map(|(&start_rva, graph)| (start_rva, graph.function_name.clone()))
+        .collect::<HashMap<u64, String>>();
 
     Ok(ModuleAnalysis {
         functions: (*functions).clone(),
         linear_view,
         graphs_by_start,
+        function_names_by_start_rva,
         instruction_owner_by_rva,
         claimed_instructions_by_function_start,
         xrefs_to_by_target_rva,

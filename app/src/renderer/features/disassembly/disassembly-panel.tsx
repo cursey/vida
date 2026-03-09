@@ -76,7 +76,6 @@ type DisassemblyPanelProps = {
   selectedRowIndex: number | null;
   onSelectRow: (rowIndex: number, address: string) => void;
   findSectionName: (address: string) => string;
-  onNavigateToVa: (va: string) => Promise<boolean>;
 };
 
 export function DisassemblyPanel({
@@ -96,7 +95,6 @@ export function DisassemblyPanel({
   selectedRowIndex,
   onSelectRow,
   findSectionName,
-  onNavigateToVa,
 }: DisassemblyPanelProps) {
   return (
     <AppPanel
@@ -227,30 +225,6 @@ export function DisassemblyPanel({
                     </div>
                     <div className={cn(cellClassName, "text-muted-foreground")}>
                       {row.comment ? <span>{`; ${row.comment}`}</span> : null}
-                      {row.branchTarget ? (
-                        <a
-                          className="mr-[10px] cursor-pointer text-primary no-underline hover:underline focus-visible:outline focus-visible:outline-1 focus-visible:outline-ring focus-visible:outline-offset-1"
-                          href={`#${row.branchTarget}`}
-                          onClick={(event) => {
-                            event.preventDefault();
-                            void onNavigateToVa(row.branchTarget ?? "");
-                          }}
-                        >
-                          ; branch -&gt; {row.branchTarget}
-                        </a>
-                      ) : null}
-                      {row.callTarget ? (
-                        <a
-                          className="mr-[10px] cursor-pointer text-primary no-underline hover:underline focus-visible:outline focus-visible:outline-1 focus-visible:outline-ring focus-visible:outline-offset-1"
-                          href={`#${row.callTarget}`}
-                          onClick={(event) => {
-                            event.preventDefault();
-                            void onNavigateToVa(row.callTarget ?? "");
-                          }}
-                        >
-                          ; call -&gt; {row.callTarget}
-                        </a>
-                      ) : null}
                     </div>
                   </div>
                 );
