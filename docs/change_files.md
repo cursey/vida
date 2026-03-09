@@ -1,5 +1,15 @@
 # Change Files
 
+## 2026-03-09 - Preserve Graph View Across Mouse History Navigation
+
+App:
+- `app/src/renderer/shell/App.tsx`
+- `app/src/renderer/shell/app.graph-view.test.tsx`
+
+Docs:
+- `docs/work_log.md`
+- `docs/change_files.md`
+
 ## 2026-03-09 - Fix Graph Operand Overlay Viewport Alignment
 
 App:

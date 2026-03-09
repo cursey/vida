@@ -1,5 +1,21 @@
 # Work Log
 
+## 2026-03-09 - Preserve Graph View Across Mouse History Navigation
+
+Summary:
+- Replaced the renderer selection history entries with `{ va, preferredView }` records so Back and Forward can replay both the selected address and whether that address should reopen in Disassembly or Graph View.
+- Added a graph-specific history replay path that synchronizes the selected VA, reloads the target function graph, and keeps mouse back/forward navigation inside Graph View when the recorded history entry was reached there.
+- Kept history VA-centric by rewriting the current entry's preferred view when users toggle Graph View on the same address, so same-VA view switches do not add duplicate history steps.
+- Added renderer regressions for graph-to-graph mouse back/forward replay and for mixed linear/graph history where Forward should restore Graph View after returning from Disassembly.
+
+Validation commands executed:
+- `cd app && npm run test:renderer -- app.graph-view`
+- `just app-check`
+- `just app-test`
+
+Changed files index:
+- See `docs/change_files.md` for the detailed file list for this work item.
+
 ## 2026-03-09 - Fix Graph Operand Overlay Viewport Alignment
 
 Summary:

@@ -421,6 +421,164 @@ describe("App graph view", () => {
     });
   });
 
+  it("replays mouse back and forward inside graph view after following a graph operand", async () => {
+    const getFunctionGraphByVa = vi.fn().mockImplementation(async ({ va }) => {
+      if (va === "0x140001000") {
+        return {
+          functionStartVa: "0x140001000",
+          functionName: "sub_140001000",
+          focusBlockId: "b_1000",
+          blocks: [
+            {
+              id: "b_1000",
+              startVa: "0x140001000",
+              endVa: "0x140001003",
+              isEntry: true,
+              isExit: false,
+              instructions: [
+                {
+                  address: "0x140001000",
+                  mnemonic: "jmp",
+                  operands: "lbl_140001020",
+                  instructionCategory: "control_flow" as const,
+                  branchTarget: "0x140001020",
+                },
+              ],
+            },
+            {
+              id: "b_1020",
+              startVa: "0x140001020",
+              endVa: "0x140001021",
+              isEntry: false,
+              isExit: true,
+              instructions: [
+                {
+                  address: "0x140001020",
+                  mnemonic: "ret",
+                  operands: "",
+                  instructionCategory: "return" as const,
+                },
+              ],
+            },
+          ],
+          edges: [
+            {
+              id: "e_1000_1020",
+              fromBlockId: "b_1000",
+              toBlockId: "b_1020",
+              kind: "unconditional" as const,
+              sourceInstructionVa: "0x140001000",
+              isBackEdge: false,
+            },
+          ],
+        };
+      }
+
+      return {
+        functionStartVa: "0x140001000",
+        functionName: "sub_140001000",
+        focusBlockId: "b_1020",
+        blocks: [
+          {
+            id: "b_1000",
+            startVa: "0x140001000",
+            endVa: "0x140001003",
+            isEntry: true,
+            isExit: false,
+            instructions: [
+              {
+                address: "0x140001000",
+                mnemonic: "jmp",
+                operands: "lbl_140001020",
+                instructionCategory: "control_flow" as const,
+                branchTarget: "0x140001020",
+              },
+            ],
+          },
+          {
+            id: "b_1020",
+            startVa: "0x140001020",
+            endVa: "0x140001021",
+            isEntry: false,
+            isExit: true,
+            instructions: [
+              {
+                address: "0x140001020",
+                mnemonic: "ret",
+                operands: "",
+                instructionCategory: "return" as const,
+              },
+            ],
+          },
+        ],
+        edges: [
+          {
+            id: "e_1000_1020",
+            fromBlockId: "b_1000",
+            toBlockId: "b_1020",
+            kind: "unconditional" as const,
+            sourceInstructionVa: "0x140001000",
+            isBackEdge: false,
+          },
+        ],
+      };
+    });
+    installMockApi(getFunctionGraphByVa);
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(menuOpenHandler).toBeTypeOf("function");
+    });
+
+    await act(async () => {
+      menuOpenHandler?.();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("Disassembly")).toBeInTheDocument();
+    });
+
+    fireEvent.keyDown(window, { key: " ", code: "Space" });
+
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "Follow graph operand lbl_140001020 to 0x140001020",
+      }),
+    );
+
+    await waitFor(() => {
+      expect(getFunctionGraphByVa).toHaveBeenNthCalledWith(2, {
+        moduleId: "m1",
+        va: "0x140001020",
+      });
+      expect(screen.getByText("Graph View")).toBeInTheDocument();
+      expect(screen.getByText("0x140001020 | 0x140001020")).toBeInTheDocument();
+    });
+
+    fireEvent.mouseDown(window, { button: 3 });
+
+    await waitFor(() => {
+      expect(getFunctionGraphByVa).toHaveBeenNthCalledWith(3, {
+        moduleId: "m1",
+        va: "0x140001000",
+      });
+      expect(screen.getByText("Graph View")).toBeInTheDocument();
+      expect(screen.getByText("0x140001000 | 0x140001000")).toBeInTheDocument();
+    });
+
+    fireEvent.mouseDown(window, { button: 4 });
+
+    await waitFor(() => {
+      expect(getFunctionGraphByVa).toHaveBeenNthCalledWith(4, {
+        moduleId: "m1",
+        va: "0x140001020",
+      });
+      expect(screen.getByText("Graph View")).toBeInTheDocument();
+      expect(screen.getByText("0x140001020 | 0x140001020")).toBeInTheDocument();
+    });
+  });
+
   it("switches graph view to another function when a call operand is clicked", async () => {
     const getFunctionGraphByVa = vi.fn().mockImplementation(async ({ va }) => {
       if (va === "0x140001000") {
@@ -503,6 +661,119 @@ describe("App graph view", () => {
         moduleId: "m1",
         va: "0x140002000",
       });
+      expect(
+        screen.getByText("sub_140002000 @ 0x140002000"),
+      ).toBeInTheDocument();
+    });
+  });
+
+  it("restores graph view on forward after toggling graph at the current VA", async () => {
+    const getFunctionGraphByVa = vi.fn().mockImplementation(async ({ va }) => {
+      if (va === "0x140002000") {
+        return {
+          functionStartVa: "0x140002000",
+          functionName: "sub_140002000",
+          focusBlockId: "b_2000",
+          blocks: [
+            {
+              id: "b_2000",
+              startVa: "0x140002000",
+              endVa: "0x140002001",
+              isEntry: true,
+              isExit: true,
+              instructions: [
+                {
+                  address: "0x140002000",
+                  mnemonic: "ret",
+                  operands: "",
+                  instructionCategory: "return" as const,
+                },
+              ],
+            },
+          ],
+          edges: [],
+        };
+      }
+
+      return {
+        functionStartVa: "0x140001000",
+        functionName: "sub_140001000",
+        focusBlockId: "b_1000",
+        blocks: [
+          {
+            id: "b_1000",
+            startVa: "0x140001000",
+            endVa: "0x140001001",
+            isEntry: true,
+            isExit: true,
+            instructions: [
+              {
+                address: "0x140001000",
+                mnemonic: "ret",
+                operands: "",
+                instructionCategory: "return" as const,
+              },
+            ],
+          },
+        ],
+        edges: [],
+      };
+    });
+    installMockApi(getFunctionGraphByVa);
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(menuOpenHandler).toBeTypeOf("function");
+    });
+
+    await act(async () => {
+      menuOpenHandler?.();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("Disassembly")).toBeInTheDocument();
+    });
+
+    fireEvent.keyDown(window, { key: "g", code: "KeyG" });
+
+    const addressInput = await screen.findByDisplayValue("0x140001000");
+    fireEvent.change(addressInput, { target: { value: "0x140002000" } });
+    fireEvent.click(screen.getByRole("button", { name: "Jump" }));
+
+    await waitFor(() => {
+      expect(screen.queryByText("Go To Address")).not.toBeInTheDocument();
+      expect(screen.getByText("Disassembly")).toBeInTheDocument();
+    });
+
+    fireEvent.keyDown(window, { key: " ", code: "Space" });
+
+    await waitFor(() => {
+      expect(getFunctionGraphByVa).toHaveBeenCalledWith({
+        moduleId: "m1",
+        va: "0x140002000",
+      });
+      expect(screen.getByText("Graph View")).toBeInTheDocument();
+      expect(
+        screen.getByText("sub_140002000 @ 0x140002000"),
+      ).toBeInTheDocument();
+    });
+
+    fireEvent.mouseDown(window, { button: 3 });
+
+    await waitFor(() => {
+      expect(screen.getByText("Disassembly")).toBeInTheDocument();
+      expect(screen.queryByText("Graph View")).not.toBeInTheDocument();
+    });
+
+    fireEvent.mouseDown(window, { button: 4 });
+
+    await waitFor(() => {
+      expect(getFunctionGraphByVa).toHaveBeenNthCalledWith(2, {
+        moduleId: "m1",
+        va: "0x140002000",
+      });
+      expect(screen.getByText("Graph View")).toBeInTheDocument();
       expect(
         screen.getByText("sub_140002000 @ 0x140002000"),
       ).toBeInTheDocument();

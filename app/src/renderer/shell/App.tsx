@@ -38,6 +38,10 @@ import type {
 
 type ActivePanel = "browser" | "disassembly";
 type CenterView = "disassembly" | "graph";
+type SelectionHistoryEntry = {
+  va: string;
+  preferredView: CenterView;
+};
 
 const PAGE_SIZE = 512;
 const OVERSCAN_ROWS = 40;
@@ -126,7 +130,7 @@ export function App() {
   const analysisPollTimerRef = useRef<number | null>(null);
   const readySupplementTimerRef = useRef<number | null>(null);
   const preferredNavigationVaRef = useRef("");
-  const selectionHistoryRef = useRef<string[]>([]);
+  const selectionHistoryRef = useRef<SelectionHistoryEntry[]>([]);
   const selectionHistoryIndexRef = useRef(-1);
   const functionSearchJobIdRef = useRef(0);
   const statusMessageTimerRef = useRef<number | null>(null);
@@ -222,7 +226,10 @@ export function App() {
   }, []);
 
   const resetSelectionHistory = useCallback(
-    (initialVa: string | null = null) => {
+    (
+      initialVa: string | null = null,
+      preferredView: CenterView = "disassembly",
+    ) => {
       selectionHistoryRef.current = [];
       selectionHistoryIndexRef.current = -1;
 
@@ -230,7 +237,7 @@ export function App() {
         return;
       }
 
-      selectionHistoryRef.current.push(initialVa);
+      selectionHistoryRef.current.push({ va: initialVa, preferredView });
       selectionHistoryIndexRef.current = 0;
     },
     [],
@@ -693,37 +700,45 @@ export function App() {
     visibleStart,
   ]);
 
-  const pushSelectionHistory = useCallback((va: string) => {
-    if (!va) {
-      return;
-    }
+  const pushSelectionHistory = useCallback(
+    (va: string, preferredView: CenterView) => {
+      if (!va) {
+        return;
+      }
 
-    const history = selectionHistoryRef.current;
-    const currentIndex = selectionHistoryIndexRef.current;
+      const history = selectionHistoryRef.current;
+      const currentIndex = selectionHistoryIndexRef.current;
+      const currentEntry = currentIndex >= 0 ? history[currentIndex] : null;
 
-    if (currentIndex >= 0 && history[currentIndex] === va) {
-      return;
-    }
+      if (currentEntry?.va === va) {
+        if (currentEntry.preferredView !== preferredView) {
+          history[currentIndex] = { va, preferredView };
+        }
+        return;
+      }
 
-    if (currentIndex < history.length - 1) {
-      history.splice(currentIndex + 1);
-    }
+      if (currentIndex < history.length - 1) {
+        history.splice(currentIndex + 1);
+      }
 
-    history.push(va);
+      history.push({ va, preferredView });
 
-    if (history.length > MAX_SELECTION_HISTORY) {
-      const overflow = history.length - MAX_SELECTION_HISTORY;
-      history.splice(0, overflow);
-    }
+      if (history.length > MAX_SELECTION_HISTORY) {
+        const overflow = history.length - MAX_SELECTION_HISTORY;
+        history.splice(0, overflow);
+      }
 
-    selectionHistoryIndexRef.current = history.length - 1;
-  }, []);
+      selectionHistoryIndexRef.current = history.length - 1;
+    },
+    [],
+  );
 
   const focusVa = useCallback(
     async (
       va: string,
       options: {
         recordHistory?: boolean;
+        historyView?: CenterView;
         syncViewport?: boolean;
         targetView?: CenterView;
         missingLinearMessage?: string;
@@ -757,8 +772,8 @@ export function App() {
           return false;
         }
 
-        if (options.recordHistory !== false) {
-          pushSelectionHistory(va);
+        if (options.recordHistory !== false && options.historyView) {
+          pushSelectionHistory(va, options.historyView);
         }
 
         setSelectedRowIndex(found.rowIndex);
@@ -815,7 +830,7 @@ export function App() {
       setDisassemblyWindowStartRow(0);
       setCenterView("disassembly");
       setGraphData(null);
-      resetSelectionHistory(targetVa);
+      resetSelectionHistory(targetVa, "disassembly");
       resetLinearCache();
       setPendingScrollRow(rowLookup.rowIndex);
       stopAnalysisPolling();
@@ -1039,6 +1054,7 @@ export function App() {
     ) =>
       focusVa(va, {
         recordHistory: options.recordHistory,
+        historyView: "disassembly",
         syncViewport: true,
         targetView: "disassembly",
         missingLinearMessage: "Disassembly is still being prepared.",
@@ -1059,7 +1075,7 @@ export function App() {
       navigateFromDisassemblyOperand(
         sourceVa,
         targetVa,
-        pushSelectionHistory,
+        (va) => pushSelectionHistory(va, "disassembly"),
         navigateToVa,
       ),
     [navigateToVa, pushSelectionHistory],
@@ -1079,7 +1095,10 @@ export function App() {
   const openGraphAtVa = useCallback(
     async (
       va: string,
-      invalidAddressMessage = "The linked target does not belong to a discovered function.",
+      options: {
+        invalidAddressMessage?: string;
+        recordHistory?: boolean;
+      } = {},
     ) => {
       if (!moduleId) {
         return false;
@@ -1097,6 +1116,9 @@ export function App() {
 
         setGraphData(graph);
         setCenterView("graph");
+        if (options.recordHistory !== false) {
+          pushSelectionHistory(va, "graph");
+        }
         setErrorText("");
         if (statusMessageTimerRef.current !== null) {
           window.clearTimeout(statusMessageTimerRef.current);
@@ -1109,7 +1131,10 @@ export function App() {
           error instanceof Error &&
           error.message.toUpperCase().includes("INVALID_ADDRESS")
         ) {
-          showTransientStatusMessage(invalidAddressMessage);
+          showTransientStatusMessage(
+            options.invalidAddressMessage ??
+              "The linked target does not belong to a discovered function.",
+          );
           return false;
         }
 
@@ -1121,7 +1146,30 @@ export function App() {
         setIsBuildingGraph(false);
       }
     },
-    [moduleId, showTransientStatusMessage],
+    [moduleId, pushSelectionHistory, showTransientStatusMessage],
+  );
+
+  const navigateToGraphVa = useCallback(
+    async (
+      va: string,
+      options: {
+        invalidAddressMessage?: string;
+        recordHistory?: boolean;
+      } = {},
+    ) => {
+      const synchronized = await syncSelectionToVa(va, {
+        syncViewport: true,
+      });
+      if (!synchronized) {
+        return false;
+      }
+
+      return openGraphAtVa(va, {
+        invalidAddressMessage: options.invalidAddressMessage,
+        recordHistory: options.recordHistory,
+      });
+    },
+    [openGraphAtVa, syncSelectionToVa],
   );
 
   const toggleGraphViewForSelection = useCallback(async () => {
@@ -1131,9 +1179,8 @@ export function App() {
 
     if (centerView === "graph") {
       if (goToAddress) {
-        await syncSelectionToVa(goToAddress, { syncViewport: true });
+        await navigateToVa(goToAddress, { recordHistory: true });
       }
-      setCenterView("disassembly");
       return;
     }
 
@@ -1156,21 +1203,22 @@ export function App() {
       return;
     }
 
-    await openGraphAtVa(
-      selectedRow.address,
-      "The highlighted instruction does not belong to a discovered function.",
-    );
+    await openGraphAtVa(selectedRow.address, {
+      invalidAddressMessage:
+        "The highlighted instruction does not belong to a discovered function.",
+      recordHistory: true,
+    });
   }, [
     activePanel,
     centerView,
     fetchLinearPage,
     goToAddress,
     moduleId,
+    navigateToVa,
     openGraphAtVa,
     readRow,
     selectedRowIndex,
     showTransientStatusMessage,
-    syncSelectionToVa,
   ]);
 
   const handleGraphInstructionSelect = useCallback(
@@ -1190,18 +1238,10 @@ export function App() {
       navigateFromGraphOperand(
         sourceVa,
         targetVa,
-        pushSelectionHistory,
-        async (va) => {
-          const synchronized = await syncSelectionToVa(va, {
-            syncViewport: true,
-          });
-          if (!synchronized) {
-            return false;
-          }
-          return openGraphAtVa(va);
-        },
+        (va) => pushSelectionHistory(va, "graph"),
+        (va) => navigateToGraphVa(va),
       ),
-    [openGraphAtVa, pushSelectionHistory, syncSelectionToVa],
+    [navigateToGraphVa, pushSelectionHistory],
   );
 
   const navigateSelectionHistory = useCallback(
@@ -1217,16 +1257,21 @@ export function App() {
         return;
       }
 
-      const targetVa = history[nextIndex];
+      const targetEntry = history[nextIndex];
       selectionHistoryIndexRef.current = nextIndex;
-      const navigated = await navigateToVa(targetVa, {
-        recordHistory: false,
-      });
+      const navigated =
+        targetEntry.preferredView === "graph"
+          ? await navigateToGraphVa(targetEntry.va, {
+              recordHistory: false,
+            })
+          : await navigateToVa(targetEntry.va, {
+              recordHistory: false,
+            });
       if (!navigated) {
         selectionHistoryIndexRef.current = currentIndex;
       }
     },
-    [moduleId, navigateToVa],
+    [moduleId, navigateToGraphVa, navigateToVa],
   );
 
   const openGoToModal = useCallback(() => {
@@ -1601,7 +1646,7 @@ export function App() {
                 onSelectRow={(rowIndex, address) => {
                   setSelectedRowIndex(rowIndex);
                   setGoToAddress(address);
-                  pushSelectionHistory(address);
+                  pushSelectionHistory(address, "disassembly");
                 }}
                 findSectionName={findSectionName}
                 onNavigateToOperandTarget={handleDisassemblyOperandNavigate}
