@@ -1,5 +1,16 @@
 # Change Files
 
+## 2026-03-09 - Simplify Graph Cache Boundaries and Xref Name Lookup
+
+Engine:
+- `engine/src/analysis.rs`
+- `engine/src/state.rs`
+
+Docs:
+- `docs/engine_benchmarking.md`
+- `docs/work_log.md`
+- `docs/change_files.md`
+
 ## 2026-03-09 - Replace Cytoscape Graph View With Custom Canvas Renderer
 
 App:

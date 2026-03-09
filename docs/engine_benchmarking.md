@@ -125,6 +125,9 @@ The repository's current recorded optimization checkpoints are:
 
 | Date | Fixture Set | Bench | Baseline | Current | Delta | Change driver |
 | --- | --- | --- | --- | --- | --- | --- |
+| 2026-03-09 | all | `engine/cold/module_open_and_analyze/minimal_with_pdb` | `[29.259 ms, 29.435 ms, 29.603 ms]` | `[24.564 ms, 24.673 ms, 24.785 ms]` | `[-17.145%, -16.298%, -15.410%]` | `engine/src/analysis.rs`, `engine/src/state.rs` |
+| 2026-03-09 | all | `engine/warm/function_graph_by_va/minimal_with_pdb` | `[59.136 us, 59.471 us, 59.849 us]` | `[54.395 us, 54.474 us, 54.562 us]` | `[-9.2901%, -8.5105%, -7.8200%]` | `engine/src/analysis.rs`, `engine/src/state.rs` |
+| 2026-03-09 | all | `engine/warm/function_graph_by_va/minimal_without_pdb` | `[61.363 us, 61.866 us, 62.502 us]` | `[55.556 us, 55.664 us, 55.789 us]` | `[-10.712%, -9.7972%, -8.9291%]` | `engine/src/analysis.rs`, `engine/src/state.rs` |
 | 2026-03-08 | quick | `engine/cold/module_open_and_analyze/minimal_with_pdb` | `[70.520 ms, 71.511 ms, 72.486 ms]` | `[20.874 ms, 23.165 ms, 26.187 ms]` | `[-70.663%, -68.523%, -65.805%]` | `engine/src/analysis.rs`, `engine/src/cfg.rs`, `engine/src/disasm.rs`, `engine/src/linear.rs`, `engine/src/state.rs` |
 | 2026-03-08 | quick | `engine/warm/linear_rows/minimal_with_pdb` | `[26.086 us, 26.241 us, 26.403 us]` | `[70.039 us, 71.349 us, 72.709 us]` | `[+164.93%, +171.42%, +178.68%]` | `engine/src/disasm.rs`, `engine/src/linear.rs`, `engine/src/state.rs` |
 | 2026-03-08 | quick | `engine/warm/function_graph_by_va/minimal_with_pdb` | `[9.2074 us, 9.2482 us, 9.2859 us]` | `[33.520 us, 33.558 us, 33.600 us]` | `[+259.71%, +262.26%, +264.76%]` | `engine/src/disasm.rs`, `engine/src/state.rs` |
@@ -141,6 +144,39 @@ The repository's current recorded optimization checkpoints are:
 | 2026-03-07 | quick | `engine/warm/linear_rows/minimal_with_pdb` | ~26.41 us | ~24.63 us | ~-6.8% | `engine/src/analysis.rs` |
 | 2026-03-07 | quick | `engine/warm/function_graph_by_va/minimal_with_pdb` | ~8.97 us | ~9.00 us | ~+0.3% | `engine/src/state.rs` |
 | 2026-03-07 | quick | `engine/warm/linear_disassembly/minimal_with_pdb` | ~0.800 us | ~0.791 us | ~-1.1% | `engine/src/analysis.rs`, `engine/src/state.rs` |
+
+## 2026-03-09 - Simplify Graph Cache Boundaries and Xref Name Lookup
+
+Date: 2026-03-09
+Commit: workspace state after shrinking cached graph metadata to compact semantic fields while keeping lazy instruction rendering intact
+Command: `just engine-bench-compare simple-lazy-boundary-baseline-2026-03-09 all`
+Fixture Set: `all`
+Machine/Profile: Windows, Criterion release bench profile
+Criterion Artifacts: `engine/target/criterion/engine_*/<fixture>/{simple-lazy-boundary-baseline-2026-03-09,new,change}/`
+
+Bench: `engine/cold/module_open_and_analyze/minimal_with_pdb`
+Baseline: `[29.259 ms, 29.435 ms, 29.603 ms]`
+Current: `[24.564 ms, 24.673 ms, 24.785 ms]`
+Delta: `[-17.145%, -16.298%, -15.410%]`
+Change driver: removed per-byte cached block-id strings and extra derived graph metadata from `engine/src/analysis.rs`, while keeping only stable block/edge ids and raw block-start ownership needed by the graph path in `engine/src/state.rs`
+Evidence: `simple-lazy-boundary-baseline-2026-03-09`; `engine/target/criterion/engine_cold_module_open_and_analyze/minimal_with_pdb/simple-lazy-boundary-baseline-2026-03-09/`; `engine/target/criterion/engine_cold_module_open_and_analyze/minimal_with_pdb/new/`; `engine/target/criterion/engine_cold_module_open_and_analyze/minimal_with_pdb/change/`
+Notes: the cold-path win is the primary target for this change, and it preserves the existing lazy instruction-rendering strategy instead of moving presentation work back into analysis
+
+Bench: `engine/warm/function_graph_by_va/minimal_with_pdb`
+Baseline: `[59.136 us, 59.471 us, 59.849 us]`
+Current: `[54.395 us, 54.474 us, 54.562 us]`
+Delta: `[-9.2901%, -8.5105%, -7.8200%]`
+Change driver: cached graph blocks and edges now keep only stable ids plus raw RVAs, so the hot graph query no longer rebuilds all identifier strings while still deriving entry/exit and back-edge flags lazily in `engine/src/state.rs`
+Evidence: `simple-lazy-boundary-baseline-2026-03-09`; `engine/target/criterion/engine_warm_function_graph_by_va/minimal_with_pdb/simple-lazy-boundary-baseline-2026-03-09/`; `engine/target/criterion/engine_warm_function_graph_by_va/minimal_with_pdb/new/`; `engine/target/criterion/engine_warm_function_graph_by_va/minimal_with_pdb/change/`
+Notes: this keeps the user-facing graph payload unchanged without introducing a new persistent graph-response cache
+
+Bench: `engine/warm/function_graph_by_va/minimal_without_pdb`
+Baseline: `[61.363 us, 61.866 us, 62.502 us]`
+Current: `[55.556 us, 55.664 us, 55.789 us]`
+Delta: `[-10.712%, -9.7972%, -8.9291%]`
+Change driver: same compact graph-cache boundary above, measured on the no-PDB fixture to confirm the win is not symbol-file-specific
+Evidence: `simple-lazy-boundary-baseline-2026-03-09`; `engine/target/criterion/engine_warm_function_graph_by_va/minimal_without_pdb/simple-lazy-boundary-baseline-2026-03-09/`; `engine/target/criterion/engine_warm_function_graph_by_va/minimal_without_pdb/new/`; `engine/target/criterion/engine_warm_function_graph_by_va/minimal_without_pdb/change/`
+Notes: the same compare run kept `engine/warm/xrefs_to_va/*` statistically flat after switching xref name resolution away from the cached graph payloads
 
 ## 2026-03-07 - Parallelize Per-Function Engine Analysis
 
@@ -289,6 +325,15 @@ Evidence: `engine/target/criterion/engine_warm_function_graph_by_va/minimal_with
 Notes: graph materialization shows the same intentional warm-path tradeoff as linear rows, but avoiding unused byte formatting cuts a large share of the intermediate regression while keeping formatting consistency covered by engine integration tests
 
 ## Saved Baseline Checkpoints
+
+### 2026-03-09 - `simple-lazy-boundary-baseline-2026-03-09`
+
+- Commit: workspace state before compacting cached graph metadata and simplifying xref name lookup
+- Command: `just engine-bench-save simple-lazy-boundary-baseline-2026-03-09 all`
+- Fixture Set: `all`
+- Machine/Profile: Windows, Criterion release bench profile
+- Criterion Artifacts: `engine/target/criterion/engine_*/<fixture>/simple-lazy-boundary-baseline-2026-03-09/`
+- Notes: captured immediately before moving graph block ownership to raw block-start RVAs and before removing the xref-to-graph lookup dependency
 
 ### 2026-03-08 - `memory-overview-slices-baseline-2026-03-08`
 

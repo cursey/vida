@@ -1,5 +1,29 @@
 # Work Log
 
+## 2026-03-09 - Simplify Graph Cache Boundaries and Xref Name Lookup
+
+Summary:
+- Kept lazy instruction rendering unchanged while shrinking the analysis-time graph cache back toward compact semantic data instead of storing extra derived graph metadata.
+- Replaced the per-byte graph block lookup map with raw block-start RVAs, kept only stable block and edge ids cached for the hot graph path, and moved entry/exit, back-edge, and end-address derivation back to the request path.
+- Reworked xref materialization to resolve source function names from the existing function-name map instead of walking back through the cached graph payloads.
+- Captured a named all-fixture baseline before the change and compared the simplified graph/xref boundary against it, with cold module-open and warm graph materialization both improving while xref lookup stayed statistically flat.
+
+Validation commands executed:
+- `just engine-bench-save simple-lazy-boundary-baseline-2026-03-09 all`
+- `cargo fmt --manifest-path engine/Cargo.toml`
+- `cargo test --manifest-path engine/Cargo.toml`
+- `just engine-bench-compare simple-lazy-boundary-baseline-2026-03-09 all`
+- `cargo fmt --manifest-path engine/Cargo.toml -- --check`
+
+Observed benchmark deltas:
+- `engine/cold/module_open_and_analyze/minimal_with_pdb`: improved to `[24.564 ms, 24.673 ms, 24.785 ms]` vs `simple-lazy-boundary-baseline-2026-03-09`
+- `engine/warm/function_graph_by_va/minimal_with_pdb`: improved to `[54.395 us, 54.474 us, 54.562 us]` vs `simple-lazy-boundary-baseline-2026-03-09`
+- `engine/warm/function_graph_by_va/minimal_without_pdb`: improved to `[55.556 us, 55.664 us, 55.789 us]` vs `simple-lazy-boundary-baseline-2026-03-09`
+- `engine/warm/xrefs_to_va/minimal_with_pdb`: no statistically significant change vs `simple-lazy-boundary-baseline-2026-03-09`
+
+Changed files index:
+- See `docs/change_files.md` for the detailed file list for this work item.
+
 ## 2026-03-09 - Replace Cytoscape Graph View With Custom Canvas Renderer
 
 Summary:

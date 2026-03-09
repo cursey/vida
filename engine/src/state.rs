@@ -366,11 +366,12 @@ impl EngineState {
             .graphs_by_start
             .get(&owner_start_rva)
             .ok_or(EngineError::InvalidAddress)?;
-        let focus_block_id = graph
-            .instruction_block_id_by_rva
+        let focus_block_start_rva = graph
+            .instruction_block_start_by_rva
             .get(&target_rva)
-            .cloned()
+            .copied()
             .ok_or(EngineError::InvalidAddress)?;
+        let focus_block_id = graph_block_id(focus_block_start_rva);
 
         let mut blocks = Vec::with_capacity(graph.blocks.len());
         for block in &graph.blocks {
@@ -399,12 +400,17 @@ impl EngineState {
                         .map(|target| to_hex(image_base + target)),
                 });
             }
+            let end_rva = block
+                .instructions
+                .last()
+                .map(|instruction| instruction.start_rva + u64::from(instruction.len))
+                .unwrap_or(block.start_rva);
             blocks.push(crate::api::FunctionGraphBlock {
                 id: block.id.clone(),
                 start_va: to_hex(image_base + block.start_rva),
-                end_va: to_hex(image_base + block.end_rva),
-                is_entry: block.is_entry,
-                is_exit: block.is_exit,
+                end_va: to_hex(image_base + end_rva),
+                is_entry: block.start_rva == graph.function_start_rva,
+                is_exit: block.ends_with_return || !block.has_outgoing_edges,
                 instructions,
             });
         }
@@ -418,7 +424,7 @@ impl EngineState {
                 to_block_id: edge.to_block_id.clone(),
                 kind: edge.kind,
                 source_instruction_va: to_hex(image_base + edge.source_instruction_rva),
-                is_back_edge: edge.is_back_edge,
+                is_back_edge: edge.to_block_start_rva <= edge.from_block_start_rva,
             })
             .collect();
 
@@ -607,19 +613,19 @@ impl EngineState {
             .into_iter()
             .flat_map(|entries| entries.iter())
             .map(|xref| {
-                let source_graph = analysis
-                    .graphs_by_start
+                let source_function_name = analysis
+                    .function_names_by_start_rva
                     .get(&xref.source_function_start_rva)
                     .ok_or_else(|| {
                         EngineError::Internal(format!(
-                            "Missing graph for xref source function {:X}",
+                            "Missing function name for xref source function {:X}",
                             xref.source_function_start_rva
                         ))
                     })?;
                 Ok(XrefRecord {
                     source_va: to_hex(image_base + xref.source_instruction_rva),
                     source_function_start_va: to_hex(image_base + xref.source_function_start_rva),
-                    source_function_name: source_graph.function_name.clone(),
+                    source_function_name: source_function_name.clone(),
                     kind: xref.kind,
                     target_va: to_hex(image_base + xref.target_rva),
                     target_kind: xref.target_kind,
@@ -1055,6 +1061,10 @@ fn ready_analysis(snapshot: &BackgroundAnalysisState) -> Result<&ModuleAnalysis,
         AnalysisLifecycleState::Canceled => Err(EngineError::Canceled),
         _ => Err(EngineError::AnalysisNotReady),
     }
+}
+
+fn graph_block_id(block_start_rva: u64) -> String {
+    format!("b_{block_start_rva:X}")
 }
 
 fn find_instruction_index(
