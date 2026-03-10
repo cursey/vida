@@ -105,4 +105,41 @@ describe("App loading workspace spinner", () => {
       expect(screen.queryByTestId("workspace-loading-spinner")).toBeNull();
     });
   });
+
+  it("returns to idle and shows an error modal when analysis fails", async () => {
+    render(<App />);
+
+    await waitFor(() => {
+      expect(menuOpenHandler).toBeTypeOf("function");
+    });
+
+    await act(async () => {
+      menuOpenHandler?.();
+    });
+
+    await waitFor(() => {
+      expect(
+        screen.getByTestId("workspace-loading-spinner"),
+      ).toBeInTheDocument();
+    });
+
+    await act(async () => {
+      resolveOpenModule?.();
+    });
+
+    await act(async () => {
+      resolveAnalysisStatus?.({
+        state: "failed",
+        message: "Module analysis failed: invalid unwind metadata",
+        discoveredFunctionCount: 1,
+      });
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("Analysis Failed")).toBeInTheDocument();
+      expect(screen.getByText(/invalid unwind metadata/i)).toBeInTheDocument();
+      expect(screen.getByTestId("workspace-idle-message")).toBeInTheDocument();
+      expect(screen.queryByTestId("workspace-loading-spinner")).toBeNull();
+    });
+  });
 });

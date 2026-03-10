@@ -7,6 +7,7 @@ import { clamp, makePageKey, parseHexVa } from "@/lib/number-utils";
 import { cn } from "@/lib/utils";
 import { desktopApi } from "@/platform/desktop-api";
 import {
+  ErrorDialog,
   GoToDialog,
   MissingPdbDialog,
   XrefsDialog,
@@ -50,6 +51,10 @@ type MissingPdbPromptChoice = "choose_pdb" | "load_without_pdb";
 type MissingPdbPromptState = {
   modulePath: string;
   embeddedPath?: string;
+};
+type ErrorDialogState = {
+  title: string;
+  message: string;
 };
 
 const PAGE_SIZE = 512;
@@ -108,7 +113,7 @@ export function App() {
   const [isLoadingXrefs, setIsLoadingXrefs] = useState(false);
   const [isDraggingFile, setIsDraggingFile] = useState(false);
 
-  const [errorText, setErrorText] = useState<string>("");
+  const [errorDialog, setErrorDialog] = useState<ErrorDialogState | null>(null);
   const [transientStatusMessage, setTransientStatusMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [cacheEpoch, setCacheEpoch] = useState(0);
@@ -196,6 +201,14 @@ export function App() {
     [closeMissingPdbPrompt],
   );
 
+  const closeErrorDialog = useCallback(() => {
+    setErrorDialog(null);
+  }, []);
+
+  const showErrorDialog = useCallback((title: string, message: string) => {
+    setErrorDialog({ title, message });
+  }, []);
+
   const fetchLinearPage = useCallback(
     async (currentModuleId: string, page: number) => {
       if (
@@ -233,14 +246,15 @@ export function App() {
 
         setCacheEpoch((value) => value + 1);
       } catch (error: unknown) {
-        setErrorText(
+        showErrorDialog(
+          "Load Linear Rows Failed",
           error instanceof Error ? error.message : "Failed to load linear rows",
         );
       } finally {
         inflightPagesRef.current.delete(page);
       }
     },
-    [],
+    [showErrorDialog],
   );
 
   useEffect(() => {
@@ -343,7 +357,7 @@ export function App() {
   const unloadCurrentModule = useCallback(async () => {
     const generation = ++asyncGenerationRef.current;
     const currentModuleId = activeModuleIdRef.current;
-    setErrorText("");
+    closeErrorDialog();
     clearModuleState();
     if (!currentModuleId) {
       return;
@@ -355,11 +369,44 @@ export function App() {
       if (generation !== asyncGenerationRef.current) {
         return;
       }
-      setErrorText(
+      showErrorDialog(
+        "Unload Module Failed",
         error instanceof Error ? error.message : "Failed to unload module",
       );
     }
-  }, [clearModuleState]);
+  }, [clearModuleState, closeErrorDialog, showErrorDialog]);
+
+  const failCurrentModuleLoad = useCallback(
+    async (
+      currentModuleId: string,
+      generation: number,
+      title: string,
+      message: string,
+    ) => {
+      if (
+        generation !== asyncGenerationRef.current ||
+        currentModuleId !== activeModuleIdRef.current
+      ) {
+        return;
+      }
+
+      const failureGeneration = ++asyncGenerationRef.current;
+      clearModuleState();
+
+      try {
+        await desktopApi.unloadModule(currentModuleId);
+      } catch (error: unknown) {
+        console.warn("Failed to unload module after load failure:", error);
+      }
+
+      if (failureGeneration !== asyncGenerationRef.current) {
+        return;
+      }
+
+      showErrorDialog(title, message);
+    },
+    [clearModuleState, showErrorDialog],
+  );
 
   useEffect(() => {
     const unlistenDragEnter = desktopApi.onDragEnter(() => {
@@ -795,7 +842,7 @@ export function App() {
         return false;
       }
 
-      setErrorText("");
+      closeErrorDialog();
       preferredNavigationVaRef.current = va;
       setGoToAddress(va);
 
@@ -835,13 +882,21 @@ export function App() {
           return false;
         }
 
-        setErrorText(
+        showErrorDialog(
+          "Address Lookup Failed",
           error instanceof Error ? error.message : options.lookupErrorMessage,
         );
         return false;
       }
     },
-    [linearInfo, moduleId, pushSelectionHistory, showTransientStatusMessage],
+    [
+      closeErrorDialog,
+      linearInfo,
+      moduleId,
+      pushSelectionHistory,
+      showErrorDialog,
+      showTransientStatusMessage,
+    ],
   );
 
   const applyReadyModuleAnalysis = useCallback(
@@ -968,7 +1023,12 @@ export function App() {
 
           if (status.state === "failed") {
             stopAnalysisPolling();
-            setErrorText(status.message);
+            void failCurrentModuleLoad(
+              currentModuleId,
+              generation,
+              "Analysis Failed",
+              status.message,
+            );
             return;
           }
 
@@ -989,7 +1049,10 @@ export function App() {
           }
 
           stopAnalysisPolling();
-          setErrorText(
+          void failCurrentModuleLoad(
+            currentModuleId,
+            generation,
+            "Analysis Failed",
             error instanceof Error
               ? error.message
               : "Failed to poll module analysis status",
@@ -999,14 +1062,15 @@ export function App() {
 
       void poll();
     },
-    [applyReadyModuleAnalysis, stopAnalysisPolling],
+    [applyReadyModuleAnalysis, failCurrentModuleLoad, stopAnalysisPolling],
   );
 
   const openModuleFromPath = useCallback(
     async (chosenPath: string) => {
       const generation = ++asyncGenerationRef.current;
       const previousModuleId = activeModuleIdRef.current;
-      setErrorText("");
+      let manualPdbPath: string | undefined;
+      closeErrorDialog();
       clearModuleState();
 
       try {
@@ -1022,7 +1086,6 @@ export function App() {
           return;
         }
 
-        let manualPdbPath: string | undefined;
         if (pdbStatus.status === "needs_manual") {
           const choice = await promptForMissingPdb(
             chosenPath,
@@ -1038,7 +1101,6 @@ export function App() {
               return;
             }
             if (!selectedPdbPath) {
-              setErrorText("Manual PDB selection was canceled.");
               return;
             }
             manualPdbPath = selectedPdbPath;
@@ -1085,22 +1147,29 @@ export function App() {
         if (generation !== asyncGenerationRef.current) {
           return;
         }
-        setErrorText(
+        showErrorDialog(
+          manualPdbPath ? "Load PDB Failed" : "Open Module Failed",
           error instanceof Error ? error.message : "Failed to open executable",
         );
       }
     },
-    [clearModuleState, promptForMissingPdb, startAnalysisPolling],
+    [
+      clearModuleState,
+      closeErrorDialog,
+      promptForMissingPdb,
+      showErrorDialog,
+      startAnalysisPolling,
+    ],
   );
 
   const openExecutableFromPicker = useCallback(async () => {
-    setErrorText("");
+    closeErrorDialog();
     const chosenPath = await desktopApi.pickExecutable();
     if (!chosenPath) {
       return;
     }
     await openModuleFromPath(chosenPath);
-  }, [openModuleFromPath]);
+  }, [closeErrorDialog, openModuleFromPath]);
 
   const handleMenuOpenExecutable = useCallback(() => {
     void openExecutableFromPicker();
@@ -1123,10 +1192,11 @@ export function App() {
     titleBarMenuModel,
     windowChromeState,
   } = useShellChrome({
+    clearErrorDialog: closeErrorDialog,
     onOpenExecutable: handleMenuOpenExecutable,
     onOpenRecentExecutable: handleMenuOpenRecentExecutable,
     onUnloadModule: handleMenuUnloadModule,
-    setErrorText,
+    showErrorDialog,
   });
 
   const navigateToVa = useCallback(
@@ -1201,7 +1271,7 @@ export function App() {
         if (options.recordHistory !== false) {
           pushSelectionHistory(va, "graph");
         }
-        setErrorText("");
+        closeErrorDialog();
         if (statusMessageTimerRef.current !== null) {
           window.clearTimeout(statusMessageTimerRef.current);
           statusMessageTimerRef.current = null;
@@ -1220,7 +1290,8 @@ export function App() {
           return false;
         }
 
-        setErrorText(
+        showErrorDialog(
+          "Open Graph View Failed",
           error instanceof Error ? error.message : "Failed to open graph view",
         );
         return false;
@@ -1228,7 +1299,13 @@ export function App() {
         setIsBuildingGraph(false);
       }
     },
-    [moduleId, pushSelectionHistory, showTransientStatusMessage],
+    [
+      closeErrorDialog,
+      moduleId,
+      pushSelectionHistory,
+      showErrorDialog,
+      showTransientStatusMessage,
+    ],
   );
 
   const navigateToGraphVa = useCallback(
@@ -1402,12 +1479,13 @@ export function App() {
         );
         return;
       }
-      setErrorText("");
+      closeErrorDialog();
       setXrefsTargetVa(result.targetVa);
       setXrefs(result.xrefs);
       setIsXrefsModalOpen(true);
     } catch (error: unknown) {
-      setErrorText(
+      showErrorDialog(
+        "Load Xrefs Failed",
         error instanceof Error ? error.message : "Failed to load xrefs",
       );
     } finally {
@@ -1420,6 +1498,8 @@ export function App() {
     moduleId,
     readRow,
     selectedRowIndex,
+    closeErrorDialog,
+    showErrorDialog,
     showTransientStatusMessage,
   ]);
 
@@ -1480,6 +1560,12 @@ export function App() {
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape" && errorDialog) {
+        event.preventDefault();
+        closeErrorDialog();
+        return;
+      }
+
       if (event.key === "Escape" && isXrefsModalOpen) {
         event.preventDefault();
         setIsXrefsModalOpen(false);
@@ -1500,6 +1586,10 @@ export function App() {
         event.preventDefault();
         setIsBrowserSearchVisible(false);
         setFunctionSearchQuery("");
+        return;
+      }
+
+      if (errorDialog) {
         return;
       }
 
@@ -1591,6 +1681,8 @@ export function App() {
   }, [
     activePanel,
     centerView,
+    closeErrorDialog,
+    errorDialog,
     isBrowserSearchVisible,
     isXrefsModalOpen,
     moduleId,
@@ -1644,11 +1736,6 @@ export function App() {
           titleText={modulePath}
           windowState={windowChromeState}
         />
-      ) : null}
-      {errorText ? (
-        <div className="rounded-md border border-destructive bg-destructive/15 px-2.5 py-2 text-[13px] text-destructive-foreground">
-          {errorText}
-        </div>
       ) : null}
       {hasCompletedAnalysis ? (
         <MemoryOverviewBar
@@ -1805,6 +1892,17 @@ export function App() {
         onOpenChange={(nextOpen) => {
           if (!nextOpen) {
             closeMissingPdbPrompt("load_without_pdb");
+          }
+        }}
+      />
+
+      <ErrorDialog
+        isOpen={errorDialog !== null}
+        message={errorDialog?.message ?? ""}
+        title={errorDialog?.title ?? ""}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) {
+            closeErrorDialog();
           }
         }}
       />

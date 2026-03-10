@@ -205,4 +205,37 @@ describe("App xrefs modal", () => {
       ).not.toBeInTheDocument();
     });
   });
+
+  it("shows an error modal when xrefs loading fails", async () => {
+    const getXrefsToVa = vi
+      .fn()
+      .mockRejectedValue(new Error("The xref index is unavailable"));
+    installMockApi(getXrefsToVa);
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(menuOpenHandler).toBeTypeOf("function");
+    });
+
+    await act(async () => {
+      menuOpenHandler?.();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("Disassembly")).toBeInTheDocument();
+    });
+
+    fireEvent.keyDown(window, { key: "x", code: "KeyX" });
+
+    await waitFor(() => {
+      expect(screen.getByText("Load Xrefs Failed")).toBeInTheDocument();
+      expect(
+        screen.getByText("The xref index is unavailable"),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByText("Xrefs To 0x140001000"),
+      ).not.toBeInTheDocument();
+    });
+  });
 });

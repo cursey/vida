@@ -138,7 +138,7 @@ describe("App manual PDB modal", () => {
     });
   });
 
-  it("fails the load when the user cancels manual PDB selection", async () => {
+  it("cancels the load when the user cancels manual PDB selection", async () => {
     const api = installMockApi({
       pickPdb: vi.fn().mockResolvedValue(null),
     });
@@ -160,9 +160,10 @@ describe("App manual PDB modal", () => {
 
     await waitFor(() => {
       expect(api.openModule).not.toHaveBeenCalled();
+      expect(screen.queryByText("Load PDB Failed")).not.toBeInTheDocument();
       expect(
-        screen.getByText("Manual PDB selection was canceled."),
-      ).toBeInTheDocument();
+        screen.queryByText("Manual PDB selection was canceled."),
+      ).not.toBeInTheDocument();
       expect(screen.getByTestId("workspace-idle-message")).toBeInTheDocument();
     });
   });
@@ -199,6 +200,7 @@ describe("App manual PDB modal", () => {
         "C:\\fixtures\\sample.exe",
         "C:\\symbols\\sample.pdb",
       );
+      expect(screen.getByText("Load PDB Failed")).toBeInTheDocument();
       expect(
         screen.getByText(/does not match the module debug signature and age/i),
       ).toBeInTheDocument();

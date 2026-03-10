@@ -1540,3 +1540,17 @@ Engine:
 - `engine/src/pdb_symbols.rs`
 - `engine/src/state.rs`
 - `engine/tests/engine_integration.rs`
+
+## 2026-03-10 - Replace Workspace Error Banner With Shared Error Modal
+
+Docs:
+- `docs/work_log.md`
+- `docs/change_files.md`
+
+App:
+- `app/src/renderer/shell/App.tsx`
+- `app/src/renderer/shell/components/app-dialogs.tsx`
+- `app/src/renderer/shell/hooks/use-shell-chrome.ts`
+- `app/src/renderer/shell/app.manual-pdb-modal.test.tsx`
+- `app/src/renderer/shell/app.loading-modal.test.tsx`
+- `app/src/renderer/shell/app.xrefs-modal.test.tsx`

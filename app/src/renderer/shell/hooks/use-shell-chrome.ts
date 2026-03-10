@@ -7,17 +7,19 @@ import type {
 } from "../../../shared";
 
 type UseShellChromeOptions = {
+  clearErrorDialog: () => void;
   onOpenExecutable: () => void;
   onOpenRecentExecutable: (path: string) => void;
   onUnloadModule: () => void;
-  setErrorText: (message: string) => void;
+  showErrorDialog: (title: string, message: string) => void;
 };
 
 export function useShellChrome({
+  clearErrorDialog,
   onOpenExecutable,
   onOpenRecentExecutable,
   onUnloadModule,
-  setErrorText,
+  showErrorDialog,
 }: UseShellChromeOptions) {
   const [windowChromeState, setWindowChromeState] = useState<WindowChromeState>(
     {
@@ -47,7 +49,8 @@ export function useShellChrome({
         setTitleBarMenuModel(menuModel);
       })
       .catch((error: unknown) => {
-        setErrorText(
+        showErrorDialog(
+          "Load Window Chrome Failed",
           error instanceof Error
             ? error.message
             : "Failed to load window chrome state",
@@ -66,7 +69,7 @@ export function useShellChrome({
       unsubscribeChrome();
       unsubscribeMenu();
     };
-  }, [setErrorText]);
+  }, [showErrorDialog]);
 
   useEffect(() => {
     const unsubscribe = desktopApi.onMenuOpenExecutable(() => {
@@ -81,7 +84,7 @@ export function useShellChrome({
   useEffect(() => {
     const unsubscribe = desktopApi.onMenuOpenRecentExecutable(
       (selectedPath) => {
-        setErrorText("");
+        clearErrorDialog();
         onOpenRecentExecutable(selectedPath);
       },
     );
@@ -89,7 +92,7 @@ export function useShellChrome({
     return () => {
       unsubscribe();
     };
-  }, [onOpenRecentExecutable, setErrorText]);
+  }, [clearErrorDialog, onOpenRecentExecutable]);
 
   useEffect(() => {
     const unsubscribe = desktopApi.onMenuUnloadModule(() => {
@@ -104,12 +107,13 @@ export function useShellChrome({
   const handleWindowControl = useCallback(
     (action: WindowControlAction) => {
       void desktopApi.windowControl(action).catch((error: unknown) => {
-        setErrorText(
+        showErrorDialog(
+          "Window Control Failed",
           error instanceof Error ? error.message : "Window control failed",
         );
       });
     },
-    [setErrorText],
+    [showErrorDialog],
   );
 
   const handleInvokeTitleBarMenuAction = useCallback(
@@ -117,12 +121,13 @@ export function useShellChrome({
       void desktopApi
         .invokeTitleBarMenuAction(commandId)
         .catch((error: unknown) => {
-          setErrorText(
+          showErrorDialog(
+            "Menu Action Failed",
             error instanceof Error ? error.message : "Menu action failed",
           );
         });
     },
-    [setErrorText],
+    [showErrorDialog],
   );
 
   return {

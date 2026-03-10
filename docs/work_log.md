@@ -1512,3 +1512,17 @@ Validation commands executed:
 
 Changed files index:
 - See `docs/change_files.md` for the detailed file list for this work item.
+
+## 2026-03-10 - Replace Workspace Error Banner With Shared Error Modal
+
+Summary:
+- Replaced the shell's inline workspace error banner with a shared error-details modal so module, PDB, navigation, xref, and shell-chrome failures surface in a consistent dialog.
+- Added fatal load cleanup for analysis failures so a failed background analysis returns the workspace to idle instead of leaving the loading spinner active behind the error.
+- Changed manual PDB picker cancellation to abort the load quietly without surfacing an error, and expanded renderer regression coverage for the updated modal flows.
+
+Validation commands executed:
+- `cmd /c npm run check` (in `app`)
+- `cmd /c npm run test:renderer -- src/renderer/shell/app.manual-pdb-modal.test.tsx src/renderer/shell/app.loading-modal.test.tsx src/renderer/shell/app.xrefs-modal.test.tsx src/renderer/shell/app.window-chrome.test.tsx` (in `app`)
+
+Changed files index:
+- See `docs/change_files.md` for the detailed file list for this work item.

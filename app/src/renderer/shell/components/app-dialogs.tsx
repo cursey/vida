@@ -32,6 +32,13 @@ type MissingPdbDialogProps = {
   onOpenChange: (nextOpen: boolean) => void;
 };
 
+type ErrorDialogProps = {
+  isOpen: boolean;
+  message: string;
+  title: string;
+  onOpenChange: (nextOpen: boolean) => void;
+};
+
 export function GoToDialog({
   isOpen,
   isLoading,
@@ -77,6 +84,38 @@ export function GoToDialog({
             </Button>
           </DialogFooter>
         </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+export function ErrorDialog({
+  isOpen,
+  message,
+  title,
+  onOpenChange,
+}: ErrorDialogProps) {
+  return (
+    <Dialog onOpenChange={onOpenChange} open={isOpen}>
+      <DialogContent className="w-[min(560px,calc(100vw-32px))] gap-2.5 p-3">
+        <DialogHeader>
+          <DialogTitle className="text-[13px] font-semibold">
+            {title}
+          </DialogTitle>
+          <DialogDescription className="text-xs leading-5">
+            The operation failed with the following details.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="max-h-[min(40vh,320px)] overflow-y-auto rounded-md border border-input bg-muted/35 px-3 py-2">
+          <pre className="m-0 whitespace-pre-wrap break-all font-mono text-[11px] leading-5 text-foreground">
+            {message}
+          </pre>
+        </div>
+        <DialogFooter className="mt-0 justify-end gap-1.5 sm:space-x-0">
+          <Button onClick={() => onOpenChange(false)} type="button">
+            Close
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
