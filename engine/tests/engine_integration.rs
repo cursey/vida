@@ -8,8 +8,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use engine::api::{
     FunctionGraphByVaParams, FunctionListParams, LinearDisassemblyParams, LinearFindRowByVaParams,
     LinearRowsParams, LinearViewInfoParams, MemoryOverviewSliceKind, ModuleAnalysisStatusParams,
-    ModuleMemoryOverviewParams, ModuleOpenParams, ModuleUnloadParams, XrefKind, XrefTargetKind,
-    XrefsToVaParams,
+    ModuleMemoryOverviewParams, ModuleOpenParams, ModulePdbStatusParams, ModuleUnloadParams,
+    XrefKind, XrefTargetKind, XrefsToVaParams,
 };
 use engine::{EngineError, EngineState, fixture_path};
 use goblin::pe::PE;
@@ -143,6 +143,7 @@ fn opens_module_lists_functions_and_disassembles() {
     let open_result = state
         .open_module(ModuleOpenParams {
             path: fixture.to_string_lossy().into_owned(),
+            pdb_path: None,
         })
         .expect("module should open");
 
@@ -427,6 +428,7 @@ fn discovers_internal_functions_from_direct_call_targets_without_pdb() {
     let open_result = state
         .open_module(ModuleOpenParams {
             path: fixture.to_string_lossy().into_owned(),
+            pdb_path: None,
         })
         .expect("module should open");
     let module_id = open_result.module_id.clone();
@@ -486,6 +488,7 @@ fn symbolizes_direct_call_and_branch_operands_in_linear_and_graph_views() {
     let open_result = state
         .open_module(ModuleOpenParams {
             path: fixture.to_string_lossy().into_owned(),
+            pdb_path: None,
         })
         .expect("module should open");
     let module_id = open_result.module_id.clone();
@@ -598,6 +601,7 @@ fn discovers_rip_relative_data_xrefs() {
     let open_result = state
         .open_module(ModuleOpenParams {
             path: fixture.to_string_lossy().into_owned(),
+            pdb_path: None,
         })
         .expect("module should open");
     let module_id = open_result.module_id;
@@ -646,6 +650,7 @@ fn discovers_pdb_functions_and_requires_strict_guid_age_match() {
     let open_result = state
         .open_module(ModuleOpenParams {
             path: fixture_exe.to_string_lossy().into_owned(),
+            pdb_path: None,
         })
         .expect("module should open");
     let module_id = open_result.module_id;
@@ -689,6 +694,7 @@ fn discovers_pdb_functions_and_requires_strict_guid_age_match() {
     let mismatch_open = mismatch_state
         .open_module(ModuleOpenParams {
             path: mismatch_exe.to_string_lossy().into_owned(),
+            pdb_path: None,
         })
         .expect("mismatch module should open");
     let mismatch_list = mismatch_state
@@ -709,6 +715,106 @@ fn discovers_pdb_functions_and_requires_strict_guid_age_match() {
 }
 
 #[test]
+fn reports_pdb_preflight_status_for_auto_found_missing_and_not_applicable_modules() {
+    let fixture_exe = fixture_path("minimal_x64.exe");
+    let mut state = EngineState::default();
+
+    let auto_found = state
+        .get_module_pdb_status(ModulePdbStatusParams {
+            path: fixture_exe.to_string_lossy().into_owned(),
+        })
+        .expect("fixture pdb status should load");
+    assert_eq!(auto_found.status, "auto_found");
+    assert!(
+        auto_found
+            .embedded_path
+            .as_deref()
+            .is_some_and(|path| path.ends_with(".pdb")),
+        "expected embedded PDB path metadata"
+    );
+
+    let missing_dir = unique_temp_dir("engine-pdb-status-missing");
+    fs::create_dir_all(&missing_dir).expect("failed to create temp directory for missing PDB");
+    let missing_exe = missing_dir.join("minimal_x64.exe");
+    fs::copy(&fixture_exe, &missing_exe).expect("failed to copy fixture exe");
+
+    let needs_manual = state
+        .get_module_pdb_status(ModulePdbStatusParams {
+            path: missing_exe.to_string_lossy().into_owned(),
+        })
+        .expect("missing pdb status should load");
+    assert_eq!(needs_manual.status, "needs_manual");
+
+    let no_rsds_dir = unique_temp_dir("engine-pdb-status-no-rsds");
+    fs::create_dir_all(&no_rsds_dir).expect("failed to create temp directory for no-RSDS PE");
+    let no_rsds_exe = no_rsds_dir.join("minimal_x64.exe");
+    fs::copy(&fixture_exe, &no_rsds_exe).expect("failed to copy fixture exe");
+    remove_rsds_signature(&no_rsds_exe);
+
+    let not_applicable = state
+        .get_module_pdb_status(ModulePdbStatusParams {
+            path: no_rsds_exe.to_string_lossy().into_owned(),
+        })
+        .expect("no-rsds pdb status should load");
+    assert_eq!(not_applicable.status, "not_applicable");
+    assert_eq!(not_applicable.embedded_path, None);
+
+    let _ = fs::remove_dir_all(missing_dir);
+    let _ = fs::remove_dir_all(no_rsds_dir);
+}
+
+#[test]
+fn manual_pdb_paths_must_match_or_module_open_fails() {
+    let fixture_exe = fixture_path("minimal_x64.exe");
+    let fixture_pdb = fixture_path("fixture_builder.pdb");
+
+    let valid_dir = unique_temp_dir("engine-manual-pdb-valid");
+    fs::create_dir_all(&valid_dir).expect("failed to create temp directory for manual PDB");
+    let valid_exe = valid_dir.join("minimal_x64.exe");
+    let valid_pdb = valid_dir.join("fixture_builder.pdb");
+    fs::copy(&fixture_exe, &valid_exe).expect("failed to copy fixture exe");
+    fs::copy(&fixture_pdb, &valid_pdb).expect("failed to copy fixture pdb");
+
+    let mut valid_state = EngineState::default();
+    let open_result = valid_state
+        .open_module(ModuleOpenParams {
+            path: valid_exe.to_string_lossy().into_owned(),
+            pdb_path: Some(valid_pdb.to_string_lossy().into_owned()),
+        })
+        .expect("manual matching pdb should open successfully");
+    let module_id = open_result.module_id.clone();
+    let ready_status = wait_for_analysis_ready(&mut valid_state, &module_id);
+    assert_eq!(ready_status.state, "ready");
+
+    let list_result = valid_state
+        .list_functions(FunctionListParams { module_id })
+        .expect("manual pdb function list should load");
+    assert!(
+        list_result.functions.iter().any(|seed| seed.kind == "pdb"),
+        "expected manual matching PDB to contribute function seeds"
+    );
+
+    let mismatch_dir = unique_temp_dir("engine-manual-pdb-mismatch");
+    fs::create_dir_all(&mismatch_dir)
+        .expect("failed to create temp directory for mismatched manual PDB");
+    let mismatch_exe = mismatch_dir.join("minimal_x64.exe");
+    let mismatch_pdb = mismatch_dir.join("fixture_builder.pdb");
+    fs::copy(&fixture_exe, &mismatch_exe).expect("failed to copy fixture exe");
+    fs::copy(&fixture_pdb, &mismatch_pdb).expect("failed to copy fixture pdb");
+    increment_rsds_age(&mismatch_exe);
+
+    let mut mismatch_state = EngineState::default();
+    let result = mismatch_state.open_module(ModuleOpenParams {
+        path: mismatch_exe.to_string_lossy().into_owned(),
+        pdb_path: Some(mismatch_pdb.to_string_lossy().into_owned()),
+    });
+    assert!(matches!(result, Err(EngineError::InvalidPdb(_))));
+
+    let _ = fs::remove_dir_all(valid_dir);
+    let _ = fs::remove_dir_all(mismatch_dir);
+}
+
+#[test]
 fn repeated_analysis_runs_keep_function_and_graph_output_stable() {
     let fixture = fixture_path("minimal_x64.exe");
     let mut baseline_function_signature = None;
@@ -720,6 +826,7 @@ fn repeated_analysis_runs_keep_function_and_graph_output_stable() {
         let open_result = state
             .open_module(ModuleOpenParams {
                 path: fixture.to_string_lossy().into_owned(),
+                pdb_path: None,
             })
             .expect("module should open");
         let module_id = open_result.module_id.clone();
@@ -833,6 +940,7 @@ fn unload_removes_module_from_engine_state() {
     let open_result = state
         .open_module(ModuleOpenParams {
             path: fixture.to_string_lossy().into_owned(),
+            pdb_path: None,
         })
         .expect("module should open");
     let module_id = open_result.module_id;
@@ -877,4 +985,14 @@ fn increment_rsds_age(path: &Path) {
     bytes[age_offset..age_offset + 4].copy_from_slice(&updated_age.to_le_bytes());
 
     fs::write(path, bytes).expect("failed to write mutated RSDS age");
+}
+
+fn remove_rsds_signature(path: &Path) {
+    let mut bytes = fs::read(path).expect("failed to read fixture copy for RSDS removal");
+    let marker_index = bytes
+        .windows(4)
+        .position(|window| window == b"RSDS")
+        .expect("fixture should contain an RSDS record");
+    bytes[marker_index..marker_index + 4].copy_from_slice(b"NONE");
+    fs::write(path, bytes).expect("failed to write RSDS-free fixture copy");
 }

@@ -6,6 +6,7 @@ export function createMockDesktopApi(
 ): DesktopApi {
   return {
     pickExecutable: vi.fn().mockResolvedValue(null),
+    pickPdb: vi.fn().mockResolvedValue(null),
     onMenuOpenExecutable: vi.fn(() => () => {}),
     onMenuOpenRecentExecutable: vi.fn(() => () => {}),
     onMenuUnloadModule: vi.fn(() => () => {}),
@@ -24,6 +25,9 @@ export function createMockDesktopApi(
     getTitleBarMenuModel: vi.fn().mockResolvedValue({ menus: [] }),
     onTitleBarMenuModelChanged: vi.fn(() => () => {}),
     invokeTitleBarMenuAction: vi.fn().mockResolvedValue(undefined),
+    getModulePdbStatus: vi.fn().mockResolvedValue({
+      status: "not_applicable",
+    }),
     openModule: vi.fn().mockResolvedValue({
       moduleId: "m1",
       arch: "x64",

@@ -23,6 +23,15 @@ type GoToDialogProps = {
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 };
 
+type MissingPdbDialogProps = {
+  embeddedPath?: string;
+  isOpen: boolean;
+  modulePath: string;
+  onChoosePdb: () => void;
+  onLoadWithoutPdb: () => void;
+  onOpenChange: (nextOpen: boolean) => void;
+};
+
 export function GoToDialog({
   isOpen,
   isLoading,
@@ -68,6 +77,47 @@ export function GoToDialog({
             </Button>
           </DialogFooter>
         </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+export function MissingPdbDialog({
+  embeddedPath,
+  isOpen,
+  modulePath,
+  onChoosePdb,
+  onLoadWithoutPdb,
+  onOpenChange,
+}: MissingPdbDialogProps) {
+  return (
+    <Dialog onOpenChange={onOpenChange} open={isOpen}>
+      <DialogContent className="w-[min(460px,calc(100vw-32px))] gap-2.5 p-3">
+        <DialogHeader>
+          <DialogTitle className="text-[13px] font-semibold">
+            No Matching PDB Found
+          </DialogTitle>
+          <DialogDescription className="text-xs leading-5">
+            No matching PDB was found automatically for{" "}
+            <span className="font-mono text-foreground">{modulePath}</span>. If
+            you want symbols, choose a PDB manually. It must match the module
+            debug signature and age.
+          </DialogDescription>
+          {embeddedPath ? (
+            <DialogDescription className="text-xs leading-5">
+              Embedded PDB path:{" "}
+              <span className="font-mono text-foreground">{embeddedPath}</span>
+            </DialogDescription>
+          ) : null}
+        </DialogHeader>
+        <DialogFooter className="mt-0 justify-end gap-1.5 sm:space-x-0">
+          <Button onClick={onLoadWithoutPdb} type="button" variant="outline">
+            Load Without PDB
+          </Button>
+          <Button onClick={onChoosePdb} type="button">
+            Choose PDB
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

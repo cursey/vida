@@ -2,6 +2,11 @@ export type HexAddress = string;
 
 export type ModuleOpenParams = {
   path: string;
+  pdbPath?: string;
+};
+
+export type ModulePdbStatusParams = {
+  path: string;
 };
 
 export type ModuleInfoParams = {
@@ -30,6 +35,7 @@ export type LinearDisassemblyParams = {
 
 export type EngineMethod =
   | "module.open"
+  | "module.getPdbStatus"
   | "module.unload"
   | "module.getAnalysisStatus"
   | "module.info"
@@ -44,6 +50,7 @@ export type EngineMethod =
 
 export type MethodParams = {
   "module.open": ModuleOpenParams;
+  "module.getPdbStatus": ModulePdbStatusParams;
   "module.unload": {
     moduleId: string;
   };
@@ -210,6 +217,10 @@ export type MethodResult = {
     arch: "x64";
     imageBase: HexAddress;
     entryVa: HexAddress;
+  };
+  "module.getPdbStatus": {
+    status: "not_applicable" | "auto_found" | "needs_manual";
+    embeddedPath?: string;
   };
   "module.unload": Record<string, never>;
   "module.getAnalysisStatus": ModuleAnalysisStatus;

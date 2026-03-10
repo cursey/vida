@@ -6,7 +6,11 @@ import { isEditableTarget } from "@/lib/dom-utils";
 import { clamp, makePageKey, parseHexVa } from "@/lib/number-utils";
 import { cn } from "@/lib/utils";
 import { desktopApi } from "@/platform/desktop-api";
-import { GoToDialog, XrefsDialog } from "@/shell/components/app-dialogs";
+import {
+  GoToDialog,
+  MissingPdbDialog,
+  XrefsDialog,
+} from "@/shell/components/app-dialogs";
 import { AppStatusBar } from "@/shell/components/status-bar";
 import { WindowChrome } from "@/shell/components/window-chrome";
 import { usePanelLayout } from "@/shell/hooks/use-panel-layout";
@@ -41,6 +45,11 @@ type CenterView = "disassembly" | "graph";
 type SelectionHistoryEntry = {
   va: string;
   preferredView: CenterView;
+};
+type MissingPdbPromptChoice = "choose_pdb" | "load_without_pdb";
+type MissingPdbPromptState = {
+  modulePath: string;
+  embeddedPath?: string;
 };
 
 const PAGE_SIZE = 512;
@@ -82,6 +91,8 @@ export function App() {
   >(null);
   const [isGoToModalOpen, setIsGoToModalOpen] = useState(false);
   const [isXrefsModalOpen, setIsXrefsModalOpen] = useState(false);
+  const [missingPdbPrompt, setMissingPdbPrompt] =
+    useState<MissingPdbPromptState | null>(null);
   const [xrefsTargetVa, setXrefsTargetVa] = useState("");
   const [xrefs, setXrefs] = useState<XrefRecord[]>([]);
   const [goToInputValue, setGoToInputValue] = useState("");
@@ -134,6 +145,9 @@ export function App() {
   const selectionHistoryIndexRef = useRef(-1);
   const functionSearchJobIdRef = useRef(0);
   const statusMessageTimerRef = useRef<number | null>(null);
+  const missingPdbPromptResolverRef = useRef<
+    ((choice: MissingPdbPromptChoice) => void) | null
+  >(null);
 
   useEffect(() => {
     activeModuleIdRef.current = moduleId;
@@ -141,6 +155,10 @@ export function App() {
 
   useEffect(() => {
     return () => {
+      if (missingPdbPromptResolverRef.current) {
+        missingPdbPromptResolverRef.current("load_without_pdb");
+        missingPdbPromptResolverRef.current = null;
+      }
       if (analysisPollTimerRef.current !== null) {
         window.clearTimeout(analysisPollTimerRef.current);
         analysisPollTimerRef.current = null;
@@ -155,6 +173,28 @@ export function App() {
       }
     };
   }, []);
+
+  const closeMissingPdbPrompt = useCallback(
+    (choice: MissingPdbPromptChoice = "load_without_pdb") => {
+      const resolve = missingPdbPromptResolverRef.current;
+      missingPdbPromptResolverRef.current = null;
+      setMissingPdbPrompt(null);
+      resolve?.(choice);
+    },
+    [],
+  );
+
+  const promptForMissingPdb = useCallback(
+    (modulePath: string, embeddedPath?: string) => {
+      closeMissingPdbPrompt();
+      setMissingPdbPrompt({ modulePath, embeddedPath });
+
+      return new Promise<MissingPdbPromptChoice>((resolve) => {
+        missingPdbPromptResolverRef.current = resolve;
+      });
+    },
+    [closeMissingPdbPrompt],
+  );
 
   const fetchLinearPage = useCallback(
     async (currentModuleId: string, page: number) => {
@@ -245,6 +285,7 @@ export function App() {
 
   const clearModuleState = useCallback(() => {
     functionSearchJobIdRef.current += 1;
+    closeMissingPdbPrompt();
     stopAnalysisPolling();
     if (readySupplementTimerRef.current !== null) {
       window.clearTimeout(readySupplementTimerRef.current);
@@ -292,7 +333,12 @@ export function App() {
     setGraphData(null);
     resetSelectionHistory();
     resetLinearCache();
-  }, [resetLinearCache, resetSelectionHistory, stopAnalysisPolling]);
+  }, [
+    closeMissingPdbPrompt,
+    resetLinearCache,
+    resetSelectionHistory,
+    stopAnalysisPolling,
+  ]);
 
   const unloadCurrentModule = useCallback(async () => {
     const generation = ++asyncGenerationRef.current;
@@ -962,7 +1008,6 @@ export function App() {
       const previousModuleId = activeModuleIdRef.current;
       setErrorText("");
       clearModuleState();
-      setIsLoading(true);
 
       try {
         if (previousModuleId) {
@@ -972,43 +1017,80 @@ export function App() {
           }
         }
 
-        const opened = await desktopApi.openModule(chosenPath);
+        const pdbStatus = await desktopApi.getModulePdbStatus(chosenPath);
         if (generation !== asyncGenerationRef.current) {
-          await desktopApi.unloadModule(opened.moduleId).catch(() => {});
           return;
         }
 
-        const info = await desktopApi.getModuleInfo(opened.moduleId);
-        if (generation !== asyncGenerationRef.current) {
-          await desktopApi.unloadModule(opened.moduleId).catch(() => {});
-          return;
+        let manualPdbPath: string | undefined;
+        if (pdbStatus.status === "needs_manual") {
+          const choice = await promptForMissingPdb(
+            chosenPath,
+            pdbStatus.embeddedPath,
+          );
+          if (generation !== asyncGenerationRef.current) {
+            return;
+          }
+
+          if (choice === "choose_pdb") {
+            const selectedPdbPath = await desktopApi.pickPdb();
+            if (generation !== asyncGenerationRef.current) {
+              return;
+            }
+            if (!selectedPdbPath) {
+              setErrorText("Manual PDB selection was canceled.");
+              return;
+            }
+            manualPdbPath = selectedPdbPath;
+          }
         }
 
-        preferredNavigationVaRef.current = opened.entryVa;
-        activeModuleIdRef.current = opened.moduleId;
-        setModulePath(chosenPath);
-        setModuleId(opened.moduleId);
-        setEntryVa(opened.entryVa);
-        setSections(info.sections);
-        setGoToAddress(opened.entryVa);
-        setAnalysisStatus({
-          state: "queued",
-          message: "Queued analysis...",
-          discoveredFunctionCount: 0,
-        });
-        void desktopApi.addRecentExecutable(chosenPath).catch((error) => {
-          console.warn("Failed to add executable to recent list:", error);
-        });
-        startAnalysisPolling(opened.moduleId, opened.entryVa, generation);
+        setIsLoading(true);
+
+        try {
+          const opened = await desktopApi.openModule(chosenPath, manualPdbPath);
+          if (generation !== asyncGenerationRef.current) {
+            await desktopApi.unloadModule(opened.moduleId).catch(() => {});
+            return;
+          }
+
+          const info = await desktopApi.getModuleInfo(opened.moduleId);
+          if (generation !== asyncGenerationRef.current) {
+            await desktopApi.unloadModule(opened.moduleId).catch(() => {});
+            return;
+          }
+
+          preferredNavigationVaRef.current = opened.entryVa;
+          activeModuleIdRef.current = opened.moduleId;
+          setModulePath(chosenPath);
+          setModuleId(opened.moduleId);
+          setEntryVa(opened.entryVa);
+          setSections(info.sections);
+          setGoToAddress(opened.entryVa);
+          setAnalysisStatus({
+            state: "queued",
+            message: "Queued analysis...",
+            discoveredFunctionCount: 0,
+          });
+          void desktopApi.addRecentExecutable(chosenPath).catch((error) => {
+            console.warn("Failed to add executable to recent list:", error);
+          });
+          startAnalysisPolling(opened.moduleId, opened.entryVa, generation);
+        } finally {
+          if (generation === asyncGenerationRef.current) {
+            setIsLoading(false);
+          }
+        }
       } catch (error: unknown) {
+        if (generation !== asyncGenerationRef.current) {
+          return;
+        }
         setErrorText(
           error instanceof Error ? error.message : "Failed to open executable",
         );
-      } finally {
-        setIsLoading(false);
       }
     },
-    [clearModuleState, startAnalysisPolling],
+    [clearModuleState, promptForMissingPdb, startAnalysisPolling],
   );
 
   const openExecutableFromPicker = useCallback(async () => {
@@ -1712,6 +1794,19 @@ export function App() {
         xrefs={xrefs}
         onOpenChange={setIsXrefsModalOpen}
         onNavigateToXref={navigateToXref}
+      />
+
+      <MissingPdbDialog
+        embeddedPath={missingPdbPrompt?.embeddedPath}
+        isOpen={missingPdbPrompt !== null}
+        modulePath={missingPdbPrompt?.modulePath ?? ""}
+        onChoosePdb={() => closeMissingPdbPrompt("choose_pdb")}
+        onLoadWithoutPdb={() => closeMissingPdbPrompt("load_without_pdb")}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) {
+            closeMissingPdbPrompt("load_without_pdb");
+          }
+        }}
       />
     </div>
   );

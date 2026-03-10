@@ -146,6 +146,7 @@ const ANALYSIS_RESULT_POLL_INTERVAL: Duration = Duration::from_millis(20);
 
 pub(crate) fn build_module_analysis_with_progress<F, C>(
     module_path: &Path,
+    manual_pdb_path: Option<&Path>,
     bytes: &[u8],
     mut on_progress: F,
     mut is_canceled: C,
@@ -159,6 +160,7 @@ where
     let image_base = pe.image_base as u64;
     let mut ordered = discover_initial_function_seed_candidates_with_progress(
         module_path,
+        manual_pdb_path,
         &pe,
         image_base,
         &section_lookup,
@@ -667,6 +669,7 @@ fn discover_call_target_seeds(
 
 fn discover_initial_function_seed_candidates_with_progress<F>(
     module_path: &Path,
+    manual_pdb_path: Option<&Path>,
     pe: &PE<'_>,
     image_base: u64,
     section_lookup: &SectionLookup,
@@ -746,7 +749,11 @@ where
     }
     emit_discovery_progress(&ordered, on_progress);
 
-    for pdb_function in discover_pdb_function_seeds(module_path, pe) {
+    for pdb_function in
+        discover_pdb_function_seeds(module_path, pe, manual_pdb_path).map_err(|error| {
+            EngineError::InvalidPdb(error.message_for_path(manual_pdb_path.unwrap_or(module_path)))
+        })?
+    {
         if !section_lookup.is_executable_rva(pdb_function.start_rva) {
             continue;
         }
@@ -1258,6 +1265,7 @@ mod tests {
 
         let result = build_module_analysis_with_progress(
             &module_path,
+            None,
             &bytes,
             |_| {},
             || cancel_checks.fetch_add(1, Ordering::Relaxed) >= 1,

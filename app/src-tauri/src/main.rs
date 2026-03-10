@@ -15,8 +15,8 @@ use engine::{
         LinearFindRowByVaResult, LinearRowsParams, LinearRowsResult, LinearViewInfoParams,
         LinearViewInfoResult, ModuleAnalysisStatusParams, ModuleAnalysisStatusResult,
         ModuleInfoParams, ModuleInfoResult, ModuleMemoryOverviewParams, ModuleMemoryOverviewResult,
-        ModuleOpenParams, ModuleOpenResult, ModuleUnloadParams, ModuleUnloadResult,
-        XrefsToVaParams, XrefsToVaResult,
+        ModuleOpenParams, ModuleOpenResult, ModulePdbStatusParams, ModulePdbStatusResult,
+        ModuleUnloadParams, ModuleUnloadResult, XrefsToVaParams, XrefsToVaResult,
     },
 };
 use serde::{Deserialize, Serialize};
@@ -109,10 +109,30 @@ impl AppState {
 
 #[tauri::command]
 async fn pick_executable(app: AppHandle) -> Result<Option<String>, String> {
+    pick_file_with_filters(&app, &open_module_filters())
+}
+
+fn open_module_filters() -> [(&'static str, &'static [&'static str]); 2] {
+    [("PE Files", &["exe", "dll"]), ("All Files", &["*"])]
+}
+
+#[tauri::command]
+async fn pick_pdb(app: AppHandle) -> Result<Option<String>, String> {
+    pick_file_with_filters(&app, &open_pdb_filters())
+}
+
+fn open_pdb_filters() -> [(&'static str, &'static [&'static str]); 2] {
+    [("PDB Files", &["pdb"]), ("All Files", &["*"])]
+}
+
+fn pick_file_with_filters(
+    app: &AppHandle,
+    filters: &[(&'static str, &'static [&'static str])],
+) -> Result<Option<String>, String> {
     let mut file_dialog = app.dialog().file();
 
-    for (name, extensions) in open_module_filters() {
-        file_dialog = file_dialog.add_filter(name, &extensions);
+    for &(name, extensions) in filters {
+        file_dialog = file_dialog.add_filter(name, extensions);
     }
 
     file_dialog
@@ -120,10 +140,6 @@ async fn pick_executable(app: AppHandle) -> Result<Option<String>, String> {
         .map(|file_path| file_path.into_path().map_err(|error| error.to_string()))
         .transpose()
         .map(|path| path.map(|path| path.to_string_lossy().into_owned()))
-}
-
-fn open_module_filters() -> [(&'static str, &'static [&'static str]); 2] {
-    [("PE Files", &["exe", "dll"]), ("All Files", &["*"])]
 }
 
 #[tauri::command]
@@ -187,10 +203,26 @@ async fn invoke_title_bar_menu_action(
 }
 
 #[tauri::command]
-async fn open_module(state: State<'_, AppState>, path: String) -> Result<ModuleOpenResult, String> {
+async fn get_module_pdb_status(
+    state: State<'_, AppState>,
+    path: String,
+) -> Result<ModulePdbStatusResult, String> {
     let engine = Arc::clone(&state.engine);
     run_engine(engine, move |engine| {
-        engine.open_module(ModuleOpenParams { path })
+        engine.get_module_pdb_status(ModulePdbStatusParams { path })
+    })
+    .await
+}
+
+#[tauri::command]
+async fn open_module(
+    state: State<'_, AppState>,
+    path: String,
+    pdb_path: Option<String>,
+) -> Result<ModuleOpenResult, String> {
+    let engine = Arc::clone(&state.engine);
+    run_engine(engine, move |engine| {
+        engine.open_module(ModuleOpenParams { path, pdb_path })
     })
     .await
 }
@@ -344,11 +376,13 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![
             pick_executable,
+            pick_pdb,
             add_recent_executable,
             get_window_chrome_state,
             window_control,
             get_title_bar_menu_model,
             invoke_title_bar_menu_action,
+            get_module_pdb_status,
             open_module,
             unload_module,
             get_module_analysis_status,
@@ -601,7 +635,7 @@ fn strip_windows_verbatim_prefix(path: String) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        build_recent_menu_model, open_module_filters, prepend_recent_path,
+        build_recent_menu_model, open_module_filters, open_pdb_filters, prepend_recent_path,
         sanitize_recent_executables,
     };
     use std::{fs, path::PathBuf};
@@ -649,6 +683,14 @@ mod tests {
         let filters = open_module_filters();
 
         assert_eq!(filters[0], ("PE Files", &["exe", "dll"] as &[&str]));
+        assert_eq!(filters[1], ("All Files", &["*"] as &[&str]));
+    }
+
+    #[test]
+    fn open_pdb_filters_include_pdb_and_all_files() {
+        let filters = open_pdb_filters();
+
+        assert_eq!(filters[0], ("PDB Files", &["pdb"] as &[&str]));
         assert_eq!(filters[1], ("All Files", &["*"] as &[&str]));
     }
 }

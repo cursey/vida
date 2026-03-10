@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-pick-pdb"
+description = "Enables the pick_pdb command without any pre-configured scope."
+commands.allow = ["pick_pdb"]
+
+[[permission]]
+identifier = "deny-pick-pdb"
+description = "Denies the pick_pdb command without any pre-configured scope."
+commands.deny = ["pick_pdb"]

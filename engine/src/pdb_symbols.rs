@@ -14,6 +14,53 @@ pub(crate) struct PdbFunctionSeed {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ModulePdbStatus {
+    pub(crate) kind: ModulePdbStatusKind,
+    pub(crate) embedded_path: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ModulePdbStatusKind {
+    NotApplicable,
+    AutoFound,
+    NeedsManual,
+}
+
+impl ModulePdbStatusKind {
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::NotApplicable => "not_applicable",
+            Self::AutoFound => "auto_found",
+            Self::NeedsManual => "needs_manual",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum PdbValidationError {
+    MissingDebugInfo,
+    OpenFailed(String),
+    ParseFailed(String),
+    SignatureMismatch,
+}
+
+impl PdbValidationError {
+    pub(crate) fn message_for_path(&self, pdb_path: &Path) -> String {
+        let display_path = pdb_path.display();
+        match self {
+            Self::MissingDebugInfo => {
+                "Module does not advertise a PDB in its debug directory".to_owned()
+            }
+            Self::OpenFailed(error) => format!("Failed to read PDB '{display_path}': {error}"),
+            Self::ParseFailed(error) => format!("Failed to parse PDB '{display_path}': {error}"),
+            Self::SignatureMismatch => {
+                format!("PDB '{display_path}' does not match the module debug signature and age")
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct RsdsInfo {
     guid: [u8; 16],
     age: u32,
@@ -26,25 +73,74 @@ enum SymbolPriority {
     Procedure,
 }
 
-pub(crate) fn discover_pdb_function_seeds(module_path: &Path, pe: &PE<'_>) -> Vec<PdbFunctionSeed> {
+pub(crate) fn inspect_module_pdb_status(module_path: &Path, pe: &PE<'_>) -> ModulePdbStatus {
     let Some(rsds_info) = extract_rsds_info(pe) else {
-        return Vec::new();
+        return ModulePdbStatus {
+            kind: ModulePdbStatusKind::NotApplicable,
+            embedded_path: None,
+        };
     };
 
-    let candidates = build_pdb_candidate_paths(module_path, &rsds_info.pdb_path);
-    for candidate in candidates {
+    if has_matching_pdb_candidate(module_path, &rsds_info, pe) {
+        ModulePdbStatus {
+            kind: ModulePdbStatusKind::AutoFound,
+            embedded_path: Some(rsds_info.pdb_path),
+        }
+    } else {
+        ModulePdbStatus {
+            kind: ModulePdbStatusKind::NeedsManual,
+            embedded_path: Some(rsds_info.pdb_path),
+        }
+    }
+}
+
+pub(crate) fn validate_manual_pdb_path(
+    pe: &PE<'_>,
+    pdb_path: &Path,
+) -> Result<(), PdbValidationError> {
+    let rsds_info = extract_rsds_info(pe).ok_or(PdbValidationError::MissingDebugInfo)?;
+    let _ = load_matching_pdb_function_seeds(pdb_path, &rsds_info, pe)?;
+    Ok(())
+}
+
+pub(crate) fn discover_pdb_function_seeds(
+    module_path: &Path,
+    pe: &PE<'_>,
+    manual_pdb_path: Option<&Path>,
+) -> Result<Vec<PdbFunctionSeed>, PdbValidationError> {
+    let Some(rsds_info) = extract_rsds_info(pe) else {
+        return Ok(Vec::new());
+    };
+
+    if let Some(pdb_path) = manual_pdb_path {
+        return load_matching_pdb_function_seeds(pdb_path, &rsds_info, pe);
+    }
+
+    let mut matched_empty = false;
+    for candidate in build_pdb_candidate_paths(module_path, &rsds_info.pdb_path) {
         if !candidate.is_file() {
             continue;
         }
 
-        if let Ok(seeds) = load_matching_pdb_function_seeds(&candidate, &rsds_info, pe) {
-            if !seeds.is_empty() {
-                return seeds;
-            }
+        match load_matching_pdb_function_seeds(&candidate, &rsds_info, pe) {
+            Ok(seeds) if !seeds.is_empty() => return Ok(seeds),
+            Ok(_) => matched_empty = true,
+            Err(_) => {}
         }
     }
 
-    Vec::new()
+    if matched_empty {
+        return Ok(Vec::new());
+    }
+
+    Ok(Vec::new())
+}
+
+fn has_matching_pdb_candidate(module_path: &Path, rsds_info: &RsdsInfo, pe: &PE<'_>) -> bool {
+    build_pdb_candidate_paths(module_path, &rsds_info.pdb_path)
+        .into_iter()
+        .filter(|candidate| candidate.is_file())
+        .any(|candidate| load_matching_pdb_function_seeds(&candidate, rsds_info, pe).is_ok())
 }
 
 fn extract_rsds_info(pe: &PE<'_>) -> Option<RsdsInfo> {
@@ -124,22 +220,33 @@ fn load_matching_pdb_function_seeds(
     pdb_path: &Path,
     rsds_info: &RsdsInfo,
     pe: &PE<'_>,
-) -> Result<Vec<PdbFunctionSeed>, ()> {
-    let file = File::open(pdb_path).map_err(|_| ())?;
-    let mut pdb = pdb::PDB::open(file).map_err(|_| ())?;
+) -> Result<Vec<PdbFunctionSeed>, PdbValidationError> {
+    let file =
+        File::open(pdb_path).map_err(|error| PdbValidationError::OpenFailed(error.to_string()))?;
+    let mut pdb =
+        pdb::PDB::open(file).map_err(|error| PdbValidationError::ParseFailed(error.to_string()))?;
 
-    let pdb_info = pdb.pdb_information().map_err(|_| ())?;
+    let pdb_info = pdb
+        .pdb_information()
+        .map_err(|error| PdbValidationError::ParseFailed(error.to_string()))?;
     let pdb_guid = pdb_info.guid.to_bytes_le();
     if pdb_info.age != rsds_info.age || pdb_guid != rsds_info.guid {
-        return Err(());
+        return Err(PdbValidationError::SignatureMismatch);
     }
 
-    let address_map = pdb.address_map().map_err(|_| ())?;
-    let symbol_table = pdb.global_symbols().map_err(|_| ())?;
+    let address_map = pdb
+        .address_map()
+        .map_err(|error| PdbValidationError::ParseFailed(error.to_string()))?;
+    let symbol_table = pdb
+        .global_symbols()
+        .map_err(|error| PdbValidationError::ParseFailed(error.to_string()))?;
 
     let mut by_rva = BTreeMap::<u64, (SymbolPriority, String)>::new();
     let mut symbols = symbol_table.iter();
-    while let Some(symbol) = symbols.next().map_err(|_| ())? {
+    while let Some(symbol) = symbols
+        .next()
+        .map_err(|error| PdbValidationError::ParseFailed(error.to_string()))?
+    {
         let parsed = match symbol.parse() {
             Ok(value) => value,
             Err(_) => continue,
@@ -309,8 +416,8 @@ mod tests {
     use std::path::Path;
 
     use super::{
-        build_pdb_candidate_paths, normalize_symbol_name, parse_codeview_filename,
-        simplify_function_name,
+        ModulePdbStatusKind, PdbValidationError, build_pdb_candidate_paths, normalize_symbol_name,
+        parse_codeview_filename, simplify_function_name,
     };
 
     #[test]
@@ -331,6 +438,23 @@ mod tests {
         assert_eq!(candidates[0], expected_with_embedded);
         assert_eq!(candidates[1], expected_basename);
         assert_eq!(candidates[2], expected_module_stem);
+    }
+
+    #[test]
+    fn exposes_stable_status_strings_and_manual_error_messages() {
+        assert_eq!(
+            ModulePdbStatusKind::NotApplicable.as_str(),
+            "not_applicable"
+        );
+        assert_eq!(ModulePdbStatusKind::AutoFound.as_str(), "auto_found");
+        assert_eq!(ModulePdbStatusKind::NeedsManual.as_str(), "needs_manual");
+
+        let path = Path::new("fixture_builder.pdb");
+        assert!(
+            PdbValidationError::SignatureMismatch
+                .message_for_path(path)
+                .contains("does not match")
+        );
     }
 
     #[test]

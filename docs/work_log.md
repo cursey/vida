@@ -1496,3 +1496,19 @@ Validation commands executed:
 
 Changed files index:
 - See `docs/change_files.md` for the detailed file list for this work item.
+
+## 2026-03-09 - Prompt for Manual PDB Selection When Auto-Discovery Misses
+
+Summary:
+- Added engine-side PDB preflight and strict manual PDB validation so module loading can distinguish between no PDB metadata, an auto-resolved match, and a missing match that needs user input.
+- Added Tauri host commands for PDB status lookup and manual `.pdb` file picking, then wired the renderer to show a missing-PDB modal and optionally continue loading without symbols.
+- Ensured manual PDB selection failures remain fatal for that load attempt, and added engine plus renderer regression coverage for auto-found, manual-pick, cancel, and mismatch flows.
+
+Validation commands executed:
+- `just engine-test`
+- `just app-check`
+- `cd app; npm run test:backend`
+- `cd app; npm run test:renderer -- src/renderer/shell/app.manual-pdb-modal.test.tsx src/renderer/shell/app.loading-modal.test.tsx`
+
+Changed files index:
+- See `docs/change_files.md` for the detailed file list for this work item.

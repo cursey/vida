@@ -18,8 +18,9 @@ use crate::api::{
     LinearFindRowByVaResult, LinearRowsParams, LinearRowsResult, LinearViewInfoParams,
     LinearViewInfoResult, MemoryOverviewSliceKind, ModuleAnalysisStatusParams,
     ModuleAnalysisStatusResult, ModuleInfoParams, ModuleInfoResult, ModuleMemoryOverviewParams,
-    ModuleMemoryOverviewResult, ModuleOpenParams, ModuleOpenResult, ModuleUnloadParams,
-    ModuleUnloadResult, SectionInfo, XrefRecord, XrefsToVaParams, XrefsToVaResult,
+    ModuleMemoryOverviewResult, ModuleOpenParams, ModuleOpenResult, ModulePdbStatusParams,
+    ModulePdbStatusResult, ModuleUnloadParams, ModuleUnloadResult, SectionInfo, XrefRecord,
+    XrefsToVaParams, XrefsToVaResult,
 };
 use crate::disasm::{parse_hex_u64, render_instruction, to_hex};
 use crate::error::EngineError;
@@ -27,6 +28,7 @@ use crate::linear::{
     DATA_GROUP_SIZE, LINEAR_ROW_HEIGHT, MAX_LINEAR_PAGE_ROWS, find_row_by_rva,
     materialize_linear_row,
 };
+use crate::pdb_symbols::{inspect_module_pdb_status, validate_manual_pdb_path};
 use crate::pe_utils::{SectionLookup, build_section_lookup, parse_pe64};
 const DEFAULT_MAX_INSTRUCTIONS: usize = 512;
 const MAX_MAX_INSTRUCTIONS: usize = 4096;
@@ -185,8 +187,13 @@ impl EngineState {
         params: ModuleOpenParams,
     ) -> Result<ModuleOpenResult, EngineError> {
         let path = PathBuf::from(params.path);
+        let manual_pdb_path = params.pdb_path.map(PathBuf::from);
         let bytes = Arc::new(fs::read(&path).map_err(|error| EngineError::Io(error.to_string()))?);
         let pe = parse_pe64(bytes.as_slice())?;
+        if let Some(pdb_path) = manual_pdb_path.as_deref() {
+            validate_manual_pdb_path(&pe, pdb_path)
+                .map_err(|error| EngineError::InvalidPdb(error.message_for_path(pdb_path)))?;
+        }
         let section_lookup = build_section_lookup(&pe);
         let image_base = pe.image_base as u64;
         let entry_rva = pe.entry as u64;
@@ -197,6 +204,7 @@ impl EngineState {
         let module_id = format!("m{}", self.next_module_id);
         let analysis_task = spawn_background_analysis(
             path.clone(),
+            manual_pdb_path,
             Arc::clone(&bytes),
             image_base,
             section_lookup.clone(),
@@ -231,6 +239,21 @@ impl EngineState {
             .ok_or(EngineError::ModuleNotFound)?;
         module.analysis_task.cancel.store(true, Ordering::Relaxed);
         Ok(ModuleUnloadResult {})
+    }
+
+    pub fn get_module_pdb_status(
+        &mut self,
+        params: ModulePdbStatusParams,
+    ) -> Result<ModulePdbStatusResult, EngineError> {
+        let path = PathBuf::from(params.path);
+        let bytes = fs::read(&path).map_err(|error| EngineError::Io(error.to_string()))?;
+        let pe = parse_pe64(&bytes)?;
+        let status = inspect_module_pdb_status(&path, &pe);
+
+        Ok(ModulePdbStatusResult {
+            status: status.kind.as_str(),
+            embedded_path: status.embedded_path,
+        })
     }
 
     pub fn get_module_analysis_status(
@@ -652,6 +675,7 @@ impl BackgroundAnalysisHandle {
 
 fn spawn_background_analysis(
     path: PathBuf,
+    manual_pdb_path: Option<PathBuf>,
     bytes: Arc<Vec<u8>>,
     image_base: u64,
     section_lookup: SectionLookup,
@@ -668,10 +692,13 @@ fn spawn_background_analysis(
             }
         };
 
-        let result =
-            build_module_analysis_with_progress(&path, bytes.as_slice(), update_progress, || {
-                worker_cancel.load(Ordering::Relaxed)
-            });
+        let result = build_module_analysis_with_progress(
+            &path,
+            manual_pdb_path.as_deref(),
+            bytes.as_slice(),
+            update_progress,
+            || worker_cancel.load(Ordering::Relaxed),
+        );
 
         let ready_memory_overview =
             match &result {

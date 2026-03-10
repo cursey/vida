@@ -3,6 +3,20 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ModuleOpenParams {
     pub path: String,
+    #[serde(rename = "pdbPath", default)]
+    pub pdb_path: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ModulePdbStatusParams {
+    pub path: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ModulePdbStatusResult {
+    pub status: &'static str,
+    #[serde(rename = "embeddedPath", skip_serializing_if = "Option::is_none")]
+    pub embedded_path: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

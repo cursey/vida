@@ -59,6 +59,7 @@ function invokeApp<T>(
 
 export const desktopApi: DesktopApi = {
   pickExecutable: () => invokeApp<string | null>("pick_executable"),
+  pickPdb: () => invokeApp<string | null>("pick_pdb"),
   addRecentExecutable: (path: string) =>
     invokeApp<void>("add_recent_executable", { path }),
   getWindowChromeState: () =>
@@ -91,8 +92,12 @@ export const desktopApi: DesktopApi = {
     }),
   onDragDrop: (callback: (payload: DragDropPayload) => void) =>
     subscribe<DragDropPayload>(TAURI_DRAG_DROP_EVENT, callback),
-  openModule: (path: string) =>
-    invokeApp<MethodResult["module.open"]>("open_module", { path }),
+  getModulePdbStatus: (path: string) =>
+    invokeApp<MethodResult["module.getPdbStatus"]>("get_module_pdb_status", {
+      path,
+    }),
+  openModule: (path: string, pdbPath?: string) =>
+    invokeApp<MethodResult["module.open"]>("open_module", { path, pdbPath }),
   unloadModule: (moduleId: string) =>
     invokeApp<MethodResult["module.unload"]>("unload_module", { moduleId }),
   getModuleAnalysisStatus: (moduleId: string) =>

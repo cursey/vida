@@ -4,6 +4,8 @@ use thiserror::Error;
 pub enum EngineError {
     #[error("I/O error: {0}")]
     Io(String),
+    #[error("Invalid PDB: {0}")]
+    InvalidPdb(String),
     #[error("Unsupported binary format")]
     UnsupportedFormat,
     #[error("Unsupported architecture")]

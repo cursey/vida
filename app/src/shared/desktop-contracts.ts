@@ -44,6 +44,7 @@ export type TitleBarMenuModel = {
 
 export type DesktopApi = {
   pickExecutable: () => Promise<string | null>;
+  pickPdb: () => Promise<string | null>;
   onMenuOpenExecutable: (callback: () => void) => () => void;
   onMenuOpenRecentExecutable: (callback: (path: string) => void) => () => void;
   onMenuUnloadModule: (callback: () => void) => () => void;
@@ -61,7 +62,13 @@ export type DesktopApi = {
     callback: (model: TitleBarMenuModel) => void,
   ) => () => void;
   invokeTitleBarMenuAction: (commandId: string) => Promise<void>;
-  openModule: (path: string) => Promise<MethodResult["module.open"]>;
+  getModulePdbStatus: (
+    path: string,
+  ) => Promise<MethodResult["module.getPdbStatus"]>;
+  openModule: (
+    path: string,
+    pdbPath?: string,
+  ) => Promise<MethodResult["module.open"]>;
   unloadModule: (moduleId: string) => Promise<MethodResult["module.unload"]>;
   getModuleAnalysisStatus: (
     moduleId: string,
