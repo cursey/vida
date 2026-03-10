@@ -815,6 +815,22 @@ fn manual_pdb_paths_must_match_or_module_open_fails() {
                 "expected improved mismatch guidance, got: {message}"
             );
             assert!(
+                message.contains("Module RSDS GUID/Age:"),
+                "expected module guid/age details, got: {message}"
+            );
+            assert!(
+                message.contains("Selected PDB GUID/Age:"),
+                "expected pdb guid/age details, got: {message}"
+            );
+            assert!(
+                message.contains("/ 2."),
+                "expected mutated module age to appear in mismatch details, got: {message}"
+            );
+            assert!(
+                message.contains("/ 1."),
+                "expected selected pdb age to appear in mismatch details, got: {message}"
+            );
+            assert!(
                 message.contains("Embedded PDB path from the module"),
                 "expected embedded path hint, got: {message}"
             );

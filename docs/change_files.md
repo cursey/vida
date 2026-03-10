@@ -1580,3 +1580,16 @@ App:
 - `app/src/renderer/shell/App.tsx`
 - `app/src/renderer/shell/hooks/use-shell-chrome.ts`
 - `app/src/renderer/shell/app.manual-pdb-modal.test.tsx`
+
+## 2026-03-10 - Show Module and PDB GUID/Age Values on PDB Mismatch
+
+Docs:
+- `docs/work_log.md`
+- `docs/change_files.md`
+
+App:
+- `app/src/renderer/shell/app.manual-pdb-modal.test.tsx`
+
+Engine:
+- `engine/src/pdb_symbols.rs`
+- `engine/tests/engine_integration.rs`

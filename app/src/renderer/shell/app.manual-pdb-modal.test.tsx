@@ -175,7 +175,7 @@ describe("App manual PDB modal", () => {
         .fn()
         .mockRejectedValue(
           new Error(
-            "Invalid PDB: The selected PDB 'C:\\symbols\\sample.pdb' does not match this module. Choose the PDB generated for the same build (matching RSDS GUID and age). Embedded PDB path from the module: 'symbols\\sample.pdb'.",
+            "Invalid PDB: The selected PDB 'C:\\symbols\\sample.pdb' does not match this module. Choose the PDB generated for the same build (matching RSDS GUID and age). Module RSDS GUID/Age: 00112233-4455-6677-8899-aabbccddeeff / 2. Selected PDB GUID/Age: 00112233-4455-6677-8899-aabbccddeeff / 1. Embedded PDB path from the module: 'symbols\\sample.pdb'.",
           ),
         ),
     });
@@ -205,6 +205,16 @@ describe("App manual PDB modal", () => {
         screen.getByText(/choose the pdb generated for the same build/i),
       ).toBeInTheDocument();
       expect(
+        screen.getByText(
+          /module rsds guid\/age: 00112233-4455-6677-8899-aabbccddeeff \/ 2/i,
+        ),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText(
+          /selected pdb guid\/age: 00112233-4455-6677-8899-aabbccddeeff \/ 1/i,
+        ),
+      ).toBeInTheDocument();
+      expect(
         screen.getByText(/embedded pdb path from the module/i),
       ).toBeInTheDocument();
       expect(screen.getByTestId("workspace-idle-message")).toBeInTheDocument();
@@ -217,7 +227,7 @@ describe("App manual PDB modal", () => {
       openModule: vi
         .fn()
         .mockRejectedValue(
-          "Invalid PDB: The selected PDB 'C:\\symbols\\sample.pdb' does not match this module. Choose the PDB generated for the same build (matching RSDS GUID and age). Embedded PDB path from the module: 'symbols\\sample.pdb'.",
+          "Invalid PDB: The selected PDB 'C:\\symbols\\sample.pdb' does not match this module. Choose the PDB generated for the same build (matching RSDS GUID and age). Module RSDS GUID/Age: 00112233-4455-6677-8899-aabbccddeeff / 2. Selected PDB GUID/Age: 00112233-4455-6677-8899-aabbccddeeff / 1. Embedded PDB path from the module: 'symbols\\sample.pdb'.",
         ),
     });
     render(<App />);
@@ -244,6 +254,16 @@ describe("App manual PDB modal", () => {
       expect(screen.getByText("Load PDB Failed")).toBeInTheDocument();
       expect(
         screen.getByText(/choose the pdb generated for the same build/i),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText(
+          /module rsds guid\/age: 00112233-4455-6677-8899-aabbccddeeff \/ 2/i,
+        ),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText(
+          /selected pdb guid\/age: 00112233-4455-6677-8899-aabbccddeeff \/ 1/i,
+        ),
       ).toBeInTheDocument();
     });
   });

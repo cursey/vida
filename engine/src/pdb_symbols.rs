@@ -41,7 +41,13 @@ pub(crate) enum PdbValidationError {
     MissingDebugInfo,
     OpenFailed(String),
     ParseFailed(String),
-    SignatureMismatch { expected_path: Option<String> },
+    SignatureMismatch {
+        expected_path: Option<String>,
+        module_guid: String,
+        module_age: u32,
+        pdb_guid: String,
+        pdb_age: u32,
+    },
 }
 
 impl PdbValidationError {
@@ -55,10 +61,25 @@ impl PdbValidationError {
             Self::ParseFailed(error) => {
                 format!("The selected file '{display_path}' is not a readable PDB: {error}")
             }
-            Self::SignatureMismatch { expected_path } => {
+            Self::SignatureMismatch {
+                expected_path,
+                module_guid,
+                module_age,
+                pdb_guid,
+                pdb_age,
+            } => {
                 let mut message = format!(
                     "The selected PDB '{display_path}' does not match this module. Choose the PDB generated for the same build (matching RSDS GUID and age)."
                 );
+                message.push_str(" Module RSDS GUID/Age: ");
+                message.push_str(module_guid);
+                message.push_str(" / ");
+                message.push_str(&module_age.to_string());
+                message.push_str(". Selected PDB GUID/Age: ");
+                message.push_str(pdb_guid);
+                message.push_str(" / ");
+                message.push_str(&pdb_age.to_string());
+                message.push('.');
                 if let Some(expected_path) =
                     expected_path.as_deref().filter(|path| !path.trim().is_empty())
                 {
@@ -245,6 +266,10 @@ fn load_matching_pdb_function_seeds(
     if pdb_info.age != rsds_info.age || pdb_guid != rsds_info.guid {
         return Err(PdbValidationError::SignatureMismatch {
             expected_path: Some(rsds_info.pdb_path.clone()),
+            module_guid: format_rsds_guid(rsds_info.guid),
+            module_age: rsds_info.age,
+            pdb_guid: format_rsds_guid(pdb_guid),
+            pdb_age: pdb_info.age,
         });
     }
 
@@ -411,6 +436,24 @@ fn is_identifier_char(ch: char) -> bool {
     ch.is_ascii_alphanumeric() || ch == '_'
 }
 
+fn format_rsds_guid(guid: [u8; 16]) -> String {
+    let data1 = u32::from_le_bytes([guid[0], guid[1], guid[2], guid[3]]);
+    let data2 = u16::from_le_bytes([guid[4], guid[5]]);
+    let data3 = u16::from_le_bytes([guid[6], guid[7]]);
+
+    format!(
+        "{data1:08x}-{data2:04x}-{data3:04x}-{b8:02x}{b9:02x}-{b10:02x}{b11:02x}{b12:02x}{b13:02x}{b14:02x}{b15:02x}",
+        b8 = guid[8],
+        b9 = guid[9],
+        b10 = guid[10],
+        b11 = guid[11],
+        b12 = guid[12],
+        b13 = guid[13],
+        b14 = guid[14],
+        b15 = guid[15],
+    )
+}
+
 fn is_executable_rva(pe: &PE<'_>, rva: u64) -> bool {
     for section in &pe.sections {
         let start = section.virtual_address as u64;
@@ -430,8 +473,8 @@ mod tests {
     use std::path::Path;
 
     use super::{
-        ModulePdbStatusKind, PdbValidationError, build_pdb_candidate_paths, normalize_symbol_name,
-        parse_codeview_filename, simplify_function_name,
+        ModulePdbStatusKind, PdbValidationError, build_pdb_candidate_paths, format_rsds_guid,
+        normalize_symbol_name, parse_codeview_filename, simplify_function_name,
     };
 
     #[test]
@@ -467,6 +510,10 @@ mod tests {
         assert!(
             PdbValidationError::SignatureMismatch {
                 expected_path: Some("symbols\\fixture_builder.pdb".to_owned()),
+                module_guid: "00112233-4455-6677-8899-aabbccddeeff".to_owned(),
+                module_age: 2,
+                pdb_guid: "11112222-3333-4444-5555-666677778888".to_owned(),
+                pdb_age: 7,
             }
                 .message_for_path(path)
                 .contains("generated for the same build")
@@ -474,14 +521,52 @@ mod tests {
         assert!(
             PdbValidationError::SignatureMismatch {
                 expected_path: Some("symbols\\fixture_builder.pdb".to_owned()),
+                module_guid: "00112233-4455-6677-8899-aabbccddeeff".to_owned(),
+                module_age: 2,
+                pdb_guid: "11112222-3333-4444-5555-666677778888".to_owned(),
+                pdb_age: 7,
             }
             .message_for_path(path)
             .contains("symbols\\fixture_builder.pdb")
         );
         assert!(
+            PdbValidationError::SignatureMismatch {
+                expected_path: Some("symbols\\fixture_builder.pdb".to_owned()),
+                module_guid: "00112233-4455-6677-8899-aabbccddeeff".to_owned(),
+                module_age: 2,
+                pdb_guid: "11112222-3333-4444-5555-666677778888".to_owned(),
+                pdb_age: 7,
+            }
+            .message_for_path(path)
+            .contains("Module RSDS GUID/Age: 00112233-4455-6677-8899-aabbccddeeff / 2")
+        );
+        assert!(
+            PdbValidationError::SignatureMismatch {
+                expected_path: Some("symbols\\fixture_builder.pdb".to_owned()),
+                module_guid: "00112233-4455-6677-8899-aabbccddeeff".to_owned(),
+                module_age: 2,
+                pdb_guid: "11112222-3333-4444-5555-666677778888".to_owned(),
+                pdb_age: 7,
+            }
+            .message_for_path(path)
+            .contains("Selected PDB GUID/Age: 11112222-3333-4444-5555-666677778888 / 7")
+        );
+        assert!(
             PdbValidationError::ParseFailed("unexpected page".to_owned())
                 .message_for_path(path)
                 .contains("not a readable PDB")
+        );
+    }
+
+    #[test]
+    fn formats_rsds_guid_in_standard_text_form() {
+        let guid = [
+            0x33, 0x22, 0x11, 0x00, 0x55, 0x44, 0x77, 0x66, 0x88, 0x99, 0xaa, 0xbb, 0xcc,
+            0xdd, 0xee, 0xff,
+        ];
+        assert_eq!(
+            format_rsds_guid(guid),
+            "00112233-4455-6677-8899-aabbccddeeff"
         );
     }
 

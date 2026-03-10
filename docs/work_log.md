@@ -1555,3 +1555,18 @@ Validation commands executed:
 
 Changed files index:
 - See `docs/change_files.md` for the detailed file list for this work item.
+
+## 2026-03-10 - Show Module and PDB GUID/Age Values on PDB Mismatch
+
+Summary:
+- Expanded manual PDB mismatch errors to include both the module RSDS GUID/age and the selected PDB GUID/age values in the failure details.
+- Kept the existing same-build guidance and embedded-path hint while making the mismatch details concrete enough to diagnose version skew directly from the modal.
+- Added engine and renderer regression coverage for the new GUID/age detail lines.
+
+Validation commands executed:
+- `cargo test --manifest-path engine/Cargo.toml`
+- `cmd /c npm run check` (in `app`)
+- `cmd /c npm run test:renderer -- src/renderer/shell/app.manual-pdb-modal.test.tsx` (in `app`)
+
+Changed files index:
+- See `docs/change_files.md` for the detailed file list for this work item.
