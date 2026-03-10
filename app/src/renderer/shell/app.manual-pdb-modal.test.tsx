@@ -175,7 +175,7 @@ describe("App manual PDB modal", () => {
         .fn()
         .mockRejectedValue(
           new Error(
-            "Invalid PDB: PDB 'C:\\symbols\\sample.pdb' does not match the module debug signature and age",
+            "Invalid PDB: The selected PDB 'C:\\symbols\\sample.pdb' does not match this module. Choose the PDB generated for the same build (matching RSDS GUID and age). Embedded PDB path from the module: 'symbols\\sample.pdb'.",
           ),
         ),
     });
@@ -202,9 +202,49 @@ describe("App manual PDB modal", () => {
       );
       expect(screen.getByText("Load PDB Failed")).toBeInTheDocument();
       expect(
-        screen.getByText(/does not match the module debug signature and age/i),
+        screen.getByText(/choose the pdb generated for the same build/i),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText(/embedded pdb path from the module/i),
       ).toBeInTheDocument();
       expect(screen.getByTestId("workspace-idle-message")).toBeInTheDocument();
+    });
+  });
+
+  it("preserves string-based backend mismatch failures after manual PDB selection", async () => {
+    const api = installMockApi({
+      pickPdb: vi.fn().mockResolvedValue("C:\\symbols\\sample.pdb"),
+      openModule: vi
+        .fn()
+        .mockRejectedValue(
+          "Invalid PDB: The selected PDB 'C:\\symbols\\sample.pdb' does not match this module. Choose the PDB generated for the same build (matching RSDS GUID and age). Embedded PDB path from the module: 'symbols\\sample.pdb'.",
+        ),
+    });
+    render(<App />);
+
+    await waitFor(() => {
+      expect(menuOpenHandler).toBeTypeOf("function");
+    });
+
+    await act(async () => {
+      menuOpenHandler?.();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("No Matching PDB Found")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Choose PDB" }));
+
+    await waitFor(() => {
+      expect(api.openModule).toHaveBeenCalledWith(
+        "C:\\fixtures\\sample.exe",
+        "C:\\symbols\\sample.pdb",
+      );
+      expect(screen.getByText("Load PDB Failed")).toBeInTheDocument();
+      expect(
+        screen.getByText(/choose the pdb generated for the same build/i),
+      ).toBeInTheDocument();
     });
   });
 });

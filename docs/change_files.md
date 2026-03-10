@@ -1554,3 +1554,29 @@ App:
 - `app/src/renderer/shell/app.manual-pdb-modal.test.tsx`
 - `app/src/renderer/shell/app.loading-modal.test.tsx`
 - `app/src/renderer/shell/app.xrefs-modal.test.tsx`
+
+## 2026-03-10 - Improve Manual PDB Failure Guidance
+
+Docs:
+- `docs/work_log.md`
+- `docs/change_files.md`
+
+App:
+- `app/src/renderer/shell/app.manual-pdb-modal.test.tsx`
+
+Engine:
+- `engine/src/pdb_symbols.rs`
+- `engine/tests/engine_integration.rs`
+
+## 2026-03-10 - Preserve String-Based Backend Error Messages in the Renderer
+
+Docs:
+- `docs/work_log.md`
+- `docs/change_files.md`
+
+App:
+- `app/src/renderer/lib/utils.ts`
+- `app/src/renderer/lib/utils.test.ts`
+- `app/src/renderer/shell/App.tsx`
+- `app/src/renderer/shell/hooks/use-shell-chrome.ts`
+- `app/src/renderer/shell/app.manual-pdb-modal.test.tsx`

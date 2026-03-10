@@ -41,20 +41,32 @@ pub(crate) enum PdbValidationError {
     MissingDebugInfo,
     OpenFailed(String),
     ParseFailed(String),
-    SignatureMismatch,
+    SignatureMismatch { expected_path: Option<String> },
 }
 
 impl PdbValidationError {
     pub(crate) fn message_for_path(&self, pdb_path: &Path) -> String {
         let display_path = pdb_path.display();
         match self {
-            Self::MissingDebugInfo => {
-                "Module does not advertise a PDB in its debug directory".to_owned()
+            Self::MissingDebugInfo => "This module does not advertise CodeView/RSDS PDB metadata, so the selected PDB cannot be validated.".to_owned(),
+            Self::OpenFailed(error) => {
+                format!("Could not open the selected PDB '{display_path}': {error}")
             }
-            Self::OpenFailed(error) => format!("Failed to read PDB '{display_path}': {error}"),
-            Self::ParseFailed(error) => format!("Failed to parse PDB '{display_path}': {error}"),
-            Self::SignatureMismatch => {
-                format!("PDB '{display_path}' does not match the module debug signature and age")
+            Self::ParseFailed(error) => {
+                format!("The selected file '{display_path}' is not a readable PDB: {error}")
+            }
+            Self::SignatureMismatch { expected_path } => {
+                let mut message = format!(
+                    "The selected PDB '{display_path}' does not match this module. Choose the PDB generated for the same build (matching RSDS GUID and age)."
+                );
+                if let Some(expected_path) =
+                    expected_path.as_deref().filter(|path| !path.trim().is_empty())
+                {
+                    message.push_str(" Embedded PDB path from the module: '");
+                    message.push_str(expected_path);
+                    message.push_str("'.");
+                }
+                message
             }
         }
     }
@@ -231,7 +243,9 @@ fn load_matching_pdb_function_seeds(
         .map_err(|error| PdbValidationError::ParseFailed(error.to_string()))?;
     let pdb_guid = pdb_info.guid.to_bytes_le();
     if pdb_info.age != rsds_info.age || pdb_guid != rsds_info.guid {
-        return Err(PdbValidationError::SignatureMismatch);
+        return Err(PdbValidationError::SignatureMismatch {
+            expected_path: Some(rsds_info.pdb_path.clone()),
+        });
     }
 
     let address_map = pdb
@@ -451,9 +465,23 @@ mod tests {
 
         let path = Path::new("fixture_builder.pdb");
         assert!(
-            PdbValidationError::SignatureMismatch
+            PdbValidationError::SignatureMismatch {
+                expected_path: Some("symbols\\fixture_builder.pdb".to_owned()),
+            }
                 .message_for_path(path)
-                .contains("does not match")
+                .contains("generated for the same build")
+        );
+        assert!(
+            PdbValidationError::SignatureMismatch {
+                expected_path: Some("symbols\\fixture_builder.pdb".to_owned()),
+            }
+            .message_for_path(path)
+            .contains("symbols\\fixture_builder.pdb")
+        );
+        assert!(
+            PdbValidationError::ParseFailed("unexpected page".to_owned())
+                .message_for_path(path)
+                .contains("not a readable PDB")
         );
     }
 

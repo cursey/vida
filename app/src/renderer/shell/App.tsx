@@ -4,7 +4,7 @@ import { MemoryOverviewBar } from "@/features/disassembly/memory-overview-bar";
 import { GraphPanel } from "@/features/graph/graph-panel";
 import { isEditableTarget } from "@/lib/dom-utils";
 import { clamp, makePageKey, parseHexVa } from "@/lib/number-utils";
-import { cn } from "@/lib/utils";
+import { cn, getErrorMessage } from "@/lib/utils";
 import { desktopApi } from "@/platform/desktop-api";
 import {
   ErrorDialog,
@@ -248,7 +248,7 @@ export function App() {
       } catch (error: unknown) {
         showErrorDialog(
           "Load Linear Rows Failed",
-          error instanceof Error ? error.message : "Failed to load linear rows",
+          getErrorMessage(error, "Failed to load linear rows"),
         );
       } finally {
         inflightPagesRef.current.delete(page);
@@ -371,7 +371,7 @@ export function App() {
       }
       showErrorDialog(
         "Unload Module Failed",
-        error instanceof Error ? error.message : "Failed to unload module",
+        getErrorMessage(error, "Failed to unload module"),
       );
     }
   }, [clearModuleState, closeErrorDialog, showErrorDialog]);
@@ -884,7 +884,7 @@ export function App() {
 
         showErrorDialog(
           "Address Lookup Failed",
-          error instanceof Error ? error.message : options.lookupErrorMessage,
+          getErrorMessage(error, options.lookupErrorMessage),
         );
         return false;
       }
@@ -1053,9 +1053,7 @@ export function App() {
             currentModuleId,
             generation,
             "Analysis Failed",
-            error instanceof Error
-              ? error.message
-              : "Failed to poll module analysis status",
+            getErrorMessage(error, "Failed to poll module analysis status"),
           );
         }
       };
@@ -1149,7 +1147,7 @@ export function App() {
         }
         showErrorDialog(
           manualPdbPath ? "Load PDB Failed" : "Open Module Failed",
-          error instanceof Error ? error.message : "Failed to open executable",
+          getErrorMessage(error, "Failed to open executable"),
         );
       }
     },
@@ -1292,7 +1290,7 @@ export function App() {
 
         showErrorDialog(
           "Open Graph View Failed",
-          error instanceof Error ? error.message : "Failed to open graph view",
+          getErrorMessage(error, "Failed to open graph view"),
         );
         return false;
       } finally {
@@ -1486,7 +1484,7 @@ export function App() {
     } catch (error: unknown) {
       showErrorDialog(
         "Load Xrefs Failed",
-        error instanceof Error ? error.message : "Failed to load xrefs",
+        getErrorMessage(error, "Failed to load xrefs"),
       );
     } finally {
       setIsLoadingXrefs(false);

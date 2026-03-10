@@ -1526,3 +1526,32 @@ Validation commands executed:
 
 Changed files index:
 - See `docs/change_files.md` for the detailed file list for this work item.
+
+## 2026-03-10 - Improve Manual PDB Failure Guidance
+
+Summary:
+- Reworded manual PDB validation failures so mismatch, open, and parse errors describe the selected file more clearly instead of surfacing the previous raw phrasing.
+- Added same-build guidance plus the module's embedded PDB path hint to manual mismatch errors so symbol-selection failures are more actionable.
+- Tightened engine and renderer regression coverage around the improved manual PDB failure text.
+
+Validation commands executed:
+- `cargo test --manifest-path engine/Cargo.toml`
+- `cmd /c npm run check` (in `app`)
+- `cmd /c npm run test:renderer -- src/renderer/shell/app.manual-pdb-modal.test.tsx` (in `app`)
+
+Changed files index:
+- See `docs/change_files.md` for the detailed file list for this work item.
+
+## 2026-03-10 - Preserve String-Based Backend Error Messages in the Renderer
+
+Summary:
+- Added a shared renderer-side error-message extractor so Tauri string rejections are shown verbatim instead of collapsing to generic fallback text.
+- Updated the shell and window-chrome error paths to use the shared extractor for module, PDB, graph, xref, address-lookup, and chrome failures.
+- Added regression coverage for raw string PDB mismatch failures and the shared extractor helper.
+
+Validation commands executed:
+- `cmd /c npm run check` (in `app`)
+- `cmd /c npm run test:renderer -- src/renderer/shell/app.manual-pdb-modal.test.tsx src/renderer/lib/utils.test.ts` (in `app`)
+
+Changed files index:
+- See `docs/change_files.md` for the detailed file list for this work item.

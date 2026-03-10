@@ -808,7 +808,19 @@ fn manual_pdb_paths_must_match_or_module_open_fails() {
         path: mismatch_exe.to_string_lossy().into_owned(),
         pdb_path: Some(mismatch_pdb.to_string_lossy().into_owned()),
     });
-    assert!(matches!(result, Err(EngineError::InvalidPdb(_))));
+    match result {
+        Err(EngineError::InvalidPdb(message)) => {
+            assert!(
+                message.contains("Choose the PDB generated for the same build"),
+                "expected improved mismatch guidance, got: {message}"
+            );
+            assert!(
+                message.contains("Embedded PDB path from the module"),
+                "expected embedded path hint, got: {message}"
+            );
+        }
+        other => panic!("expected InvalidPdb error, got: {other:?}"),
+    }
 
     let _ = fs::remove_dir_all(valid_dir);
     let _ = fs::remove_dir_all(mismatch_dir);

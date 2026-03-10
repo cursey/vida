@@ -1,3 +1,4 @@
+import { getErrorMessage } from "@/lib/utils";
 import { desktopApi } from "@/platform/desktop-api";
 import { useCallback, useEffect, useState } from "react";
 import type {
@@ -51,9 +52,7 @@ export function useShellChrome({
       .catch((error: unknown) => {
         showErrorDialog(
           "Load Window Chrome Failed",
-          error instanceof Error
-            ? error.message
-            : "Failed to load window chrome state",
+          getErrorMessage(error, "Failed to load window chrome state"),
         );
       });
 
@@ -109,7 +108,7 @@ export function useShellChrome({
       void desktopApi.windowControl(action).catch((error: unknown) => {
         showErrorDialog(
           "Window Control Failed",
-          error instanceof Error ? error.message : "Window control failed",
+          getErrorMessage(error, "Window control failed"),
         );
       });
     },
@@ -123,7 +122,7 @@ export function useShellChrome({
         .catch((error: unknown) => {
           showErrorDialog(
             "Menu Action Failed",
-            error instanceof Error ? error.message : "Menu action failed",
+            getErrorMessage(error, "Menu action failed"),
           );
         });
     },
