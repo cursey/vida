@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use goblin::pe::PE;
 use pdb::{FallibleIterator, SymbolData};
 
-const IMAGE_SCN_MEM_EXECUTE: u32 = 0x20000000;
+use crate::pe_utils::{SectionLookup, build_section_lookup};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct PdbFunctionSeed {
@@ -113,8 +113,9 @@ pub(crate) fn inspect_module_pdb_status(module_path: &Path, pe: &PE<'_>) -> Modu
             embedded_path: None,
         };
     };
+    let section_lookup = build_section_lookup(pe);
 
-    if has_matching_pdb_candidate(module_path, &rsds_info, pe) {
+    if has_matching_pdb_candidate(module_path, &rsds_info, &section_lookup) {
         ModulePdbStatus {
             kind: ModulePdbStatusKind::AutoFound,
             embedded_path: Some(rsds_info.pdb_path),
@@ -132,13 +133,15 @@ pub(crate) fn validate_manual_pdb_path(
     pdb_path: &Path,
 ) -> Result<(), PdbValidationError> {
     let rsds_info = extract_rsds_info(pe).ok_or(PdbValidationError::MissingDebugInfo)?;
-    let _ = load_matching_pdb_function_seeds(pdb_path, &rsds_info, pe)?;
+    let section_lookup = build_section_lookup(pe);
+    let _ = load_matching_pdb_function_seeds(pdb_path, &rsds_info, &section_lookup)?;
     Ok(())
 }
 
 pub(crate) fn discover_pdb_function_seeds(
     module_path: &Path,
     pe: &PE<'_>,
+    section_lookup: &SectionLookup,
     manual_pdb_path: Option<&Path>,
 ) -> Result<Vec<PdbFunctionSeed>, PdbValidationError> {
     let Some(rsds_info) = extract_rsds_info(pe) else {
@@ -146,7 +149,7 @@ pub(crate) fn discover_pdb_function_seeds(
     };
 
     if let Some(pdb_path) = manual_pdb_path {
-        return load_matching_pdb_function_seeds(pdb_path, &rsds_info, pe);
+        return load_matching_pdb_function_seeds(pdb_path, &rsds_info, section_lookup);
     }
 
     let mut matched_empty = false;
@@ -155,7 +158,7 @@ pub(crate) fn discover_pdb_function_seeds(
             continue;
         }
 
-        match load_matching_pdb_function_seeds(&candidate, &rsds_info, pe) {
+        match load_matching_pdb_function_seeds(&candidate, &rsds_info, section_lookup) {
             Ok(seeds) if !seeds.is_empty() => return Ok(seeds),
             Ok(_) => matched_empty = true,
             Err(_) => {}
@@ -169,11 +172,17 @@ pub(crate) fn discover_pdb_function_seeds(
     Ok(Vec::new())
 }
 
-fn has_matching_pdb_candidate(module_path: &Path, rsds_info: &RsdsInfo, pe: &PE<'_>) -> bool {
+fn has_matching_pdb_candidate(
+    module_path: &Path,
+    rsds_info: &RsdsInfo,
+    section_lookup: &SectionLookup,
+) -> bool {
     build_pdb_candidate_paths(module_path, &rsds_info.pdb_path)
         .into_iter()
         .filter(|candidate| candidate.is_file())
-        .any(|candidate| load_matching_pdb_function_seeds(&candidate, rsds_info, pe).is_ok())
+        .any(|candidate| {
+            load_matching_pdb_function_seeds(&candidate, rsds_info, section_lookup).is_ok()
+        })
 }
 
 fn extract_rsds_info(pe: &PE<'_>) -> Option<RsdsInfo> {
@@ -252,7 +261,7 @@ fn path_key(path: &Path) -> String {
 fn load_matching_pdb_function_seeds(
     pdb_path: &Path,
     rsds_info: &RsdsInfo,
-    pe: &PE<'_>,
+    section_lookup: &SectionLookup,
 ) -> Result<Vec<PdbFunctionSeed>, PdbValidationError> {
     let file =
         File::open(pdb_path).map_err(|error| PdbValidationError::OpenFailed(error.to_string()))?;
@@ -297,7 +306,10 @@ fn load_matching_pdb_function_seeds(
                     continue;
                 };
                 let rva = u64::from(rva.0);
-                if !is_executable_rva(pe, rva) {
+                if !section_lookup.is_executable_rva(rva) {
+                    continue;
+                }
+                if !should_record_symbol(&by_rva, rva, SymbolPriority::Procedure) {
                     continue;
                 }
 
@@ -317,7 +329,10 @@ fn load_matching_pdb_function_seeds(
                     continue;
                 };
                 let rva = u64::from(rva.0);
-                if !is_executable_rva(pe, rva) {
+                if !section_lookup.is_executable_rva(rva) {
+                    continue;
+                }
+                if !should_record_symbol(&by_rva, rva, SymbolPriority::Public) {
                     continue;
                 }
 
@@ -336,6 +351,17 @@ fn load_matching_pdb_function_seeds(
         .into_iter()
         .map(|(start_rva, (_, name))| PdbFunctionSeed { start_rva, name })
         .collect())
+}
+
+fn should_record_symbol(
+    by_rva: &BTreeMap<u64, (SymbolPriority, String)>,
+    rva: u64,
+    priority: SymbolPriority,
+) -> bool {
+    !matches!(
+        by_rva.get(&rva),
+        Some((existing_priority, _)) if *existing_priority >= priority
+    )
 }
 
 fn insert_symbol(
@@ -454,28 +480,16 @@ fn format_rsds_guid(guid: [u8; 16]) -> String {
     )
 }
 
-fn is_executable_rva(pe: &PE<'_>, rva: u64) -> bool {
-    for section in &pe.sections {
-        let start = section.virtual_address as u64;
-        let len = u64::from(section.virtual_size.max(section.size_of_raw_data));
-        let end = start.saturating_add(len);
-        if rva < start || rva >= end {
-            continue;
-        }
-        return section.characteristics & IMAGE_SCN_MEM_EXECUTE != 0;
-    }
-
-    false
-}
-
 #[cfg(test)]
 mod tests {
     use std::path::Path;
 
     use super::{
-        ModulePdbStatusKind, PdbValidationError, build_pdb_candidate_paths, format_rsds_guid,
-        normalize_symbol_name, parse_codeview_filename, simplify_function_name,
+        ModulePdbStatusKind, PdbValidationError, SymbolPriority, build_pdb_candidate_paths,
+        format_rsds_guid, normalize_symbol_name, parse_codeview_filename, should_record_symbol,
+        simplify_function_name,
     };
+    use std::collections::BTreeMap;
 
     #[test]
     fn parses_codeview_filename_up_to_nul() {
@@ -515,8 +529,8 @@ mod tests {
                 pdb_guid: "11112222-3333-4444-5555-666677778888".to_owned(),
                 pdb_age: 7,
             }
-                .message_for_path(path)
-                .contains("generated for the same build")
+            .message_for_path(path)
+            .contains("generated for the same build")
         );
         assert!(
             PdbValidationError::SignatureMismatch {
@@ -561,8 +575,8 @@ mod tests {
     #[test]
     fn formats_rsds_guid_in_standard_text_form() {
         let guid = [
-            0x33, 0x22, 0x11, 0x00, 0x55, 0x44, 0x77, 0x66, 0x88, 0x99, 0xaa, 0xbb, 0xcc,
-            0xdd, 0xee, 0xff,
+            0x33, 0x22, 0x11, 0x00, 0x55, 0x44, 0x77, 0x66, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd,
+            0xee, 0xff,
         ];
         assert_eq!(
             format_rsds_guid(guid),
@@ -579,6 +593,28 @@ mod tests {
         assert_ne!(msvc, "??_0klass@@QEAAHH@Z");
         assert!(msvc.contains("klass"));
         assert!(!msvc.contains('('));
+    }
+
+    #[test]
+    fn skips_name_work_for_rvas_with_stronger_existing_priority() {
+        let mut by_rva = BTreeMap::new();
+        by_rva.insert(0x1000, (SymbolPriority::Procedure, "kept".to_owned()));
+
+        assert!(!should_record_symbol(
+            &by_rva,
+            0x1000,
+            SymbolPriority::Public
+        ));
+        assert!(!should_record_symbol(
+            &by_rva,
+            0x1000,
+            SymbolPriority::Procedure
+        ));
+        assert!(should_record_symbol(
+            &by_rva,
+            0x2000,
+            SymbolPriority::Public
+        ));
     }
 
     #[test]

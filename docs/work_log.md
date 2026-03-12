@@ -1,5 +1,26 @@
 # Work Log
 
+## 2026-03-12 - Reduce Initial Function Discovery Churn
+
+Summary:
+- Switched discovery progress updates to report counts during the seed-gathering phase and only materialize the full discovered-function snapshot once analysis moves past discovery, cutting repeated vector cloning from the initial-load path.
+- Reused `SectionLookup` for PDB-backed seed filtering and skipped demangling/name normalization work for symbol RVAs that already have an equal-or-stronger recorded priority.
+- Fixed the engine benchmark harness to pass the now-required `pdb_path` field so cold-load comparisons keep working after the manual-PDB API expansion.
+
+Validation commands executed:
+- `just engine-bench-save function-discovery-baseline-2026-03-12 all`
+- `just engine-fmt`
+- `just engine-test`
+- `just engine-bench-compare function-discovery-baseline-2026-03-12 all`
+
+Observed benchmark deltas:
+- `engine/cold/module_open_and_analyze/minimal_with_pdb`: no statistically significant change vs `function-discovery-baseline-2026-03-12` (`[18.022 ms, 18.131 ms, 18.272 ms]` -> `[18.000 ms, 18.093 ms, 18.186 ms]`)
+- `engine/cold/module_open_and_analyze/minimal_without_pdb`: no statistically significant change vs `function-discovery-baseline-2026-03-12` (`[18.155 ms, 18.260 ms, 18.366 ms]` -> `[18.038 ms, 18.178 ms, 18.300 ms]`)
+- `engine/cold/module_open_and_analyze/overlay_4mb_without_pdb`: improved vs `function-discovery-baseline-2026-03-12` (`[19.419 ms, 19.764 ms, 20.144 ms]` -> `[18.854 ms, 18.996 ms, 19.138 ms]`)
+
+Changed files index:
+- See `docs/change_files.md` for the detailed file list for this work item.
+
 ## 2026-03-09 - Preserve Graph View Across Mouse History Navigation
 
 Summary:

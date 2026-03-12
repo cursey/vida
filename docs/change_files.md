@@ -1,5 +1,18 @@
 # Change Files
 
+## 2026-03-12 - Reduce Initial Function Discovery Churn
+
+Engine:
+- `engine/benches/analysis_bench.rs`
+- `engine/src/analysis.rs`
+- `engine/src/pdb_symbols.rs`
+- `engine/src/state.rs`
+
+Docs:
+- `docs/engine_benchmarking.md`
+- `docs/work_log.md`
+- `docs/change_files.md`
+
 ## 2026-03-09 - Preserve Graph View Across Mouse History Navigation
 
 App:

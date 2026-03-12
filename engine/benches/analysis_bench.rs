@@ -115,7 +115,10 @@ fn open_ready_fixture(fixture: BenchFixture) -> ReadyFixtureContext {
 
     let mut state = EngineState::default();
     let open_result = state
-        .open_module(ModuleOpenParams { path })
+        .open_module(ModuleOpenParams {
+            path,
+            pdb_path: None,
+        })
         .expect("module should open");
     let module_id = open_result.module_id;
     let entry_va = open_result.entry_va;
@@ -155,6 +158,7 @@ fn bench_module_open_and_analyze(c: &mut Criterion) {
                     let open_result = state
                         .open_module(ModuleOpenParams {
                             path: black_box(path.clone()),
+                            pdb_path: None,
                         })
                         .expect("module should open");
 

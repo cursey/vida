@@ -124,7 +124,8 @@ impl AnalysisProgressPhase {
 #[derive(Debug, Clone)]
 pub(crate) struct AnalysisProgressUpdate {
     pub(crate) phase: AnalysisProgressPhase,
-    pub(crate) discovered_functions: Arc<Vec<FunctionSeedEntry>>,
+    pub(crate) discovered_function_count: usize,
+    pub(crate) discovered_functions: Option<Arc<Vec<FunctionSeedEntry>>>,
     pub(crate) total_function_count: Option<usize>,
     pub(crate) analyzed_function_count: Option<usize>,
 }
@@ -233,7 +234,8 @@ where
     analysis_order.sort_by_key(|seed| (seed_priority(seed.kind), seed.start_rva));
     on_progress(AnalysisProgressUpdate {
         phase: AnalysisProgressPhase::AnalyzingFunctions,
-        discovered_functions: Arc::clone(&functions),
+        discovered_function_count: functions.len(),
+        discovered_functions: Some(Arc::clone(&functions)),
         total_function_count: Some(functions.len()),
         analyzed_function_count: Some(0),
     });
@@ -265,7 +267,8 @@ where
 
             on_progress(AnalysisProgressUpdate {
                 phase: AnalysisProgressPhase::AnalyzingFunctions,
-                discovered_functions: Arc::clone(&functions),
+                discovered_function_count: functions.len(),
+                discovered_functions: Some(Arc::clone(&functions)),
                 total_function_count: Some(functions.len()),
                 analyzed_function_count: Some(index + 1),
             });
@@ -282,7 +285,8 @@ where
 
     on_progress(AnalysisProgressUpdate {
         phase: AnalysisProgressPhase::FinalizingLinearView,
-        discovered_functions: Arc::clone(&functions),
+        discovered_function_count: functions.len(),
+        discovered_functions: Some(Arc::clone(&functions)),
         total_function_count: Some(functions.len()),
         analyzed_function_count: Some(functions.len()),
     });
@@ -750,9 +754,13 @@ where
     emit_discovery_progress(&ordered, on_progress);
 
     for pdb_function in
-        discover_pdb_function_seeds(module_path, pe, manual_pdb_path).map_err(|error| {
-            EngineError::InvalidPdb(error.message_for_path(manual_pdb_path.unwrap_or(module_path)))
-        })?
+        discover_pdb_function_seeds(module_path, pe, section_lookup, manual_pdb_path).map_err(
+            |error| {
+                EngineError::InvalidPdb(
+                    error.message_for_path(manual_pdb_path.unwrap_or(module_path)),
+                )
+            },
+        )?
     {
         if !section_lookup.is_executable_rva(pdb_function.start_rva) {
             continue;
@@ -787,7 +795,8 @@ where
 {
     on_progress(AnalysisProgressUpdate {
         phase: AnalysisProgressPhase::DiscoveringFunctions,
-        discovered_functions: Arc::new(collect_discovered_function_entries(ordered)),
+        discovered_function_count: ordered.len(),
+        discovered_functions: None,
         total_function_count: None,
         analyzed_function_count: None,
     });

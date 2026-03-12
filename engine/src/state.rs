@@ -75,6 +75,7 @@ struct BackgroundAnalysisHandle {
 struct BackgroundAnalysisState {
     lifecycle_state: AnalysisLifecycleState,
     message: String,
+    discovered_function_count: usize,
     discovered_functions: Arc<Vec<FunctionSeedEntry>>,
     total_function_count: Option<usize>,
     analyzed_function_count: Option<usize>,
@@ -113,6 +114,7 @@ impl BackgroundAnalysisState {
         Self {
             lifecycle_state: AnalysisLifecycleState::Queued,
             message: "Queued analysis...".to_owned(),
+            discovered_function_count: 0,
             discovered_functions: Arc::new(Vec::new()),
             total_function_count: None,
             analyzed_function_count: None,
@@ -133,11 +135,14 @@ impl BackgroundAnalysisState {
             }
         };
         self.message = progress.phase.message(
-            progress.discovered_functions.len(),
+            progress.discovered_function_count,
             progress.analyzed_function_count,
             progress.total_function_count,
         );
-        self.discovered_functions = progress.discovered_functions;
+        self.discovered_function_count = progress.discovered_function_count;
+        if let Some(discovered_functions) = progress.discovered_functions {
+            self.discovered_functions = discovered_functions;
+        }
         self.total_function_count = progress.total_function_count;
         self.analyzed_function_count = progress.analyzed_function_count;
         self.failure_message = None;
@@ -150,6 +155,7 @@ impl BackgroundAnalysisState {
     ) {
         self.lifecycle_state = AnalysisLifecycleState::Ready;
         self.message = "Analysis ready.".to_owned();
+        self.discovered_function_count = analysis.functions.len();
         self.total_function_count = Some(analysis.functions.len());
         self.analyzed_function_count = Some(analysis.functions.len());
         self.discovered_functions = Arc::new(analysis.functions.clone());
@@ -268,7 +274,7 @@ impl EngineState {
         Ok(ModuleAnalysisStatusResult {
             state: snapshot.lifecycle_state.state_name(),
             message: snapshot.message.clone(),
-            discovered_function_count: snapshot.discovered_functions.len(),
+            discovered_function_count: snapshot.discovered_function_count,
             total_function_count: snapshot.total_function_count,
             analyzed_function_count: snapshot.analyzed_function_count,
         })
@@ -1112,13 +1118,52 @@ fn find_instruction_index(
 #[cfg(test)]
 mod tests {
     use super::{
-        BaseMemoryRegion, MEMORY_OVERVIEW_TARGET_SLICE_COUNT, MemoryRangeSpec,
-        build_memory_overview_segments, build_memory_overview_slices,
+        BackgroundAnalysisState, BaseMemoryRegion, MEMORY_OVERVIEW_TARGET_SLICE_COUNT,
+        MemoryRangeSpec, build_memory_overview_segments, build_memory_overview_slices,
         merge_instruction_owner_ranges,
     };
-    use crate::analysis::InstructionOwnerRange;
+    use crate::analysis::{
+        AnalysisProgressPhase, AnalysisProgressUpdate, FunctionSeedEntry, InstructionOwnerRange,
+    };
     use crate::api::MemoryOverviewSliceKind;
     use std::collections::BTreeMap;
+    use std::sync::Arc;
+
+    #[test]
+    fn background_analysis_progress_can_track_counts_without_snapshot_clones() {
+        let mut state = BackgroundAnalysisState::queued();
+
+        state.update_progress(AnalysisProgressUpdate {
+            phase: AnalysisProgressPhase::DiscoveringFunctions,
+            discovered_function_count: 3,
+            discovered_functions: None,
+            total_function_count: None,
+            analyzed_function_count: None,
+        });
+
+        assert_eq!(state.discovered_function_count, 3);
+        assert!(state.discovered_functions.is_empty());
+
+        let discovered_functions = Arc::new(vec![FunctionSeedEntry {
+            start_rva: 0x1000,
+            name: "sub_140001000".to_owned(),
+            kind: "entry",
+        }]);
+
+        state.update_progress(AnalysisProgressUpdate {
+            phase: AnalysisProgressPhase::AnalyzingFunctions,
+            discovered_function_count: 3,
+            discovered_functions: Some(Arc::clone(&discovered_functions)),
+            total_function_count: Some(3),
+            analyzed_function_count: Some(1),
+        });
+
+        assert_eq!(state.discovered_function_count, 3);
+        assert!(Arc::ptr_eq(
+            &state.discovered_functions,
+            &discovered_functions
+        ));
+    }
 
     #[test]
     fn merge_instruction_owner_ranges_merges_sorted_instruction_ranges() {

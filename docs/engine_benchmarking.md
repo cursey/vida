@@ -125,6 +125,9 @@ The repository's current recorded optimization checkpoints are:
 
 | Date | Fixture Set | Bench | Baseline | Current | Delta | Change driver |
 | --- | --- | --- | --- | --- | --- | --- |
+| 2026-03-12 | all | `engine/cold/module_open_and_analyze/minimal_with_pdb` | `[18.022 ms, 18.131 ms, 18.272 ms]` | `[18.000 ms, 18.093 ms, 18.186 ms]` | `[-1.7143%, -0.6040%, +0.5000%]` | `engine/src/analysis.rs`, `engine/src/pdb_symbols.rs`, `engine/src/state.rs` |
+| 2026-03-12 | all | `engine/cold/module_open_and_analyze/minimal_without_pdb` | `[18.155 ms, 18.260 ms, 18.366 ms]` | `[18.038 ms, 18.178 ms, 18.300 ms]` | `[-2.7664%, -1.2730%, +0.3308%]` | `engine/src/analysis.rs`, `engine/src/pdb_symbols.rs`, `engine/src/state.rs` |
+| 2026-03-12 | all | `engine/cold/module_open_and_analyze/overlay_4mb_without_pdb` | `[19.419 ms, 19.764 ms, 20.144 ms]` | `[18.854 ms, 18.996 ms, 19.138 ms]` | `[-5.1482%, -3.1204%, -1.1262%]` | `engine/src/analysis.rs`, `engine/src/pdb_symbols.rs`, `engine/src/state.rs` |
 | 2026-03-09 | all | `engine/cold/module_open_and_analyze/minimal_with_pdb` | `[29.259 ms, 29.435 ms, 29.603 ms]` | `[24.564 ms, 24.673 ms, 24.785 ms]` | `[-17.145%, -16.298%, -15.410%]` | `engine/src/analysis.rs`, `engine/src/state.rs` |
 | 2026-03-09 | all | `engine/warm/function_graph_by_va/minimal_with_pdb` | `[59.136 us, 59.471 us, 59.849 us]` | `[54.395 us, 54.474 us, 54.562 us]` | `[-9.2901%, -8.5105%, -7.8200%]` | `engine/src/analysis.rs`, `engine/src/state.rs` |
 | 2026-03-09 | all | `engine/warm/function_graph_by_va/minimal_without_pdb` | `[61.363 us, 61.866 us, 62.502 us]` | `[55.556 us, 55.664 us, 55.789 us]` | `[-10.712%, -9.7972%, -8.9291%]` | `engine/src/analysis.rs`, `engine/src/state.rs` |
@@ -144,6 +147,39 @@ The repository's current recorded optimization checkpoints are:
 | 2026-03-07 | quick | `engine/warm/linear_rows/minimal_with_pdb` | ~26.41 us | ~24.63 us | ~-6.8% | `engine/src/analysis.rs` |
 | 2026-03-07 | quick | `engine/warm/function_graph_by_va/minimal_with_pdb` | ~8.97 us | ~9.00 us | ~+0.3% | `engine/src/state.rs` |
 | 2026-03-07 | quick | `engine/warm/linear_disassembly/minimal_with_pdb` | ~0.800 us | ~0.791 us | ~-1.1% | `engine/src/analysis.rs`, `engine/src/state.rs` |
+
+## 2026-03-12 - Reduce Initial Function Discovery Churn
+
+Date: 2026-03-12
+Commit: workspace state after removing discovery-phase function-list snapshot clones, reusing section lookups for PDB symbol filtering, and skipping duplicate symbol-name normalization for lower-priority RVAs
+Command: `just engine-bench-compare function-discovery-baseline-2026-03-12 all`
+Fixture Set: `all`
+Machine/Profile: Windows, Criterion release bench profile
+Criterion Artifacts: `engine/target/criterion/engine_cold_module_open_and_analyze/<fixture>/{function-discovery-baseline-2026-03-12,new,change}/`
+
+Bench: `engine/cold/module_open_and_analyze/minimal_with_pdb`
+Baseline: `[18.022 ms, 18.131 ms, 18.272 ms]`
+Current: `[18.000 ms, 18.093 ms, 18.186 ms]`
+Delta: `[-1.7143%, -0.6040%, +0.5000%]`
+Change driver: discovery progress in `engine/src/analysis.rs` now reports counts until the final seed set is fixed, while `engine/src/pdb_symbols.rs` reuses `SectionLookup` and avoids duplicate name work for RVAs that already have an equal-or-stronger symbol priority; `engine/src/state.rs` tracks discovery counts separately from the final function snapshot
+Evidence: `function-discovery-baseline-2026-03-12`; `engine/target/criterion/engine_cold_module_open_and_analyze/minimal_with_pdb/function-discovery-baseline-2026-03-12/`; `engine/target/criterion/engine_cold_module_open_and_analyze/minimal_with_pdb/new/`; `engine/target/criterion/engine_cold_module_open_and_analyze/minimal_with_pdb/change/`
+Notes: no statistically significant cold-path change on the small checked-in PDB fixture, which suggests this optimization mainly targets larger symbol-heavy discovery workloads instead of the minimal smoke fixture
+
+Bench: `engine/cold/module_open_and_analyze/minimal_without_pdb`
+Baseline: `[18.155 ms, 18.260 ms, 18.366 ms]`
+Current: `[18.038 ms, 18.178 ms, 18.300 ms]`
+Delta: `[-2.7664%, -1.2730%, +0.3308%]`
+Change driver: the same discovery-progress snapshot change in `engine/src/analysis.rs` and `engine/src/state.rs`
+Evidence: `function-discovery-baseline-2026-03-12`; `engine/target/criterion/engine_cold_module_open_and_analyze/minimal_without_pdb/function-discovery-baseline-2026-03-12/`; `engine/target/criterion/engine_cold_module_open_and_analyze/minimal_without_pdb/new/`; `engine/target/criterion/engine_cold_module_open_and_analyze/minimal_without_pdb/change/`
+Notes: no statistically significant change on the no-PDB fixture either, which keeps the discovery-progress refactor effectively neutral outside symbol-heavy cases
+
+Bench: `engine/cold/module_open_and_analyze/overlay_4mb_without_pdb`
+Baseline: `[19.419 ms, 19.764 ms, 20.144 ms]`
+Current: `[18.854 ms, 18.996 ms, 19.138 ms]`
+Delta: `[-5.1482%, -3.1204%, -1.1262%]`
+Change driver: same discovery-progress snapshot reduction, measured on the larger cold-load fixture to verify the initial-load path stays at least as fast when file-open overhead is higher
+Evidence: `function-discovery-baseline-2026-03-12`; `engine/target/criterion/engine_cold_module_open_and_analyze/overlay_4mb_without_pdb/function-discovery-baseline-2026-03-12/`; `engine/target/criterion/engine_cold_module_open_and_analyze/overlay_4mb_without_pdb/new/`; `engine/target/criterion/engine_cold_module_open_and_analyze/overlay_4mb_without_pdb/change/`
+Notes: this was the only cold fixture in the compare run with a statistically significant improvement
 
 ## 2026-03-09 - Simplify Graph Cache Boundaries and Xref Name Lookup
 
@@ -325,6 +361,15 @@ Evidence: `engine/target/criterion/engine_warm_function_graph_by_va/minimal_with
 Notes: graph materialization shows the same intentional warm-path tradeoff as linear rows, but avoiding unused byte formatting cuts a large share of the intermediate regression while keeping formatting consistency covered by engine integration tests
 
 ## Saved Baseline Checkpoints
+
+### 2026-03-12 - `function-discovery-baseline-2026-03-12`
+
+- Commit: workspace state immediately before reducing discovery-phase cloning and tightening PDB symbol filtering
+- Command: `just engine-bench-save function-discovery-baseline-2026-03-12 all`
+- Fixture Set: `all`
+- Machine/Profile: Windows, Criterion release bench profile
+- Criterion Artifacts: `engine/target/criterion/engine_*/<fixture>/function-discovery-baseline-2026-03-12/`
+- Notes: captured after restoring the benchmark harness to pass `ModuleOpenParams.pdb_path`, so later compares stay compatible with the current engine API surface
 
 ### 2026-03-09 - `simple-lazy-boundary-baseline-2026-03-09`
 
