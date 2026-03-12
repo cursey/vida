@@ -26,6 +26,22 @@ vi.mock("@/platform/desktop-api", () => ({
 function buildRows(): LinearRow[] {
   return [
     {
+      kind: "comment",
+      address: "0x140001000",
+      bytes: "",
+      mnemonic: "",
+      operands: "",
+      text: "",
+    },
+    {
+      kind: "comment",
+      address: "0x140001000",
+      bytes: "",
+      mnemonic: "",
+      operands: "",
+      text: "sub_140001000",
+    },
+    {
       kind: "instruction",
       address: "0x140001000",
       bytes: "eb 1e",
@@ -67,6 +83,7 @@ describe("App graph view", () => {
 
   function installMockApi(
     getFunctionGraphByVa: DesktopApi["getFunctionGraphByVa"],
+    findLinearRowByVa: DesktopApi["findLinearRowByVa"] | null = null,
   ): DesktopApi {
     const rows = buildRows();
     const rowIndexByVa = new Map(
@@ -119,9 +136,11 @@ describe("App graph view", () => {
       getLinearRows: vi.fn().mockResolvedValue({
         rows,
       }),
-      findLinearRowByVa: vi.fn().mockImplementation(async ({ va }) => ({
-        rowIndex: rowIndexByVa.get(va) ?? 0,
-      })),
+      findLinearRowByVa:
+        findLinearRowByVa ??
+        vi.fn().mockImplementation(async ({ va }) => ({
+          rowIndex: rowIndexByVa.get(va) ?? 0,
+        })),
     });
 
     return mockDesktopApi;
@@ -209,6 +228,56 @@ describe("App graph view", () => {
     await waitFor(() => {
       expect(screen.getByText("Disassembly")).toBeInTheDocument();
       expect(screen.queryByText("Graph View")).not.toBeInTheDocument();
+    });
+  });
+
+  it("opens graph view from a selected function comment row", async () => {
+    const getFunctionGraphByVa = vi.fn().mockResolvedValue({
+      functionStartVa: "0x140001000",
+      functionName: "sub_140001000",
+      focusBlockId: "b_1000",
+      blocks: [
+        {
+          id: "b_1000",
+          startVa: "0x140001000",
+          endVa: "0x140001003",
+          isEntry: true,
+          isExit: true,
+          instructions: [
+            {
+              address: "0x140001000",
+              mnemonic: "push",
+              operands: "rbp",
+              instructionCategory: "stack",
+            },
+          ],
+        },
+      ],
+      edges: [],
+    });
+    installMockApi(
+      getFunctionGraphByVa,
+      vi.fn().mockResolvedValue({ rowIndex: 1 }),
+    );
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(menuOpenHandler).toBeTypeOf("function");
+    });
+
+    await act(async () => {
+      menuOpenHandler?.();
+    });
+
+    fireEvent.keyDown(window, { key: " ", code: "Space" });
+
+    await waitFor(() => {
+      expect(screen.getByText("Graph View")).toBeInTheDocument();
+      expect(getFunctionGraphByVa).toHaveBeenCalledWith({
+        moduleId: "m1",
+        va: "0x140001000",
+      });
     });
   });
 
@@ -805,7 +874,7 @@ describe("App graph view", () => {
     await waitFor(() => {
       expect(
         screen.getByText(
-          "The highlighted instruction does not belong to a discovered function.",
+          "The highlighted row does not belong to a discovered function.",
         ),
       ).toBeInTheDocument();
       expect(screen.getByText("Disassembly")).toBeInTheDocument();

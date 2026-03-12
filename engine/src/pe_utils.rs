@@ -75,6 +75,17 @@ impl SectionLookup {
             0
         }
     }
+
+    #[cfg(test)]
+    pub(crate) fn from_test_sections(
+        sections: Vec<SectionSlice>,
+        size_of_headers: u64,
+    ) -> SectionLookup {
+        SectionLookup {
+            sections,
+            size_of_headers,
+        }
+    }
 }
 
 pub(crate) fn build_section_lookup(pe: &PE<'_>) -> SectionLookup {

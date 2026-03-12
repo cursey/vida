@@ -195,6 +195,7 @@ export function DisassemblyPanel({
                 }
 
                 const operandTarget = operandTargetForRow(row);
+                const isCommentRow = row.kind === "comment";
 
                 return (
                   <div
@@ -203,6 +204,7 @@ export function DisassemblyPanel({
                       "absolute left-0 grid h-[var(--cell-height)] w-full items-center text-xs hover:bg-accent",
                       row.kind === "gap" &&
                         "bg-secondary/45 text-secondary-foreground italic",
+                      row.kind === "comment" && "text-muted-foreground italic",
                       selectedRowIndex === logicalRowIndex &&
                         "bg-primary/16 shadow-[inset_0_0_0_1px_oklch(var(--primary)/0.35)] hover:bg-primary/16",
                     )}
@@ -222,49 +224,69 @@ export function DisassemblyPanel({
                     }}
                   >
                     <div className={cn(cellClassName, "text-muted-foreground")}>
-                      {findSectionName(row.address)}
+                      {isCommentRow ? "" : findSectionName(row.address)}
                     </div>
                     <div className={cellClassName}>
-                      <code>{row.address}</code>
+                      {isCommentRow ? null : <code>{row.address}</code>}
                     </div>
                     <div className={cellClassName}>
-                      <code>{row.bytes}</code>
+                      {isCommentRow ? null : <code>{row.bytes}</code>}
                     </div>
-                    <div className={cellClassName}>
-                      <span
-                        className={
-                          mnemonicClassNames[row.instructionCategory ?? "other"]
-                        }
+                    {isCommentRow ? (
+                      <div
+                        className={cn(
+                          cellClassName,
+                          "col-span-2 text-muted-foreground",
+                        )}
+                        style={{ gridColumn: "4 / 6" }}
                       >
-                        {row.mnemonic}
-                      </span>
-                      {row.operands ? (
-                        operandTarget ? (
-                          <a
-                            className="ml-[1ch] min-w-0 truncate cursor-pointer text-primary underline decoration-primary/45 underline-offset-2 hover:decoration-primary focus-visible:outline focus-visible:outline-1 focus-visible:outline-ring focus-visible:outline-offset-1"
-                            href={`#${operandTarget}`}
-                            onClick={(event) => {
-                              event.preventDefault();
-                              event.stopPropagation();
-                              void onNavigateToOperandTarget(
-                                row.address,
-                                operandTarget,
-                              );
-                            }}
-                            onPointerDown={(event) => {
-                              event.stopPropagation();
-                            }}
+                        <span>{row.text}</span>
+                      </div>
+                    ) : (
+                      <>
+                        <div className={cellClassName}>
+                          <span
+                            className={
+                              mnemonicClassNames[
+                                row.instructionCategory ?? "other"
+                              ]
+                            }
                           >
-                            {row.operands}
-                          </a>
-                        ) : (
-                          <span className="ml-[1ch]">{row.operands}</span>
-                        )
-                      ) : null}
-                    </div>
-                    <div className={cn(cellClassName, "text-muted-foreground")}>
-                      {row.comment ? <span>{`; ${row.comment}`}</span> : null}
-                    </div>
+                            {row.mnemonic}
+                          </span>
+                          {row.operands ? (
+                            operandTarget ? (
+                              <a
+                                className="ml-[1ch] min-w-0 truncate cursor-pointer text-primary underline decoration-primary/45 underline-offset-2 hover:decoration-primary focus-visible:outline focus-visible:outline-1 focus-visible:outline-ring focus-visible:outline-offset-1"
+                                href={`#${operandTarget}`}
+                                onClick={(event) => {
+                                  event.preventDefault();
+                                  event.stopPropagation();
+                                  void onNavigateToOperandTarget(
+                                    row.address,
+                                    operandTarget,
+                                  );
+                                }}
+                                onPointerDown={(event) => {
+                                  event.stopPropagation();
+                                }}
+                              >
+                                {row.operands}
+                              </a>
+                            ) : (
+                              <span className="ml-[1ch]">{row.operands}</span>
+                            )
+                          ) : null}
+                        </div>
+                        <div
+                          className={cn(cellClassName, "text-muted-foreground")}
+                        >
+                          {row.comment ? (
+                            <span>{`; ${row.comment}`}</span>
+                          ) : null}
+                        </div>
+                      </>
+                    )}
                   </div>
                 );
               })}

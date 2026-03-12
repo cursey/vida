@@ -26,6 +26,22 @@ vi.mock("@/platform/desktop-api", () => ({
 function buildRows(): LinearRow[] {
   return [
     {
+      kind: "comment",
+      address: "0x140001000",
+      bytes: "",
+      mnemonic: "",
+      operands: "",
+      text: "",
+    },
+    {
+      kind: "comment",
+      address: "0x140001000",
+      bytes: "",
+      mnemonic: "",
+      operands: "",
+      text: "sub_140001000",
+    },
+    {
       kind: "instruction",
       address: "0x140001000",
       bytes: "48 8b 05 39 20 00 00",
@@ -44,8 +60,10 @@ describe("App xrefs modal", () => {
     getXrefsToVa: DesktopApi["getXrefsToVa"],
     findLinearRowByVa: DesktopApi["findLinearRowByVa"] = vi
       .fn()
-      .mockResolvedValue({ rowIndex: 0 }),
+      .mockResolvedValue({ rowIndex: 2 }),
   ): DesktopApi {
+    const rows = buildRows();
+
     mockDesktopApi = createMockDesktopApi({
       pickExecutable: vi.fn().mockResolvedValue("C:\\fixtures\\sample.exe"),
       onMenuOpenExecutable: vi.fn((callback: () => void) => {
@@ -81,14 +99,14 @@ describe("App xrefs modal", () => {
         ],
       }),
       getLinearViewInfo: vi.fn().mockResolvedValue({
-        rowCount: 1,
+        rowCount: rows.length,
         minVa: "0x140001000",
         maxVa: "0x140001000",
         rowHeight: 24,
         dataGroupSize: 16,
       }),
       getLinearRows: vi.fn().mockResolvedValue({
-        rows: buildRows(),
+        rows,
       }),
       findLinearRowByVa,
       getXrefsToVa,
@@ -119,7 +137,7 @@ describe("App xrefs modal", () => {
   });
 
   it("opens the xrefs modal for the highlighted VA and navigates on click", async () => {
-    const findLinearRowByVa = vi.fn().mockResolvedValue({ rowIndex: 0 });
+    const findLinearRowByVa = vi.fn().mockResolvedValue({ rowIndex: 2 });
     const getXrefsToVa = vi.fn().mockResolvedValue({
       targetVa: "0x140001000",
       xrefs: [
@@ -170,6 +188,33 @@ describe("App xrefs modal", () => {
       expect(
         screen.queryByText("Xrefs To 0x140001000"),
       ).not.toBeInTheDocument();
+    });
+  });
+
+  it("uses the selected function comment row address when opening xrefs", async () => {
+    const getXrefsToVa = vi.fn().mockResolvedValue({
+      targetVa: "0x140001000",
+      xrefs: [],
+    });
+    installMockApi(getXrefsToVa, vi.fn().mockResolvedValue({ rowIndex: 1 }));
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(menuOpenHandler).toBeTypeOf("function");
+    });
+
+    await act(async () => {
+      menuOpenHandler?.();
+    });
+
+    fireEvent.keyDown(window, { key: "x", code: "KeyX" });
+
+    await waitFor(() => {
+      expect(getXrefsToVa).toHaveBeenCalledWith({
+        moduleId: "m1",
+        va: "0x140001000",
+      });
     });
   });
 

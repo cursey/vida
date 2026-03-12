@@ -1,5 +1,4 @@
-use std::collections::BTreeMap;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fmt::Write as FmtWrite;
 
 use crate::api::{InstructionCategory, LinearViewRow, XrefKind, XrefTargetKind};
@@ -54,6 +53,7 @@ struct LinearSegment {
 #[derive(Debug)]
 enum LinearSegmentKind {
     Instructions(InstructionSegment),
+    FunctionHeader(FunctionHeaderSegment),
     Data,
     Gap,
 }
@@ -63,15 +63,39 @@ struct InstructionSegment {
     rows: Vec<AnalyzedInstructionRow>,
 }
 
+#[derive(Debug)]
+struct FunctionHeaderSegment {
+    function_start_rva: u64,
+}
+
 #[derive(Debug, Clone, Copy)]
 struct RangeSpec {
     start: u64,
     end: u64,
 }
 
+fn append_segment(
+    segments: &mut Vec<LinearSegment>,
+    row_cursor: &mut u64,
+    start_rva: u64,
+    end_rva: u64,
+    row_count: u64,
+    kind: LinearSegmentKind,
+) {
+    segments.push(LinearSegment {
+        start_row: *row_cursor,
+        row_count,
+        start_rva,
+        end_rva,
+        kind,
+    });
+    *row_cursor += row_count;
+}
+
 pub(crate) fn build_linear_view(
     section_lookup: &SectionLookup,
     instruction_rows: &BTreeMap<u64, AnalyzedInstructionRow>,
+    function_starts: &BTreeSet<u64>,
 ) -> Result<LinearView, EngineError> {
     let mut ranges = collect_mapped_ranges(section_lookup);
     if ranges.is_empty() {
@@ -90,14 +114,14 @@ pub(crate) fn build_linear_view(
 
     for range in normalized {
         if previous_end < range.start {
-            segments.push(LinearSegment {
-                start_row: row_cursor,
-                row_count: 1,
-                start_rva: previous_end,
-                end_rva: range.start,
-                kind: LinearSegmentKind::Gap,
-            });
-            row_cursor += 1;
+            append_segment(
+                &mut segments,
+                &mut row_cursor,
+                previous_end,
+                range.start,
+                1,
+                LinearSegmentKind::Gap,
+            );
         }
 
         if range.end <= range.start {
@@ -114,14 +138,14 @@ pub(crate) fn build_linear_view(
             else {
                 let row_count = (range.end - cursor).div_ceil(DATA_GROUP_SIZE);
                 if row_count > 0 {
-                    segments.push(LinearSegment {
-                        start_row: row_cursor,
+                    append_segment(
+                        &mut segments,
+                        &mut row_cursor,
+                        cursor,
+                        range.end,
                         row_count,
-                        start_rva: cursor,
-                        end_rva: range.end,
-                        kind: LinearSegmentKind::Data,
-                    });
-                    row_cursor += row_count;
+                        LinearSegmentKind::Data,
+                    );
                 }
                 break;
             };
@@ -130,17 +154,30 @@ pub(crate) fn build_linear_view(
                 let data_end = next_instruction.start_rva.min(range.end);
                 let row_count = (data_end - cursor).div_ceil(DATA_GROUP_SIZE);
                 if row_count > 0 {
-                    segments.push(LinearSegment {
-                        start_row: row_cursor,
+                    append_segment(
+                        &mut segments,
+                        &mut row_cursor,
+                        cursor,
+                        data_end,
                         row_count,
-                        start_rva: cursor,
-                        end_rva: data_end,
-                        kind: LinearSegmentKind::Data,
-                    });
-                    row_cursor += row_count;
+                        LinearSegmentKind::Data,
+                    );
                 }
                 cursor = data_end;
                 continue;
+            }
+
+            if function_starts.contains(&next_instruction.start_rva) {
+                append_segment(
+                    &mut segments,
+                    &mut row_cursor,
+                    next_instruction.start_rva,
+                    next_instruction.start_rva,
+                    2,
+                    LinearSegmentKind::FunctionHeader(FunctionHeaderSegment {
+                        function_start_rva: next_instruction.start_rva,
+                    }),
+                );
             }
 
             let mut rows = Vec::new();
@@ -152,6 +189,9 @@ pub(crate) fn build_linear_view(
                 if row.start_rva != next_cursor {
                     break;
                 }
+                if !rows.is_empty() && function_starts.contains(&row.start_rva) {
+                    break;
+                }
                 rows.push(row.clone());
                 next_cursor = row.end_rva();
             }
@@ -159,14 +199,14 @@ pub(crate) fn build_linear_view(
             if rows.is_empty() {
                 let data_end = cursor.saturating_add(DATA_GROUP_SIZE).min(range.end);
                 let row_count = (data_end - cursor).div_ceil(DATA_GROUP_SIZE);
-                segments.push(LinearSegment {
-                    start_row: row_cursor,
+                append_segment(
+                    &mut segments,
+                    &mut row_cursor,
+                    cursor,
+                    data_end,
                     row_count,
-                    start_rva: cursor,
-                    end_rva: data_end,
-                    kind: LinearSegmentKind::Data,
-                });
-                row_cursor += row_count;
+                    LinearSegmentKind::Data,
+                );
                 cursor = data_end;
                 continue;
             }
@@ -177,14 +217,14 @@ pub(crate) fn build_linear_view(
                 .map(AnalyzedInstructionRow::end_rva)
                 .unwrap_or(segment_start);
             let row_count = rows.len() as u64;
-            segments.push(LinearSegment {
-                start_row: row_cursor,
+            append_segment(
+                &mut segments,
+                &mut row_cursor,
+                segment_start,
+                segment_end,
                 row_count,
-                start_rva: segment_start,
-                end_rva: segment_end,
-                kind: LinearSegmentKind::Instructions(InstructionSegment { rows }),
-            });
-            row_cursor += row_count;
+                LinearSegmentKind::Instructions(InstructionSegment { rows }),
+            );
             cursor = segment_end;
         }
 
@@ -277,6 +317,7 @@ pub(crate) fn find_row_by_rva(view: &LinearView, rva: u64) -> Result<u64, Engine
             let row_offset = (rva - segment.start_rva) / DATA_GROUP_SIZE;
             Ok(segment.start_row + row_offset)
         }
+        LinearSegmentKind::FunctionHeader(_) => Err(EngineError::InvalidAddress),
         LinearSegmentKind::Instructions(instructions) => {
             let index = instructions
                 .rows
@@ -321,6 +362,7 @@ pub(crate) fn materialize_linear_row(
                     to_hex(image_base + segment.end_rva),
                     gap_size
                 )),
+                text: None,
             })
         }
         LinearSegmentKind::Data => {
@@ -352,6 +394,36 @@ pub(crate) fn materialize_linear_row(
                 branch_target: None,
                 call_target: None,
                 comment: None,
+                text: None,
+            })
+        }
+        LinearSegmentKind::FunctionHeader(header) => {
+            let function_name = function_names_by_start_rva
+                .get(&header.function_start_rva)
+                .ok_or_else(|| {
+                    EngineError::Internal(format!(
+                        "Missing function name for linear header at RVA {:X}",
+                        header.function_start_rva
+                    ))
+                })?;
+
+            let text = if row_offset == 0 {
+                String::new()
+            } else {
+                function_name.clone()
+            };
+
+            Ok(LinearViewRow {
+                kind: "comment",
+                address: to_hex(image_base + header.function_start_rva),
+                bytes: String::new(),
+                mnemonic: String::new(),
+                operands: String::new(),
+                instruction_category: None,
+                branch_target: None,
+                call_target: None,
+                comment: None,
+                text: Some(text),
             })
         }
         LinearSegmentKind::Instructions(instructions) => {
@@ -382,7 +454,168 @@ pub(crate) fn materialize_linear_row(
                     .call_target_rva
                     .map(|target| to_hex(image_base + target)),
                 comment: None,
+                text: None,
             })
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::pe_utils::{SectionLookup, SectionSlice};
+
+    fn test_section_lookup(start_rva: u64, end_rva: u64) -> SectionLookup {
+        SectionLookup::from_test_sections(
+            vec![SectionSlice {
+                start_rva,
+                end_rva,
+                readable: true,
+                writable: false,
+                executable: true,
+                pointer_to_raw_data: 0,
+                size_of_raw_data: end_rva - start_rva,
+            }],
+            0,
+        )
+    }
+
+    fn instruction_row(start_rva: u64) -> AnalyzedInstructionRow {
+        AnalyzedInstructionRow {
+            start_rva,
+            len: 1,
+            instruction_category: InstructionCategory::Return,
+            branch_target_rva: None,
+            call_target_rva: None,
+            xrefs: Vec::new(),
+        }
+    }
+
+    fn function_names(starts: &[u64]) -> HashMap<u64, String> {
+        starts
+            .iter()
+            .copied()
+            .map(|start| (start, format!("sub_{start:04x}")))
+            .collect()
+    }
+
+    #[test]
+    fn materialized_function_headers_share_function_start_address_and_lookup_skips_them() {
+        let section_lookup = test_section_lookup(0x1000, 0x1002);
+        let instruction_rows = BTreeMap::from([
+            (0x1000, instruction_row(0x1000)),
+            (0x1001, instruction_row(0x1001)),
+        ]);
+        let function_starts = BTreeSet::from([0x1000]);
+        let function_names_by_start_rva = function_names(&[0x1000]);
+        let bytes = [0xC3, 0xC3];
+
+        let view = build_linear_view(&section_lookup, &instruction_rows, &function_starts)
+            .expect("linear view should build");
+
+        assert_eq!(view.row_count, 4);
+        assert_eq!(
+            find_row_by_rva(&view, 0x1000).expect("lookup should skip headers"),
+            2
+        );
+
+        let blank_header = materialize_linear_row(
+            &view,
+            &bytes,
+            &section_lookup,
+            0x140000000,
+            0,
+            &function_names_by_start_rva,
+        )
+        .expect("blank header row should materialize");
+        assert_eq!(blank_header.kind, "comment");
+        assert_eq!(blank_header.address, "0x140001000");
+        assert_eq!(blank_header.text.as_deref(), Some(""));
+
+        let named_header = materialize_linear_row(
+            &view,
+            &bytes,
+            &section_lookup,
+            0x140000000,
+            1,
+            &function_names_by_start_rva,
+        )
+        .expect("named header row should materialize");
+        assert_eq!(named_header.kind, "comment");
+        assert_eq!(named_header.address, "0x140001000");
+        assert_eq!(named_header.text.as_deref(), Some("sub_1000"));
+
+        let first_instruction = materialize_linear_row(
+            &view,
+            &bytes,
+            &section_lookup,
+            0x140000000,
+            2,
+            &function_names_by_start_rva,
+        )
+        .expect("instruction row should materialize");
+        assert_eq!(first_instruction.kind, "instruction");
+        assert_eq!(first_instruction.address, "0x140001000");
+        assert_eq!(first_instruction.text, None);
+    }
+
+    #[test]
+    fn build_linear_view_splits_contiguous_instructions_at_materialized_function_boundaries() {
+        let section_lookup = test_section_lookup(0x1000, 0x1002);
+        let instruction_rows = BTreeMap::from([
+            (0x1000, instruction_row(0x1000)),
+            (0x1001, instruction_row(0x1001)),
+        ]);
+        let function_starts = BTreeSet::from([0x1000, 0x1001]);
+        let function_names_by_start_rva = function_names(&[0x1000, 0x1001]);
+        let bytes = [0xC3, 0xC3];
+
+        let view = build_linear_view(&section_lookup, &instruction_rows, &function_starts)
+            .expect("linear view should build");
+
+        assert_eq!(view.row_count, 6);
+        assert_eq!(
+            find_row_by_rva(&view, 0x1001)
+                .expect("lookup should land on second function instruction"),
+            5
+        );
+
+        let second_blank_header = materialize_linear_row(
+            &view,
+            &bytes,
+            &section_lookup,
+            0x140000000,
+            3,
+            &function_names_by_start_rva,
+        )
+        .expect("second blank header should materialize");
+        assert_eq!(second_blank_header.kind, "comment");
+        assert_eq!(second_blank_header.address, "0x140001001");
+        assert_eq!(second_blank_header.text.as_deref(), Some(""));
+
+        let second_named_header = materialize_linear_row(
+            &view,
+            &bytes,
+            &section_lookup,
+            0x140000000,
+            4,
+            &function_names_by_start_rva,
+        )
+        .expect("second named header should materialize");
+        assert_eq!(second_named_header.kind, "comment");
+        assert_eq!(second_named_header.address, "0x140001001");
+        assert_eq!(second_named_header.text.as_deref(), Some("sub_1001"));
+
+        let second_instruction = materialize_linear_row(
+            &view,
+            &bytes,
+            &section_lookup,
+            0x140000000,
+            5,
+            &function_names_by_start_rva,
+        )
+        .expect("second function instruction should materialize");
+        assert_eq!(second_instruction.kind, "instruction");
+        assert_eq!(second_instruction.address, "0x140001001");
     }
 }

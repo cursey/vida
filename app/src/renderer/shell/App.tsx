@@ -1353,16 +1353,19 @@ export function App() {
       await fetchLinearPage(moduleId, makePageKey(selectedRowIndex, PAGE_SIZE));
       selectedRow = readRow(selectedRowIndex);
     }
-    if (!selectedRow || selectedRow.kind !== "instruction") {
+    if (
+      !selectedRow ||
+      (selectedRow.kind !== "instruction" && selectedRow.kind !== "comment")
+    ) {
       showTransientStatusMessage(
-        "The highlighted row is not a function instruction.",
+        "The highlighted row does not belong to a discovered function.",
       );
       return;
     }
 
     await openGraphAtVa(selectedRow.address, {
       invalidAddressMessage:
-        "The highlighted instruction does not belong to a discovered function.",
+        "The highlighted row does not belong to a discovered function.",
       recordHistory: true,
     });
   }, [

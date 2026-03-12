@@ -290,7 +290,15 @@ where
         total_function_count: Some(functions.len()),
         analyzed_function_count: Some(functions.len()),
     });
-    let linear_view = build_linear_view(&section_lookup, &claimed_instructions)?;
+    let materialized_function_starts = claimed_instructions_by_function_start
+        .keys()
+        .copied()
+        .collect::<BTreeSet<u64>>();
+    let linear_view = build_linear_view(
+        &section_lookup,
+        &claimed_instructions,
+        &materialized_function_starts,
+    )?;
     let xrefs_to_by_target_rva = build_xref_indexes(
         &claimed_instructions_by_function_start,
         &instruction_owner_by_rva,

@@ -1,5 +1,27 @@
 # Change Files
 
+## 2026-03-12 - Add Linear Function Comment Rows
+
+App:
+- `app/src/renderer/features/disassembly/disassembly-panel.test.tsx`
+- `app/src/renderer/features/disassembly/disassembly-panel.tsx`
+- `app/src/renderer/shell/App.tsx`
+- `app/src/renderer/shell/app.graph-view.test.tsx`
+- `app/src/renderer/shell/app.xrefs-modal.test.tsx`
+- `app/src/shared/engine-contracts.ts`
+
+Engine:
+- `engine/src/analysis.rs`
+- `engine/src/api.rs`
+- `engine/src/linear.rs`
+- `engine/src/pe_utils.rs`
+- `engine/tests/engine_integration.rs`
+
+Docs:
+- `docs/work_log.md`
+- `docs/change_files.md`
+
+
 ## 2026-03-12 - Reduce Initial Function Discovery Churn
 
 Engine:

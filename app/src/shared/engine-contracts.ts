@@ -199,7 +199,7 @@ export type LinearInstruction = {
   comment?: string;
 };
 
-export type LinearRow = {
+export type LinearContentRow = {
   kind: "instruction" | "data" | "gap";
   address: HexAddress;
   bytes: string;
@@ -209,7 +209,23 @@ export type LinearRow = {
   branchTarget?: HexAddress;
   callTarget?: HexAddress;
   comment?: string;
+  text?: never;
 };
+
+export type LinearCommentRow = {
+  kind: "comment";
+  address: HexAddress;
+  bytes: string;
+  mnemonic: string;
+  operands: string;
+  text: string;
+  instructionCategory?: never;
+  branchTarget?: never;
+  callTarget?: never;
+  comment?: never;
+};
+
+export type LinearRow = LinearContentRow | LinearCommentRow;
 
 export type MethodResult = {
   "module.open": {

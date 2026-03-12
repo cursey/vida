@@ -288,22 +288,43 @@ fn opens_module_lists_functions_and_disassembles() {
         })
         .expect("row lookup should succeed");
 
+    assert!(
+        row_lookup_result.row_index >= 2,
+        "entry lookup should land after two synthetic function header rows"
+    );
+
     let linear_rows_result = state
         .get_linear_rows(LinearRowsParams {
             module_id: module_id.clone(),
-            start_row: row_lookup_result.row_index,
-            row_count: 1,
+            start_row: row_lookup_result.row_index - 2,
+            row_count: 3,
         })
         .expect("linear rows should load");
-    let row = linear_rows_result
+    let blank_header_row = linear_rows_result
         .rows
         .first()
-        .expect("expected one linear row");
+        .expect("expected blank header row");
+    let named_header_row = linear_rows_result
+        .rows
+        .get(1)
+        .expect("expected named header row");
+    let row = linear_rows_result
+        .rows
+        .get(2)
+        .expect("expected one instruction row after headers");
+
+    assert_eq!(blank_header_row.kind, "comment");
+    assert_eq!(blank_header_row.address, entry_va);
+    assert_eq!(blank_header_row.text.as_deref(), Some(""));
+
+    assert_eq!(named_header_row.kind, "comment");
+    assert_eq!(named_header_row.address, entry_va);
 
     assert_eq!(
         row.kind, "instruction",
         "entry row should decode to an instruction"
     );
+    assert_eq!(row.address, disassembly_result.instructions[0].address);
     assert!(
         !row.bytes.is_empty(),
         "linear rows should render bytes lazily"
@@ -316,7 +337,6 @@ fn opens_module_lists_functions_and_disassembles() {
         row.instruction_category.is_some(),
         "instruction rows should include instructionCategory"
     );
-    assert_eq!(row.address, disassembly_result.instructions[0].address);
     assert_eq!(row.bytes, disassembly_result.instructions[0].bytes);
     assert_eq!(row.mnemonic, disassembly_result.instructions[0].mnemonic);
 
@@ -334,6 +354,11 @@ fn opens_module_lists_functions_and_disassembles() {
     assert!(
         !graph_result.focus_block_id.is_empty(),
         "Graph result should include focusBlockId"
+    );
+    assert_eq!(
+        named_header_row.text.as_deref(),
+        Some(graph_result.function_name.as_str()),
+        "named header row should surface the canonical materialized function name"
     );
 
     let entry_u64 =

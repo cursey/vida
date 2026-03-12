@@ -1,5 +1,22 @@
 # Work Log
 
+## 2026-03-12 - Add Linear Function Comment Rows
+
+Summary:
+- Extended the engine linear row model with synthetic `comment` rows and zero-length function-header segments so every materialized function contributes a blank spacer row plus a named header row without breaking VA-based row lookup.
+- Split contiguous instruction segments at later materialized function starts, kept `find_linear_row_by_va` landing on the first instruction row, and added engine unit/integration coverage for shared-address headers and adjacent functions.
+- Updated the shared renderer contract and disassembly panel to render dedicated comment rows separately from the trailing comment column, and let Graph View and xref flows operate on selected comment rows by their shared function address.
+
+Validation commands executed:
+- `just engine-fmt`
+- `just engine-test`
+- `cd app && npm run test:renderer -- disassembly-panel app.graph-view app.xrefs-modal`
+- `just app-fmt`
+- `just app-check`
+
+Changed files index:
+- See `docs/change_files.md` for the detailed file list for this work item.
+
 ## 2026-03-12 - Reduce Initial Function Discovery Churn
 
 Summary:
