@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::thread;
@@ -438,6 +438,92 @@ fn opens_module_lists_functions_and_disassembles() {
         }),
         Err(EngineError::InvalidAddress)
     ));
+}
+
+#[test]
+fn linear_view_materializes_non_entry_basic_block_labels_without_breaking_va_lookup() {
+    let fixture = fixture_path("minimal_x64.exe");
+    assert!(
+        fixture.exists(),
+        "Fixture does not exist: {}",
+        fixture.display()
+    );
+
+    let mut state = EngineState::default();
+    let open_result = state
+        .open_module(ModuleOpenParams {
+            path: fixture.to_string_lossy().into_owned(),
+            pdb_path: None,
+        })
+        .expect("module should open");
+    let module_id = open_result.module_id.clone();
+
+    let ready_status = wait_for_analysis_ready(&mut state, &module_id);
+    assert_eq!(ready_status.state, "ready");
+
+    let rows = load_all_linear_rows(&mut state, &module_id);
+    let label_rows = rows
+        .iter()
+        .enumerate()
+        .filter(|(_, row)| row.kind == "label" && row.text.as_deref() != Some(""))
+        .collect::<Vec<_>>();
+    assert!(
+        !label_rows.is_empty(),
+        "expected at least one materialized non-entry basic block label row",
+    );
+
+    let mut labeled_addresses = HashSet::new();
+    for (label_index, label_row) in label_rows {
+        assert!(
+            labeled_addresses.insert(label_row.address.clone()),
+            "each labeled basic block start should appear exactly once in the linear view",
+        );
+
+        let blank_label_row = rows
+            .get(label_index - 1)
+            .expect("label rows should be preceded by a blank spacer row");
+        let next_row = rows
+            .get(label_index + 1)
+            .expect("label rows should be followed by the block's first instruction");
+        let row_lookup = state
+            .find_linear_row_by_va(LinearFindRowByVaParams {
+                module_id: module_id.clone(),
+                va: label_row.address.clone(),
+            })
+            .expect("VA lookup should land on the block's first instruction");
+        let graph = state
+            .get_function_graph_by_va(FunctionGraphByVaParams {
+                module_id: module_id.clone(),
+                va: label_row.address.clone(),
+            })
+            .expect("label rows should resolve back to a function graph");
+        let expected_label = format!(
+            "lbl_{}",
+            label_row.address.trim_start_matches("0x").to_lowercase()
+        );
+
+        assert_eq!(blank_label_row.kind, "comment");
+        assert_eq!(blank_label_row.address, label_row.address);
+        assert_eq!(blank_label_row.text.as_deref(), Some(""));
+        assert_eq!(next_row.kind, "instruction");
+        assert_eq!(next_row.address, label_row.address);
+        assert_eq!(row_lookup.row_index, (label_index + 1) as u64);
+        assert_eq!(label_row.text.as_deref(), Some(expected_label.as_str()));
+        assert!(
+            graph
+                .blocks
+                .iter()
+                .any(|block| !block.is_entry && block.start_va == label_row.address),
+            "label rows should correspond to non-entry graph blocks",
+        );
+        assert!(
+            !graph
+                .blocks
+                .iter()
+                .any(|block| block.is_entry && block.start_va == label_row.address),
+            "function entry blocks should not receive label rows",
+        );
+    }
 }
 
 #[test]

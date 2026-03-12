@@ -51,6 +51,22 @@ function buildRows(): LinearRow[] {
       branchTarget: "0x140001020",
     },
     {
+      kind: "comment",
+      address: "0x140001020",
+      bytes: "",
+      mnemonic: "",
+      operands: "",
+      text: "",
+    },
+    {
+      kind: "label",
+      address: "0x140001020",
+      bytes: "",
+      mnemonic: "",
+      operands: "",
+      text: "lbl_140001020",
+    },
+    {
       kind: "instruction",
       address: "0x140001020",
       bytes: "c3",
@@ -277,6 +293,85 @@ describe("App graph view", () => {
       expect(getFunctionGraphByVa).toHaveBeenCalledWith({
         moduleId: "m1",
         va: "0x140001000",
+      });
+    });
+  });
+
+  it("opens graph view from a selected label row", async () => {
+    const getFunctionGraphByVa = vi.fn().mockResolvedValue({
+      functionStartVa: "0x140001000",
+      functionName: "sub_140001000",
+      focusBlockId: "b_1020",
+      blocks: [
+        {
+          id: "b_1000",
+          startVa: "0x140001000",
+          endVa: "0x140001002",
+          isEntry: true,
+          isExit: false,
+          instructions: [
+            {
+              address: "0x140001000",
+              mnemonic: "jmp",
+              operands: "lbl_140001020",
+              instructionCategory: "control_flow",
+              branchTarget: "0x140001020",
+            },
+          ],
+        },
+        {
+          id: "b_1020",
+          startVa: "0x140001020",
+          endVa: "0x140001021",
+          isEntry: false,
+          isExit: true,
+          instructions: [
+            {
+              address: "0x140001020",
+              mnemonic: "ret",
+              operands: "",
+              instructionCategory: "return",
+            },
+          ],
+        },
+      ],
+      edges: [
+        {
+          id: "e_1000_1020",
+          fromBlockId: "b_1000",
+          toBlockId: "b_1020",
+          kind: "unconditional",
+          sourceInstructionVa: "0x140001000",
+          isBackEdge: false,
+        },
+      ],
+    });
+    installMockApi(
+      getFunctionGraphByVa,
+      vi.fn().mockResolvedValue({ rowIndex: 4 }),
+    );
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(menuOpenHandler).toBeTypeOf("function");
+    });
+
+    await act(async () => {
+      menuOpenHandler?.();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("Disassembly")).toBeInTheDocument();
+    });
+
+    fireEvent.keyDown(window, { key: " ", code: "Space" });
+
+    await waitFor(() => {
+      expect(screen.getByText("Graph View")).toBeInTheDocument();
+      expect(getFunctionGraphByVa).toHaveBeenCalledWith({
+        moduleId: "m1",
+        va: "0x140001020",
       });
     });
   });

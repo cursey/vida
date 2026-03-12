@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fmt::Write as FmtWrite;
 
 use crate::api::{InstructionCategory, LinearViewRow, XrefKind, XrefTargetKind};
-use crate::disasm::{bytes_to_hex, render_instruction, to_hex};
+use crate::disasm::{bytes_to_hex, default_label_name, render_instruction, to_hex};
 use crate::error::EngineError;
 use crate::pe_utils::SectionLookup;
 
@@ -54,6 +54,7 @@ struct LinearSegment {
 enum LinearSegmentKind {
     Instructions(InstructionSegment),
     FunctionHeader(FunctionHeaderSegment),
+    Label(LabelSegment),
     Data,
     Gap,
 }
@@ -66,6 +67,11 @@ struct InstructionSegment {
 #[derive(Debug)]
 struct FunctionHeaderSegment {
     function_start_rva: u64,
+}
+
+#[derive(Debug)]
+struct LabelSegment {
+    block_start_rva: u64,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -96,6 +102,7 @@ pub(crate) fn build_linear_view(
     section_lookup: &SectionLookup,
     instruction_rows: &BTreeMap<u64, AnalyzedInstructionRow>,
     function_starts: &BTreeSet<u64>,
+    label_starts: &BTreeSet<u64>,
 ) -> Result<LinearView, EngineError> {
     let mut ranges = collect_mapped_ranges(section_lookup);
     if ranges.is_empty() {
@@ -178,6 +185,17 @@ pub(crate) fn build_linear_view(
                         function_start_rva: next_instruction.start_rva,
                     }),
                 );
+            } else if label_starts.contains(&next_instruction.start_rva) {
+                append_segment(
+                    &mut segments,
+                    &mut row_cursor,
+                    next_instruction.start_rva,
+                    next_instruction.start_rva,
+                    2,
+                    LinearSegmentKind::Label(LabelSegment {
+                        block_start_rva: next_instruction.start_rva,
+                    }),
+                );
             }
 
             let mut rows = Vec::new();
@@ -189,7 +207,10 @@ pub(crate) fn build_linear_view(
                 if row.start_rva != next_cursor {
                     break;
                 }
-                if !rows.is_empty() && function_starts.contains(&row.start_rva) {
+                if !rows.is_empty()
+                    && (function_starts.contains(&row.start_rva)
+                        || label_starts.contains(&row.start_rva))
+                {
                     break;
                 }
                 rows.push(row.clone());
@@ -317,7 +338,9 @@ pub(crate) fn find_row_by_rva(view: &LinearView, rva: u64) -> Result<u64, Engine
             let row_offset = (rva - segment.start_rva) / DATA_GROUP_SIZE;
             Ok(segment.start_row + row_offset)
         }
-        LinearSegmentKind::FunctionHeader(_) => Err(EngineError::InvalidAddress),
+        LinearSegmentKind::FunctionHeader(_) | LinearSegmentKind::Label(_) => {
+            Err(EngineError::InvalidAddress)
+        }
         LinearSegmentKind::Instructions(instructions) => {
             let index = instructions
                 .rows
@@ -426,6 +449,27 @@ pub(crate) fn materialize_linear_row(
                 text: Some(text),
             })
         }
+        LinearSegmentKind::Label(label) => {
+            let text = if row_offset == 0 {
+                String::new()
+            } else {
+                default_label_name(image_base + label.block_start_rva)
+            };
+            let kind = if row_offset == 0 { "comment" } else { "label" };
+
+            Ok(LinearViewRow {
+                kind,
+                address: to_hex(image_base + label.block_start_rva),
+                bytes: String::new(),
+                mnemonic: String::new(),
+                operands: String::new(),
+                instruction_category: None,
+                branch_target: None,
+                call_target: None,
+                comment: None,
+                text: Some(text),
+            })
+        }
         LinearSegmentKind::Instructions(instructions) => {
             let row = instructions.rows.get(row_offset as usize).ok_or_else(|| {
                 EngineError::Internal("Invalid instruction row offset".to_owned())
@@ -507,11 +551,17 @@ mod tests {
             (0x1001, instruction_row(0x1001)),
         ]);
         let function_starts = BTreeSet::from([0x1000]);
+        let label_starts = BTreeSet::new();
         let function_names_by_start_rva = function_names(&[0x1000]);
         let bytes = [0xC3, 0xC3];
 
-        let view = build_linear_view(&section_lookup, &instruction_rows, &function_starts)
-            .expect("linear view should build");
+        let view = build_linear_view(
+            &section_lookup,
+            &instruction_rows,
+            &function_starts,
+            &label_starts,
+        )
+        .expect("linear view should build");
 
         assert_eq!(view.row_count, 4);
         assert_eq!(
@@ -560,6 +610,71 @@ mod tests {
     }
 
     #[test]
+    fn materialized_block_labels_share_block_start_address_and_lookup_skips_them() {
+        let section_lookup = test_section_lookup(0x1000, 0x1002);
+        let instruction_rows = BTreeMap::from([
+            (0x1000, instruction_row(0x1000)),
+            (0x1001, instruction_row(0x1001)),
+        ]);
+        let function_starts = BTreeSet::from([0x1000]);
+        let label_starts = BTreeSet::from([0x1001]);
+        let function_names_by_start_rva = function_names(&[0x1000]);
+        let bytes = [0xC3, 0xC3];
+
+        let view = build_linear_view(
+            &section_lookup,
+            &instruction_rows,
+            &function_starts,
+            &label_starts,
+        )
+        .expect("linear view should build");
+
+        assert_eq!(view.row_count, 6);
+        assert_eq!(
+            find_row_by_rva(&view, 0x1001).expect("lookup should skip labels"),
+            5
+        );
+
+        let blank_label_row = materialize_linear_row(
+            &view,
+            &bytes,
+            &section_lookup,
+            0x140000000,
+            3,
+            &function_names_by_start_rva,
+        )
+        .expect("blank label row should materialize");
+        assert_eq!(blank_label_row.kind, "comment");
+        assert_eq!(blank_label_row.address, "0x140001001");
+        assert_eq!(blank_label_row.text.as_deref(), Some(""));
+
+        let label_row = materialize_linear_row(
+            &view,
+            &bytes,
+            &section_lookup,
+            0x140000000,
+            4,
+            &function_names_by_start_rva,
+        )
+        .expect("label row should materialize");
+        assert_eq!(label_row.kind, "label");
+        assert_eq!(label_row.address, "0x140001001");
+        assert_eq!(label_row.text.as_deref(), Some("lbl_140001001"));
+
+        let labeled_instruction = materialize_linear_row(
+            &view,
+            &bytes,
+            &section_lookup,
+            0x140000000,
+            5,
+            &function_names_by_start_rva,
+        )
+        .expect("instruction row after label should materialize");
+        assert_eq!(labeled_instruction.kind, "instruction");
+        assert_eq!(labeled_instruction.address, "0x140001001");
+    }
+
+    #[test]
     fn build_linear_view_splits_contiguous_instructions_at_materialized_function_boundaries() {
         let section_lookup = test_section_lookup(0x1000, 0x1002);
         let instruction_rows = BTreeMap::from([
@@ -567,11 +682,17 @@ mod tests {
             (0x1001, instruction_row(0x1001)),
         ]);
         let function_starts = BTreeSet::from([0x1000, 0x1001]);
+        let label_starts = BTreeSet::new();
         let function_names_by_start_rva = function_names(&[0x1000, 0x1001]);
         let bytes = [0xC3, 0xC3];
 
-        let view = build_linear_view(&section_lookup, &instruction_rows, &function_starts)
-            .expect("linear view should build");
+        let view = build_linear_view(
+            &section_lookup,
+            &instruction_rows,
+            &function_starts,
+            &label_starts,
+        )
+        .expect("linear view should build");
 
         assert_eq!(view.row_count, 6);
         assert_eq!(

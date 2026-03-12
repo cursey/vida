@@ -195,7 +195,16 @@ export function DisassemblyPanel({
                 }
 
                 const operandTarget = operandTargetForRow(row);
-                const isCommentRow = row.kind === "comment";
+                const isAnnotationRow =
+                  row.kind === "comment" || row.kind === "label";
+                const annotationText =
+                  row.kind === "comment"
+                    ? row.text
+                      ? `; ${row.text}`
+                      : ""
+                    : row.kind === "label"
+                      ? `${row.text}:`
+                      : "";
 
                 return (
                   <div
@@ -209,6 +218,7 @@ export function DisassemblyPanel({
                         "bg-primary/16 shadow-[inset_0_0_0_1px_oklch(var(--primary)/0.35)] hover:bg-primary/16",
                     )}
                     data-address={row.address}
+                    data-row-kind={row.kind}
                     data-selected={
                       selectedRowIndex === logicalRowIndex ? "true" : "false"
                     }
@@ -230,21 +240,31 @@ export function DisassemblyPanel({
                       <code>{row.address}</code>
                     </div>
                     <div className={cellClassName}>
-                      {isCommentRow ? null : <code>{row.bytes}</code>}
+                      {isAnnotationRow ? null : <code>{row.bytes}</code>}
                     </div>
-                    {isCommentRow ? (
+                    {isAnnotationRow ? (
                       <div
                         className={cn(
                           cellClassName,
-                          "col-span-2 text-muted-foreground",
+                          "col-span-2",
+                          row.kind === "comment" && "text-muted-foreground",
                         )}
                         style={{ gridColumn: "4 / 6" }}
                       >
-                        <span>{row.text ? `; ${row.text}` : ""}</span>
+                        <span
+                          className={cn(row.kind === "label" && "text-primary")}
+                        >
+                          {annotationText}
+                        </span>
                       </div>
                     ) : (
                       <>
-                        <div className={cellClassName}>
+                        <div
+                          className={cn(
+                            cellClassName,
+                            row.kind === "instruction" && "pl-[4ch]",
+                          )}
+                        >
                           <span
                             className={
                               mnemonicClassNames[

@@ -294,10 +294,13 @@ where
         .keys()
         .copied()
         .collect::<BTreeSet<u64>>();
+    let materialized_block_label_starts =
+        collect_materialized_block_label_starts(&graphs_by_start, &claimed_instructions);
     let linear_view = build_linear_view(
         &section_lookup,
         &claimed_instructions,
         &materialized_function_starts,
+        &materialized_block_label_starts,
     )?;
     let xrefs_to_by_target_rva = build_xref_indexes(
         &claimed_instructions_by_function_start,
@@ -330,6 +333,27 @@ pub(crate) fn instruction_owner_for_rva(
     } else {
         None
     }
+}
+
+fn collect_materialized_block_label_starts(
+    graphs_by_start: &HashMap<u64, CachedFunctionGraph>,
+    claimed_instructions: &BTreeMap<u64, AnalyzedInstructionRow>,
+) -> BTreeSet<u64> {
+    graphs_by_start
+        .values()
+        .flat_map(|graph| {
+            graph.blocks.iter().filter_map(move |block| {
+                if block.start_rva == graph.function_start_rva
+                    || block.instructions.is_empty()
+                    || !claimed_instructions.contains_key(&block.start_rva)
+                {
+                    None
+                } else {
+                    Some(block.start_rva)
+                }
+            })
+        })
+        .collect::<BTreeSet<u64>>()
 }
 
 fn build_xref_indexes(
@@ -936,12 +960,15 @@ fn build_cached_function_graph(
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeSet;
+
     use super::{
-        CachedFunctionGraph, CachedXref, CompletedFunctionAnalysis, FunctionSeedCandidate,
-        InstructionOwnerRange, build_module_analysis_with_progress, build_xref_indexes,
-        claim_function_rows_for_owner, discover_call_target_seeds, instruction_owner_for_rva,
-        instruction_range_overlaps, merge_completed_function_analysis, register_seed,
-        seed_priority,
+        CachedFunctionGraph, CachedFunctionGraphBlock, CachedFunctionGraphInstruction, CachedXref,
+        CompletedFunctionAnalysis, FunctionSeedCandidate, InstructionOwnerRange,
+        build_module_analysis_with_progress, build_xref_indexes, claim_function_rows_for_owner,
+        collect_materialized_block_label_starts, discover_call_target_seeds,
+        instruction_owner_for_rva, instruction_range_overlaps, merge_completed_function_analysis,
+        register_seed, seed_priority,
     };
     use crate::api::{InstructionCategory, XrefKind, XrefTargetKind};
     use crate::linear::AnalyzedInstructionRow;
@@ -998,12 +1025,38 @@ mod tests {
         function_start_rva: u64,
         function_rows: Vec<AnalyzedInstructionRow>,
     ) -> CompletedFunctionAnalysis {
+        completed_function_analysis_with_blocks(function_start_rva, function_rows, &[])
+    }
+
+    fn completed_function_analysis_with_blocks(
+        function_start_rva: u64,
+        function_rows: Vec<AnalyzedInstructionRow>,
+        block_starts: &[u64],
+    ) -> CompletedFunctionAnalysis {
+        let blocks = block_starts
+            .iter()
+            .copied()
+            .map(|start_rva| CachedFunctionGraphBlock {
+                id: format!("b_{start_rva:x}"),
+                start_rva,
+                has_outgoing_edges: false,
+                ends_with_return: true,
+                instructions: vec![CachedFunctionGraphInstruction {
+                    start_rva,
+                    len: 1,
+                    instruction_category: InstructionCategory::Return,
+                    branch_target_rva: None,
+                    call_target_rva: None,
+                }],
+            })
+            .collect::<Vec<_>>();
+
         CompletedFunctionAnalysis {
             function_start_rva,
             cached_graph: CachedFunctionGraph {
                 function_start_rva,
                 function_name: format!("sub_{function_start_rva:x}"),
-                blocks: Vec::new(),
+                blocks,
                 edges: Vec::new(),
                 instruction_block_start_by_rva: HashMap::new(),
             },
@@ -1108,6 +1161,28 @@ mod tests {
                 .map(Vec::len),
             None
         );
+    }
+
+    #[test]
+    fn collect_materialized_block_label_starts_excludes_function_entries_and_unclaimed_blocks() {
+        let graphs_by_start = HashMap::from([(
+            0x1000,
+            completed_function_analysis_with_blocks(
+                0x1000,
+                vec![instruction_row(0x1000, 1), instruction_row(0x1010, 1)],
+                &[0x1000, 0x1010, 0x1020],
+            )
+            .cached_graph,
+        )]);
+        let claimed_instructions = BTreeMap::from([
+            (0x1000, instruction_row(0x1000, 1)),
+            (0x1010, instruction_row(0x1010, 1)),
+        ]);
+
+        let label_starts =
+            collect_materialized_block_label_starts(&graphs_by_start, &claimed_instructions);
+
+        assert_eq!(label_starts, BTreeSet::from([0x1010]));
     }
 
     #[test]

@@ -1355,7 +1355,9 @@ export function App() {
     }
     if (
       !selectedRow ||
-      (selectedRow.kind !== "instruction" && selectedRow.kind !== "comment")
+      (selectedRow.kind !== "instruction" &&
+        selectedRow.kind !== "comment" &&
+        selectedRow.kind !== "label")
     ) {
       showTransientStatusMessage(
         "The highlighted row does not belong to a discovered function.",

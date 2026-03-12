@@ -1,5 +1,23 @@
 # Work Log
 
+## 2026-03-12 - Add Linear Basic-Block Label Rows
+
+Summary:
+- Extended the engine linear view to emit synthetic `label` rows for materialized non-entry basic-block starts, deriving label-start RVAs from cached CFG blocks and inserting zero-length label segments with an empty synthetic `comment` spacer row above each visible label without changing VA lookup semantics.
+- Kept label rows in the same row index space as instructions by splitting contiguous instruction segments at interior block starts, while preserving function-header `comment` rows and keeping `find_linear_row_by_va` landing on the first instruction row at each labeled address.
+- Updated the shared renderer contract, disassembly panel, and shell behavior so label rows render as distinct address-bearing annotation rows with only the `lbl_<va>:` text colored, instruction text indented more deeply beneath labels like a traditional assembler listing, and Graph View/xref actions driven by the shared address.
+
+Validation commands executed:
+- `just engine-fmt`
+- `just engine-test`
+- `just app-fmt`
+- `cd app && npm run test:renderer -- disassembly-panel app.graph-view app.xrefs-modal`
+- `just app-check`
+
+Changed files index:
+- See `docs/change_files.md` for the detailed file list for this work item.
+
+
 ## 2026-03-12 - Add Linear Function Comment Rows
 
 Summary:

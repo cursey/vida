@@ -49,6 +49,30 @@ function buildRows(): LinearRow[] {
       operands: "rax,[rip+0x2039]",
       instructionCategory: "data_transfer",
     },
+    {
+      kind: "comment",
+      address: "0x140001020",
+      bytes: "",
+      mnemonic: "",
+      operands: "",
+      text: "",
+    },
+    {
+      kind: "label",
+      address: "0x140001020",
+      bytes: "",
+      mnemonic: "",
+      operands: "",
+      text: "lbl_140001020",
+    },
+    {
+      kind: "instruction",
+      address: "0x140001020",
+      bytes: "c3",
+      mnemonic: "ret",
+      operands: "",
+      instructionCategory: "return",
+    },
   ];
 }
 
@@ -101,7 +125,7 @@ describe("App xrefs modal", () => {
       getLinearViewInfo: vi.fn().mockResolvedValue({
         rowCount: rows.length,
         minVa: "0x140001000",
-        maxVa: "0x140001000",
+        maxVa: "0x140001020",
         rowHeight: 24,
         dataGroupSize: 16,
       }),
@@ -214,6 +238,37 @@ describe("App xrefs modal", () => {
       expect(getXrefsToVa).toHaveBeenCalledWith({
         moduleId: "m1",
         va: "0x140001000",
+      });
+    });
+  });
+
+  it("uses the selected label row address when opening xrefs", async () => {
+    const getXrefsToVa = vi.fn().mockResolvedValue({
+      targetVa: "0x140001020",
+      xrefs: [],
+    });
+    installMockApi(getXrefsToVa, vi.fn().mockResolvedValue({ rowIndex: 4 }));
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(menuOpenHandler).toBeTypeOf("function");
+    });
+
+    await act(async () => {
+      menuOpenHandler?.();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("Disassembly")).toBeInTheDocument();
+    });
+
+    fireEvent.keyDown(window, { key: "x", code: "KeyX" });
+
+    await waitFor(() => {
+      expect(getXrefsToVa).toHaveBeenCalledWith({
+        moduleId: "m1",
+        va: "0x140001020",
       });
     });
   });

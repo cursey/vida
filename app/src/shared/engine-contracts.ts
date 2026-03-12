@@ -212,8 +212,7 @@ export type LinearContentRow = {
   text?: never;
 };
 
-export type LinearCommentRow = {
-  kind: "comment";
+type LinearSyntheticTextRow = {
   address: HexAddress;
   bytes: string;
   mnemonic: string;
@@ -225,7 +224,15 @@ export type LinearCommentRow = {
   comment?: never;
 };
 
-export type LinearRow = LinearContentRow | LinearCommentRow;
+export type LinearCommentRow = {
+  kind: "comment";
+} & LinearSyntheticTextRow;
+
+export type LinearLabelRow = {
+  kind: "label";
+} & LinearSyntheticTextRow;
+
+export type LinearRow = LinearContentRow | LinearCommentRow | LinearLabelRow;
 
 export type MethodResult = {
   "module.open": {

@@ -134,6 +134,100 @@ describe("DisassemblyPanel", () => {
     expect(onSelectRow).toHaveBeenCalledWith(1, "0x140001000");
   });
 
+  it("renders label rows with a blank spacer, colored text, and indented instructions", () => {
+    const onSelectRow = vi.fn();
+    const annotationRows: LinearRow[] = [
+      {
+        kind: "comment",
+        address: "0x140001000",
+        bytes: "",
+        mnemonic: "",
+        operands: "",
+        text: "entry_function",
+      },
+      {
+        kind: "comment",
+        address: "0x140001010",
+        bytes: "",
+        mnemonic: "",
+        operands: "",
+        text: "",
+      },
+      {
+        kind: "label",
+        address: "0x140001010",
+        bytes: "",
+        mnemonic: "",
+        operands: "",
+        text: "lbl_140001010",
+      },
+      {
+        kind: "instruction",
+        address: "0x140001010",
+        bytes: "C3",
+        mnemonic: "ret",
+        operands: "",
+        instructionCategory: "return",
+      },
+    ];
+
+    render(
+      <DisassemblyPanel
+        isActive
+        moduleId="m1"
+        isReady
+        rowCount={annotationRows.length}
+        disassemblyColumnStyle={{}}
+        onActivate={vi.fn()}
+        onStartColumnResizing={vi.fn()}
+        disassemblyScrollRef={createRef<HTMLDivElement>()}
+        disassemblyListTotalSize={annotationRows.length * 24}
+        virtualItems={[
+          { key: 0, index: 0, start: 0, end: 24, size: 24, lane: 0 },
+          { key: 1, index: 1, start: 24, end: 48, size: 24, lane: 0 },
+          { key: 2, index: 2, start: 48, end: 72, size: 24, lane: 0 },
+          { key: 3, index: 3, start: 72, end: 96, size: 24, lane: 0 },
+        ]}
+        boundedDisassemblyWindowStart={0}
+        readRow={(index) => annotationRows[index]}
+        cacheEpoch={0}
+        selectedRowIndex={null}
+        onSelectRow={onSelectRow}
+        findSectionName={() => ".text"}
+        onNavigateToOperandTarget={vi.fn().mockResolvedValue(true)}
+      />,
+    );
+
+    const commentRow = screen
+      .getByText("; entry_function")
+      .closest("[data-row-kind='comment']");
+    const spacerRow = document.querySelector(
+      "[data-row-kind='comment'][data-address='0x140001010']",
+    );
+    const labelRows = document.querySelectorAll(
+      "[data-row-kind='label'][data-address='0x140001010']",
+    );
+    const labelText = screen.getByText("lbl_140001010:");
+    const labelRow = labelText.closest("[data-row-kind='label']");
+    const instructionRow = screen
+      .getByText("ret")
+      .closest("[data-row-kind='instruction']");
+    const instructionCell = instructionRow?.querySelector("div:nth-child(4)");
+
+    expect(commentRow).toHaveClass("italic");
+    expect(spacerRow).not.toBeNull();
+    expect(labelRow).not.toHaveClass("font-semibold", "text-primary", "italic");
+    expect(labelText).toHaveClass("text-primary");
+    expect(labelRows).toHaveLength(1);
+    expect(screen.getAllByText("0x140001010")).toHaveLength(3);
+    expect(screen.getAllByText(".text")).toHaveLength(4);
+    expect(instructionCell).toHaveClass("pl-[4ch]");
+
+    fireEvent.pointerDown(labelText);
+
+    expect(onSelectRow).toHaveBeenCalledWith(2, "0x140001010");
+  });
+
   it("follows operand links without selecting the current row", () => {
     const onNavigateToOperandTarget = vi.fn().mockResolvedValue(true);
     const onSelectRow = vi.fn();
