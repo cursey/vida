@@ -76,9 +76,17 @@ describe("DisassemblyPanel", () => {
     expect(onNavigateToOperandTarget).not.toHaveBeenCalled();
   });
 
-  it("renders comment rows without duplicating address cells and selects by shared address", () => {
+  it("renders comment rows with shared section and address cells and only prefixes named rows", () => {
     const onSelectRow = vi.fn();
     const commentRows: LinearRow[] = [
+      {
+        kind: "comment",
+        address: "0x140001000",
+        bytes: "",
+        mnemonic: "",
+        operands: "",
+        text: "",
+      },
       {
         kind: "comment",
         address: "0x140001000",
@@ -104,6 +112,7 @@ describe("DisassemblyPanel", () => {
         virtualItems={[
           { key: 0, index: 0, start: 0, end: 24, size: 24, lane: 0 },
           { key: 1, index: 1, start: 24, end: 48, size: 24, lane: 0 },
+          { key: 2, index: 2, start: 48, end: 72, size: 24, lane: 0 },
         ]}
         boundedDisassemblyWindowStart={0}
         readRow={(index) => commentRows[index]}
@@ -115,12 +124,14 @@ describe("DisassemblyPanel", () => {
       />,
     );
 
-    expect(screen.getByText("entry_function")).toBeInTheDocument();
-    expect(screen.getAllByText("0x140001000")).toHaveLength(1);
+    expect(screen.queryByText(/^;$/)).toBeNull();
+    expect(screen.getByText("; entry_function")).toBeInTheDocument();
+    expect(screen.getAllByText("0x140001000")).toHaveLength(3);
+    expect(screen.getAllByText(".text")).toHaveLength(3);
 
-    fireEvent.pointerDown(screen.getByText("entry_function"));
+    fireEvent.pointerDown(screen.getByText("; entry_function"));
 
-    expect(onSelectRow).toHaveBeenCalledWith(0, "0x140001000");
+    expect(onSelectRow).toHaveBeenCalledWith(1, "0x140001000");
   });
 
   it("follows operand links without selecting the current row", () => {

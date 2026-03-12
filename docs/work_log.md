@@ -5,7 +5,7 @@
 Summary:
 - Extended the engine linear row model with synthetic `comment` rows and zero-length function-header segments so every materialized function contributes a blank spacer row plus a named header row without breaking VA-based row lookup.
 - Split contiguous instruction segments at later materialized function starts, kept `find_linear_row_by_va` landing on the first instruction row, and added engine unit/integration coverage for shared-address headers and adjacent functions.
-- Updated the shared renderer contract and disassembly panel to render dedicated comment rows separately from the trailing comment column, and let Graph View and xref flows operate on selected comment rows by their shared function address.
+- Updated the shared renderer contract and disassembly panel to render dedicated comment rows separately from the trailing comment column while still filling the section/address cells, prefixing the visible header text with `;`, and letting Graph View and xref flows operate on selected comment rows by their shared function address.
 
 Validation commands executed:
 - `just engine-fmt`

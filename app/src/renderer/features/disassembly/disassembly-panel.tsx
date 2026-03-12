@@ -224,10 +224,10 @@ export function DisassemblyPanel({
                     }}
                   >
                     <div className={cn(cellClassName, "text-muted-foreground")}>
-                      {isCommentRow ? "" : findSectionName(row.address)}
+                      {findSectionName(row.address)}
                     </div>
                     <div className={cellClassName}>
-                      {isCommentRow ? null : <code>{row.address}</code>}
+                      <code>{row.address}</code>
                     </div>
                     <div className={cellClassName}>
                       {isCommentRow ? null : <code>{row.bytes}</code>}
@@ -240,7 +240,7 @@ export function DisassemblyPanel({
                         )}
                         style={{ gridColumn: "4 / 6" }}
                       >
-                        <span>{row.text}</span>
+                        <span>{row.text ? `; ${row.text}` : ""}</span>
                       </div>
                     ) : (
                       <>
