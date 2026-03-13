@@ -1,5 +1,37 @@
 # Change Files
 
+## 2026-03-13 - Switch Slint App to Skia Renderer
+
+App:
+- `app-slint/Cargo.toml`
+
+Docs:
+- `docs/work_log.md`
+- `docs/change_files.md`
+
+## 2026-03-13 - Extract Slint Status Bar Controller and Normalize Controller Module Layout
+
+App:
+- `app-slint/src/controller/mod.rs`
+- `app-slint/src/controller/function_list.rs`
+- `app-slint/src/controller/linear_view.rs`
+- `app-slint/src/controller/status_bar.rs`
+
+Docs:
+- `docs/work_log.md`
+- `docs/change_files.md`
+
+## 2026-03-13 - Split Slint Controller Linear View and Function List Modules
+
+App:
+- `app-slint/src/controller.rs`
+- `app-slint/src/controller/function_list.rs`
+- `app-slint/src/controller/linear_view.rs`
+
+Docs:
+- `docs/work_log.md`
+- `docs/change_files.md`
+
 ## 2026-03-13 - Add Experimental Slint Linear Disassembly App
 
 Root:

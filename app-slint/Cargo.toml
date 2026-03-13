@@ -7,7 +7,7 @@ build = "build.rs"
 [dependencies]
 engine = { path = "../engine" }
 rfd = "0.15.4"
-slint = { version = "1.15.1", features = ["backend-winit", "renderer-femtovg", "std"] }
+slint = { version = "1.15.1", features = ["backend-winit", "renderer-skia", "std"] }
 
 [build-dependencies]
 slint-build = "1.15.1"

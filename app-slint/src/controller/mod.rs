@@ -1,5 +1,4 @@
 use std::cell::RefCell;
-use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::{Arc, Mutex, mpsc};
@@ -12,19 +11,29 @@ use engine::api::{
     ModuleOpenParams, ModuleUnloadParams, SectionInfo,
 };
 use engine::{EngineError, EngineState};
-use slint::{ComponentHandle, Model, ModelNotify, SharedString, Timer, TimerMode, Weak as UiWeak};
+use slint::{ComponentHandle, Timer, TimerMode, Weak as UiWeak};
 
-use crate::{MainWindow, UiFunctionItem, UiLinearRow};
+use crate::{MainWindow, UiFunctionItem};
+
+mod function_list;
+mod linear_view;
+mod status_bar;
+
+use self::function_list::FunctionListModel;
+use self::linear_view::{
+    DisassemblyRowsModel, PAGE_SIZE, PageRequest, SectionRange, build_section_ranges,
+    map_linear_row, normalize_hex_address,
+};
+use self::status_bar::{StatusBarController, StatusBarState};
 
 const ANALYSIS_POLL_INTERVAL: Duration = Duration::from_millis(125);
 const MESSAGE_PUMP_INTERVAL: Duration = Duration::from_millis(16);
-const PAGE_SIZE: u64 = 512;
-const MAX_CACHED_PAGES: usize = 32;
 const ROW_HEIGHT: f32 = 24.0;
 
 pub struct AppController {
     engine: Arc<Mutex<EngineState>>,
     window: UiWeak<MainWindow>,
+    status_bar: StatusBarController,
     functions: Rc<FunctionListModel>,
     rows: Rc<DisassemblyRowsModel>,
     state: RefCell<AppState>,
@@ -43,20 +52,6 @@ struct AppState {
 struct LoadedModule {
     module_id: String,
     sections: Vec<SectionRange>,
-}
-
-#[derive(Clone)]
-struct SectionRange {
-    name: SharedString,
-    start: u64,
-    end: u64,
-}
-
-#[derive(Clone)]
-struct PageRequest {
-    generation: u64,
-    module_id: String,
-    page: u64,
 }
 
 struct ReadyPayload {
@@ -105,35 +100,11 @@ enum WorkerMessage {
 
 struct UiState {
     file_name: String,
-    status_text: String,
     workspace_message: String,
-    current_address: String,
-    go_to_text: String,
-    row_count_text: String,
     selected_function_index: i32,
     has_module: bool,
     is_ready: bool,
-}
-
-pub struct FunctionListModel {
-    items: RefCell<Vec<UiFunctionItem>>,
-    notify: ModelNotify,
-}
-
-struct DisassemblyRowsModel {
-    inner: RefCell<DisassemblyRowsState>,
-    notify: ModelNotify,
-    requester: RefCell<Option<Rc<dyn Fn(PageRequest)>>>,
-}
-
-struct DisassemblyRowsState {
-    generation: u64,
-    module_id: String,
-    row_count: usize,
-    selected_row: Option<usize>,
-    pages: HashMap<u64, Vec<UiLinearRow>>,
-    page_order: VecDeque<u64>,
-    inflight_pages: HashSet<u64>,
+    status_bar: StatusBarState,
 }
 
 impl AppController {
@@ -141,9 +112,11 @@ impl AppController {
         let functions = Rc::new(FunctionListModel::default());
         let rows = Rc::new(DisassemblyRowsModel::default());
         let (sender, receiver) = mpsc::channel();
+        let window_weak = window.as_weak();
         let controller = Rc::new(Self {
             engine: Arc::new(Mutex::new(EngineState::default())),
-            window: window.as_weak(),
+            window: window_weak.clone(),
+            status_bar: StatusBarController::new(window_weak),
             functions: Rc::clone(&functions),
             rows: Rc::clone(&rows),
             state: RefCell::new(AppState::default()),
@@ -162,15 +135,18 @@ impl AppController {
 
         window.set_functions(functions.clone().into());
         window.set_disassembly_rows(rows.clone().into());
-        window.set_status_text("Open an executable to begin.".into());
         window.set_workspace_message("Open an executable to begin.".into());
-        window.set_current_address("".into());
-        window.set_go_to_text("".into());
-        window.set_row_count_text("".into());
         window.set_file_name("".into());
         window.set_selected_function_index(-1);
         window.set_has_module(false);
         window.set_is_ready(false);
+        controller.status_bar.apply(
+            &StatusBarState {
+                status_text: "Open an executable to begin.".to_string(),
+                ..StatusBarState::default()
+            },
+            false,
+        );
         controller
     }
 
@@ -252,14 +228,14 @@ impl AppController {
         self.set_ui_state(
             UiState {
                 file_name: file_name.clone(),
-                status_text: format!("Opening {file_name}..."),
                 workspace_message: format!("Opening {file_name}..."),
-                current_address: String::new(),
-                go_to_text: String::new(),
-                row_count_text: String::new(),
                 selected_function_index: -1,
                 has_module: true,
                 is_ready: false,
+                status_bar: StatusBarState {
+                    status_text: format!("Opening {file_name}..."),
+                    ..StatusBarState::default()
+                },
             },
             false,
         );
@@ -302,14 +278,16 @@ impl AppController {
                 self.set_ui_state(
                     UiState {
                         file_name,
-                        status_text: "Analyzing module...".to_string(),
                         workspace_message: "Analyzing module...".to_string(),
-                        current_address: entry_va.clone(),
-                        go_to_text: entry_va,
-                        row_count_text: String::new(),
                         selected_function_index: -1,
                         has_module: true,
                         is_ready: false,
+                        status_bar: StatusBarState {
+                            status_text: "Analyzing module...".to_string(),
+                            current_address: entry_va.clone(),
+                            go_to_text: entry_va,
+                            ..StatusBarState::default()
+                        },
                     },
                     false,
                 );
@@ -325,14 +303,14 @@ impl AppController {
                 self.set_ui_state(
                     UiState {
                         file_name,
-                        status_text: message.clone(),
-                        workspace_message: message,
-                        current_address: String::new(),
-                        go_to_text: String::new(),
-                        row_count_text: String::new(),
+                        workspace_message: message.clone(),
                         selected_function_index: -1,
                         has_module: true,
                         is_ready: false,
+                        status_bar: StatusBarState {
+                            status_text: message.clone(),
+                            ..StatusBarState::default()
+                        },
                     },
                     true,
                 );
@@ -360,14 +338,14 @@ impl AppController {
                 self.set_ui_state(
                     UiState {
                         file_name,
-                        status_text: message.clone(),
-                        workspace_message: message,
-                        current_address: String::new(),
-                        go_to_text: String::new(),
-                        row_count_text: String::new(),
+                        workspace_message: message.clone(),
                         selected_function_index: -1,
                         has_module: false,
                         is_ready: false,
+                        status_bar: StatusBarState {
+                            status_text: message.clone(),
+                            ..StatusBarState::default()
+                        },
                     },
                     false,
                 );
@@ -403,7 +381,7 @@ impl AppController {
             } => {
                 self.rows.mark_page_complete(generation, &module_id, page);
                 if self.state.borrow().generation == generation {
-                    self.window_handle().set_status_text(message.into());
+                    self.status_bar.set_status_text(message);
                 }
             }
         }
@@ -434,14 +412,16 @@ impl AppController {
         self.set_ui_state(
             UiState {
                 file_name: payload.file_name.clone(),
-                status_text: format!("Analysis ready for {}.", payload.file_name),
                 workspace_message: String::new(),
-                current_address: payload.entry_va.clone(),
-                go_to_text: payload.entry_va.clone(),
-                row_count_text: format!("{} rows", payload.row_count),
                 selected_function_index: entry_index.map_or(-1, |index| index as i32),
                 has_module: true,
                 is_ready: true,
+                status_bar: StatusBarState {
+                    status_text: format!("Analysis ready for {}.", payload.file_name),
+                    current_address: payload.entry_va.clone(),
+                    go_to_text: payload.entry_va.clone(),
+                    row_count_text: format!("{} rows", payload.row_count),
+                },
             },
             false,
         );
@@ -457,8 +437,8 @@ impl AppController {
         let (module_id, generation) = {
             let state = self.state.borrow();
             let Some(current) = &state.current else {
-                self.window_handle()
-                    .set_status_text("Open a module before navigating.".into());
+                self.status_bar
+                    .set_status_text("Open a module before navigating.");
                 return;
             };
             (current.module_id.clone(), state.generation)
@@ -473,8 +453,8 @@ impl AppController {
         }) {
             Ok(result) => result.row_index as usize,
             Err(_) => {
-                self.window_handle()
-                    .set_status_text(format!("Unable to navigate to {raw_va}.").into());
+                self.status_bar
+                    .set_status_text(format!("Unable to navigate to {raw_va}."));
                 return;
             }
         };
@@ -488,9 +468,8 @@ impl AppController {
 
     fn select_row(&self, row_index: usize, va: String, function_index: Option<i32>, scroll: bool) {
         self.rows.set_selected_row(Some(row_index));
+        self.status_bar.set_current_address(va);
         let window = self.window_handle();
-        window.set_current_address(va.clone().into());
-        window.set_go_to_text(va.into());
         if let Some(function_index) = function_index {
             window.set_selected_function_index(function_index);
         }
@@ -502,256 +481,15 @@ impl AppController {
     fn set_ui_state(&self, state: UiState, preserve_navigation: bool) {
         let window = self.window_handle();
         window.set_file_name(state.file_name.into());
-        window.set_status_text(state.status_text.into());
         window.set_workspace_message(state.workspace_message.into());
+        self.status_bar
+            .apply(&state.status_bar, preserve_navigation);
         if !preserve_navigation {
-            window.set_current_address(state.current_address.into());
-            window.set_go_to_text(state.go_to_text.into());
-            window.set_row_count_text(state.row_count_text.into());
             window.set_selected_function_index(state.selected_function_index);
             window.set_disassembly_viewport_y(0.0);
         }
         window.set_has_module(state.has_module);
         window.set_is_ready(state.is_ready);
-    }
-}
-
-impl Default for FunctionListModel {
-    fn default() -> Self {
-        Self {
-            items: RefCell::new(Vec::new()),
-            notify: ModelNotify::default(),
-        }
-    }
-}
-
-impl FunctionListModel {
-    fn replace(&self, items: Vec<UiFunctionItem>) {
-        *self.items.borrow_mut() = items;
-        self.notify.reset();
-    }
-}
-
-impl Model for FunctionListModel {
-    type Data = UiFunctionItem;
-
-    fn row_count(&self) -> usize {
-        self.items.borrow().len()
-    }
-
-    fn row_data(&self, row: usize) -> Option<Self::Data> {
-        self.items.borrow().get(row).cloned()
-    }
-
-    fn model_tracker(&self) -> &dyn slint::ModelTracker {
-        &self.notify
-    }
-}
-
-impl Default for DisassemblyRowsModel {
-    fn default() -> Self {
-        Self {
-            inner: RefCell::new(DisassemblyRowsState {
-                generation: 0,
-                module_id: String::new(),
-                row_count: 0,
-                selected_row: None,
-                pages: HashMap::new(),
-                page_order: VecDeque::new(),
-                inflight_pages: HashSet::new(),
-            }),
-            notify: ModelNotify::default(),
-            requester: RefCell::new(None),
-        }
-    }
-}
-
-impl DisassemblyRowsModel {
-    fn set_requester(&self, requester: impl Fn(PageRequest) + 'static) {
-        *self.requester.borrow_mut() = Some(Rc::new(requester));
-    }
-
-    fn reset(&self, generation: u64) {
-        {
-            let mut inner = self.inner.borrow_mut();
-            inner.generation = generation;
-            inner.module_id.clear();
-            inner.row_count = 0;
-            inner.selected_row = None;
-            inner.pages.clear();
-            inner.page_order.clear();
-            inner.inflight_pages.clear();
-        }
-        self.notify.reset();
-    }
-
-    fn configure(&self, generation: u64, module_id: String, row_count: usize) {
-        {
-            let mut inner = self.inner.borrow_mut();
-            inner.generation = generation;
-            inner.module_id = module_id;
-            inner.row_count = row_count;
-            inner.selected_row = None;
-            inner.pages.clear();
-            inner.page_order.clear();
-            inner.inflight_pages.clear();
-        }
-        self.notify.reset();
-    }
-
-    fn set_selected_row(&self, selected_row: Option<usize>) {
-        let mut changed_rows = Vec::new();
-        {
-            let mut inner = self.inner.borrow_mut();
-            let previous = inner.selected_row;
-            if previous == selected_row {
-                return;
-            }
-            inner.selected_row = selected_row;
-            for row_index in [previous, selected_row].into_iter().flatten() {
-                let page = row_index as u64 / PAGE_SIZE;
-                let offset = row_index % PAGE_SIZE as usize;
-                if let Some(rows) = inner.pages.get_mut(&page) {
-                    if let Some(row) = rows.get_mut(offset) {
-                        row.is_selected = Some(row_index) == selected_row;
-                    }
-                }
-                changed_rows.push(row_index);
-            }
-        }
-
-        for row_index in changed_rows {
-            self.notify.row_changed(row_index);
-        }
-    }
-
-    fn apply_page(&self, generation: u64, module_id: &str, page: u64, mut rows: Vec<UiLinearRow>) {
-        let start_row = page * PAGE_SIZE;
-        let changed_row_count = rows.len();
-        {
-            let mut inner = self.inner.borrow_mut();
-            if inner.generation != generation || inner.module_id != module_id {
-                return;
-            }
-            for (offset, row) in rows.iter_mut().enumerate() {
-                row.is_selected = inner.selected_row == Some(start_row as usize + offset);
-            }
-            inner.inflight_pages.remove(&page);
-            inner.page_order.retain(|value| *value != page);
-            inner.pages.insert(page, rows);
-            inner.page_order.push_back(page);
-            while inner.page_order.len() > MAX_CACHED_PAGES {
-                if let Some(oldest) = inner.page_order.pop_front() {
-                    inner.pages.remove(&oldest);
-                }
-            }
-        }
-        for offset in 0..changed_row_count {
-            self.notify.row_changed(start_row as usize + offset);
-        }
-    }
-
-    fn mark_page_complete(&self, generation: u64, module_id: &str, page: u64) {
-        let mut inner = self.inner.borrow_mut();
-        if inner.generation == generation && inner.module_id == module_id {
-            inner.inflight_pages.remove(&page);
-        }
-    }
-
-    fn request_page_if_needed(&self, request: PageRequest) {
-        let requester = {
-            let mut inner = self.inner.borrow_mut();
-            if request.page * PAGE_SIZE >= inner.row_count as u64 {
-                return;
-            }
-            if inner.pages.contains_key(&request.page)
-                || inner.inflight_pages.contains(&request.page)
-            {
-                return;
-            }
-            inner.inflight_pages.insert(request.page);
-            self.requester.borrow().clone()
-        };
-
-        if let Some(requester) = requester {
-            requester(request);
-        }
-    }
-
-    fn placeholder_row(&self, row: usize) -> UiLinearRow {
-        let is_selected = self.inner.borrow().selected_row == Some(row);
-        UiLinearRow {
-            kind: "loading".into(),
-            section: "".into(),
-            address: "...".into(),
-            bytes: "...".into(),
-            mnemonic: "loading".into(),
-            operands: "".into(),
-            comment: "".into(),
-            category: "other".into(),
-            is_selected,
-            is_loading: true,
-        }
-    }
-}
-
-impl Model for DisassemblyRowsModel {
-    type Data = UiLinearRow;
-
-    fn row_count(&self) -> usize {
-        self.inner.borrow().row_count
-    }
-
-    fn row_data(&self, row: usize) -> Option<Self::Data> {
-        let (generation, module_id, row_count, page, cached) = {
-            let inner = self.inner.borrow();
-            if row >= inner.row_count {
-                return None;
-            }
-            let page = row as u64 / PAGE_SIZE;
-            let offset = row % PAGE_SIZE as usize;
-            (
-                inner.generation,
-                inner.module_id.clone(),
-                inner.row_count,
-                page,
-                inner
-                    .pages
-                    .get(&page)
-                    .and_then(|rows| rows.get(offset))
-                    .cloned(),
-            )
-        };
-
-        if let Some(cached) = cached {
-            return Some(cached);
-        }
-
-        self.request_page_if_needed(PageRequest {
-            generation,
-            module_id: module_id.clone(),
-            page,
-        });
-        if page > 0 {
-            self.request_page_if_needed(PageRequest {
-                generation,
-                module_id: module_id.clone(),
-                page: page - 1,
-            });
-        }
-        if (page + 1) * PAGE_SIZE < row_count as u64 {
-            self.request_page_if_needed(PageRequest {
-                generation,
-                module_id,
-                page: page + 1,
-            });
-        }
-
-        Some(self.placeholder_row(row))
-    }
-
-    fn model_tracker(&self) -> &dyn slint::ModelTracker {
-        &self.notify
     }
 }
 
@@ -942,160 +680,9 @@ fn with_engine<T>(
     operation(&mut engine).map_err(|error| error.to_string())
 }
 
-fn map_linear_row(row: LinearViewRow, sections: &[SectionRange]) -> UiLinearRow {
-    let address = parse_hex_u64(&row.address).ok();
-    let section = address
-        .and_then(|address| {
-            sections
-                .iter()
-                .find(|section| address >= section.start && address < section.end)
-                .map(|section| section.name.clone())
-        })
-        .unwrap_or_default();
-
-    let category = row
-        .instruction_category
-        .map(|category| match category {
-            engine::api::InstructionCategory::Call => "call",
-            engine::api::InstructionCategory::Return => "return",
-            engine::api::InstructionCategory::ControlFlow => "control_flow",
-            engine::api::InstructionCategory::System => "system",
-            engine::api::InstructionCategory::Stack => "stack",
-            engine::api::InstructionCategory::String => "string",
-            engine::api::InstructionCategory::CompareTest => "compare_test",
-            engine::api::InstructionCategory::Arithmetic => "arithmetic",
-            engine::api::InstructionCategory::Logic => "logic",
-            engine::api::InstructionCategory::BitShift => "bit_shift",
-            engine::api::InstructionCategory::DataTransfer => "data_transfer",
-            engine::api::InstructionCategory::Other => "other",
-        })
-        .unwrap_or("other");
-
-    let comment = match row.kind {
-        "comment" | "label" => row.text.unwrap_or_default(),
-        _ => row.comment.unwrap_or_default(),
-    };
-
-    UiLinearRow {
-        kind: row.kind.into(),
-        section,
-        address: row.address.into(),
-        bytes: row.bytes.into(),
-        mnemonic: row.mnemonic.into(),
-        operands: row.operands.into(),
-        comment: comment.into(),
-        category: category.into(),
-        is_selected: false,
-        is_loading: false,
-    }
-}
-
-fn build_section_ranges(sections: &[SectionInfo]) -> Vec<SectionRange> {
-    sections
-        .iter()
-        .filter_map(|section| {
-            Some(SectionRange {
-                name: section.name.clone().into(),
-                start: parse_hex_u64(&section.start_va).ok()?,
-                end: parse_hex_u64(&section.end_va).ok()?,
-            })
-        })
-        .collect()
-}
-
-fn normalize_hex_address(raw: &str) -> String {
-    let trimmed = raw.trim();
-    if trimmed.is_empty() {
-        return String::new();
-    }
-    let digits = trimmed
-        .strip_prefix("0x")
-        .or_else(|| trimmed.strip_prefix("0X"))
-        .unwrap_or(trimmed);
-    format!("0x{}", digits.to_uppercase())
-}
-
-fn parse_hex_u64(value: &str) -> Result<u64, String> {
-    let trimmed = value.trim();
-    let digits = trimmed
-        .strip_prefix("0x")
-        .or_else(|| trimmed.strip_prefix("0X"))
-        .unwrap_or(trimmed);
-    u64::from_str_radix(digits, 16).map_err(|error| error.to_string())
-}
-
 fn display_name(path: &Path) -> String {
     path.file_name()
         .and_then(|name| name.to_str())
         .map(ToOwned::to_owned)
         .unwrap_or_else(|| path.to_string_lossy().to_string())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::{DisassemblyRowsModel, PAGE_SIZE, map_linear_row};
-    use engine::api::{InstructionCategory, LinearViewRow};
-    use slint::Model;
-
-    fn instruction_row(address: &str) -> LinearViewRow {
-        LinearViewRow {
-            kind: "instruction",
-            address: address.to_string(),
-            bytes: "90".to_string(),
-            mnemonic: "nop".to_string(),
-            operands: String::new(),
-            instruction_category: Some(InstructionCategory::Other),
-            branch_target: None,
-            call_target: None,
-            comment: None,
-            text: None,
-        }
-    }
-
-    #[test]
-    fn row_model_returns_loading_placeholder_for_missing_page() {
-        let model = DisassemblyRowsModel::default();
-        model.configure(1, "m1".to_string(), PAGE_SIZE as usize);
-
-        let row = model.row_data(7).expect("placeholder row");
-        assert!(row.is_loading);
-        assert_eq!(row.mnemonic.as_str(), "loading");
-    }
-
-    #[test]
-    fn row_model_marks_cached_row_selected() {
-        let model = DisassemblyRowsModel::default();
-        model.configure(1, "m1".to_string(), PAGE_SIZE as usize);
-        model.apply_page(
-            1,
-            "m1",
-            0,
-            vec![map_linear_row(instruction_row("0x140001000"), &[])],
-        );
-
-        model.set_selected_row(Some(0));
-        assert!(model.row_data(0).expect("selected row").is_selected);
-    }
-
-    #[test]
-    fn linear_label_rows_map_text_into_comment_field() {
-        let mapped = map_linear_row(
-            LinearViewRow {
-                kind: "label",
-                address: "0x140001000".to_string(),
-                bytes: String::new(),
-                mnemonic: String::new(),
-                operands: String::new(),
-                instruction_category: None,
-                branch_target: None,
-                call_target: None,
-                comment: None,
-                text: Some("lbl_140001000".to_string()),
-            },
-            &[],
-        );
-
-        assert_eq!(mapped.kind.as_str(), "label");
-        assert_eq!(mapped.comment.as_str(), "lbl_140001000");
-    }
 }

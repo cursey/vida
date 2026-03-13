@@ -1,5 +1,49 @@
 # Work Log
 
+## 2026-03-13 - Switch Slint App to Skia Renderer
+
+Summary:
+- Replaced the `app-slint` Slint renderer feature selection from `renderer-femtovg` to `renderer-skia` while keeping the existing Winit backend and app code unchanged.
+- Verified the workspace still builds and links successfully with the Skia renderer path, including the existing `app-slint` tests.
+
+Validation commands executed:
+- `cargo fmt --manifest-path app-slint/Cargo.toml -- --check`
+- `cargo check --manifest-path app-slint/Cargo.toml`
+- `cargo test --manifest-path app-slint/Cargo.toml`
+
+Changed files index:
+- See `docs/change_files.md` for the detailed file list for this work item.
+
+## 2026-03-13 - Extract Slint Status Bar Controller and Normalize Controller Module Layout
+
+Summary:
+- Moved the Slint controller root from `app-slint/src/controller.rs` to `app-slint/src/controller/mod.rs` so all controller modules now live under one `controller/` tree instead of mixing a flat module file with sibling submodules.
+- Added a dedicated `StatusBarController` that owns status-text, current-address, go-to text, and row-count updates, reducing the amount of direct status-bar property wiring inside `AppController`.
+- Kept the function-list and linear-view controller modules under the same directory structure and preserved the existing load, paging, and navigation behavior.
+
+Validation commands executed:
+- `cargo fmt --manifest-path app-slint/Cargo.toml`
+- `cargo fmt --manifest-path app-slint/Cargo.toml -- --check`
+- `cargo test --manifest-path app-slint/Cargo.toml`
+
+Changed files index:
+- See `docs/change_files.md` for the detailed file list for this work item.
+
+## 2026-03-13 - Split Slint Controller Linear View and Function List Modules
+
+Summary:
+- Moved the Slint function list model out of `app-slint/src/controller.rs` into a dedicated `controller/function_list.rs` module so the app controller keeps only orchestration logic.
+- Moved the virtualized linear-view row model, section-range helpers, address normalization, and row-mapping tests into `controller/linear_view.rs` so the paging behavior and its tests sit with the linear-view implementation.
+- Kept the existing `AppController` wiring and message flow unchanged while reducing `controller.rs` to the load/navigation orchestration and background worker plumbing.
+
+Validation commands executed:
+- `cargo fmt --manifest-path app-slint/Cargo.toml`
+- `cargo fmt --manifest-path app-slint/Cargo.toml -- --check`
+- `cargo test --manifest-path app-slint/Cargo.toml`
+
+Changed files index:
+- See `docs/change_files.md` for the detailed file list for this work item.
+
 ## 2026-03-13 - Add Experimental Slint Linear Disassembly App
 
 Summary:
