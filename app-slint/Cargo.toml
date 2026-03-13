@@ -1,0 +1,13 @@
+[package]
+name = "app-slint"
+version = "0.1.0"
+edition = "2024"
+build = "build.rs"
+
+[dependencies]
+engine = { path = "../engine" }
+rfd = "0.15.4"
+slint = { version = "1.15.1", features = ["backend-winit", "renderer-femtovg", "std"] }
+
+[build-dependencies]
+slint-build = "1.15.1"

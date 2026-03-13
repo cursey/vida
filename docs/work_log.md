@@ -1,5 +1,23 @@
 # Work Log
 
+## 2026-03-13 - Add Experimental Slint Linear Disassembly App
+
+Summary:
+- Added a parallel `app-slint` native desktop crate that reuses the existing in-process Rust `EngineState` instead of the Tauri host, keeping the current `app/` workflow unchanged while introducing an experimental Slint-based UI path.
+- Implemented a first-pass native workspace with file open, background analysis progress, a function list, go-to-address navigation, row selection, and a virtualized linear disassembly pane backed by the existing paged linear-view engine APIs.
+- Built the Slint disassembly list around a custom row model plus a UI-thread message pump so background engine work only sends plain data back to the UI thread, avoiding cross-thread Slint model access while still prefetching paged linear rows asynchronously.
+- Extended the root `justfile` with `slint-build`, `slint-dev`, `slint-fmt`, `slint-check`, and `slint-test`, and folded the Slint crate into the existing root `build`, `fmt`, `check`, and `test` recipes.
+
+Validation commands executed:
+- `cargo test --manifest-path app-slint/Cargo.toml`
+- `just slint-check`
+- `just slint-test`
+- `just check`
+- `just test`
+
+Changed files index:
+- See `docs/change_files.md` for the detailed file list for this work item.
+
 ## 2026-03-12 - Add Linear Basic-Block Label Rows
 
 Summary:

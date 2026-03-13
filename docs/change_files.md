@@ -1,5 +1,22 @@
 # Change Files
 
+## 2026-03-13 - Add Experimental Slint Linear Disassembly App
+
+Root:
+- `justfile`
+
+App:
+- `app-slint/build.rs`
+- `app-slint/Cargo.toml`
+- `app-slint/Cargo.lock`
+- `app-slint/src/controller.rs`
+- `app-slint/src/main.rs`
+- `app-slint/ui/main-window.slint`
+
+Docs:
+- `docs/work_log.md`
+- `docs/change_files.md`
+
 ## 2026-03-12 - Add Linear Basic-Block Label Rows
 
 App:

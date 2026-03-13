@@ -37,6 +37,7 @@ app-test:
 clean:
   if (Test-Path "app/dist") { Remove-Item -Recurse -Force "app/dist" }
   if (Test-Path "app/src-tauri/target") { Remove-Item -Recurse -Force "app/src-tauri/target" }
+  if (Test-Path "app-slint/target") { Remove-Item -Recurse -Force "app-slint/target" }
   if (Test-Path "engine/target") { Remove-Item -Recurse -Force "engine/target" }
 
 engine-build:
@@ -50,6 +51,22 @@ engine-fmt-check:
 
 engine-test:
   cargo test --manifest-path engine/Cargo.toml
+
+slint-build:
+  cargo build --manifest-path app-slint/Cargo.toml
+
+slint-dev:
+  cargo run --manifest-path app-slint/Cargo.toml
+
+slint-fmt:
+  cargo fmt --manifest-path app-slint/Cargo.toml
+
+slint-check:
+  cargo fmt --manifest-path app-slint/Cargo.toml -- --check
+  cargo check --manifest-path app-slint/Cargo.toml
+
+slint-test:
+  cargo test --manifest-path app-slint/Cargo.toml
 
 engine-bench-prepare-fixtures:
   python "engine/tests/fixtures/generate_bench_fixtures.py"
@@ -77,15 +94,15 @@ engine-bench-compare BASELINE FIXTURE_SET="quick":
 
 bench: engine-bench
 
-build: engine-build app-build
+build: engine-build app-build slint-build
 
 build-release: app-build-release
 build-portable: app-build-portable
 
 lint: app-lint
 
-fmt: app-fmt engine-fmt
+fmt: app-fmt engine-fmt slint-fmt
 
-check: app-check engine-fmt-check
+check: app-check engine-fmt-check slint-check
 
-test: app-test engine-test
+test: app-test engine-test slint-test

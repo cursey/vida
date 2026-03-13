@@ -1,0 +1,384 @@
+import { Button, LineEdit, ListView } from "std-widgets.slint";
+
+export struct UiFunctionItem {
+    name: string,
+    start_va: string,
+}
+
+export struct UiLinearRow {
+    kind: string,
+    section: string,
+    address: string,
+    bytes: string,
+    mnemonic: string,
+    operands: string,
+    comment: string,
+    category: string,
+    is_selected: bool,
+    is_loading: bool,
+}
+
+component DisassemblyPane inherits Rectangle {
+    in-out property <[UiLinearRow]> rows;
+    in-out property <length> viewport-y <=> disassembly-list.viewport-y;
+    callback row-selected(index: int, va: string);
+
+    pure function row-background(row: UiLinearRow) -> brush {
+        if (row.is_selected) {
+            return #1f3a5f;
+        }
+        if (row.kind == "gap") {
+            return #1b1b1f;
+        }
+        if (row.kind == "comment" || row.kind == "label") {
+            return #16181d;
+        }
+        return #121417;
+    }
+
+    pure function mnemonic-color(category: string, kind: string) -> brush {
+        if (kind == "label") {
+            return #ffd479;
+        }
+        if (kind == "comment") {
+            return #8d99aa;
+        }
+        if (category == "call") {
+            return #7dcfff;
+        }
+        if (category == "return") {
+            return #ff9e64;
+        }
+        if (category == "control_flow") {
+            return #bb9af7;
+        }
+        if (category == "compare_test") {
+            return #9ece6a;
+        }
+        return #d7dce2;
+    }
+
+    background: #101319;
+    horizontal-stretch: 1;
+    vertical-stretch: 1;
+
+    VerticalLayout {
+        spacing: 0px;
+
+        Rectangle {
+            height: 30px;
+            background: #1a1f27;
+            border-width: 1px;
+            border-color: #242b36;
+
+            HorizontalLayout {
+                spacing: 0px;
+
+                Rectangle { width: 88px; Text { x: 10px; y: 7px; text: "Section"; color: #8d99aa; } }
+                Rectangle { width: 132px; Text { x: 10px; y: 7px; text: "Address"; color: #8d99aa; } }
+                Rectangle { width: 220px; Text { x: 10px; y: 7px; text: "Bytes"; color: #8d99aa; } }
+                Rectangle { width: 380px; Text { x: 10px; y: 7px; text: "Instruction"; color: #8d99aa; } }
+                Rectangle { horizontal-stretch: 1; Text { x: 10px; y: 7px; text: "Comment"; color: #8d99aa; } }
+            }
+        }
+
+        disassembly-list := ListView {
+            for row[index] in root.rows : Rectangle {
+                height: 24px;
+                background: root.row-background(row);
+
+                TouchArea {
+                    clicked => {
+                        root.row-selected(index, row.address);
+                    }
+                }
+
+                HorizontalLayout {
+                    spacing: 0px;
+
+                    Rectangle {
+                        width: 88px;
+                        clip: true;
+                        Text {
+                            x: 10px;
+                            y: 5px;
+                            text: row.section;
+                            color: #7a8595;
+                            font-family: "Cascadia Mono";
+                            font-size: 12px;
+                        }
+                    }
+
+                    Rectangle {
+                        width: 132px;
+                        clip: true;
+                        Text {
+                            x: 10px;
+                            y: 5px;
+                            text: row.address;
+                            color: #d7dce2;
+                            font-family: "Cascadia Mono";
+                            font-size: 12px;
+                        }
+                    }
+
+                    Rectangle {
+                        width: 220px;
+                        clip: true;
+                        Text {
+                            x: 10px;
+                            y: 5px;
+                            text: row.bytes;
+                            color: #7a8595;
+                            font-family: "Cascadia Mono";
+                            font-size: 12px;
+                        }
+                    }
+
+                    Rectangle {
+                        width: 380px;
+                        clip: true;
+
+                        if (row.kind == "comment") : Text {
+                            x: 10px;
+                            y: 5px;
+                            text: row.comment == "" ? "" : "; " + row.comment;
+                            color: #8d99aa;
+                            font-family: "Cascadia Mono";
+                            font-size: 12px;
+                        }
+
+                        if (row.kind == "label") : Text {
+                            x: 10px;
+                            y: 5px;
+                            text: row.comment + ":";
+                            color: #ffd479;
+                            font-family: "Cascadia Mono";
+                            font-size: 12px;
+                        }
+
+                        if (row.kind != "comment" && row.kind != "label") : Text {
+                            x: 10px;
+                            y: 5px;
+                            text: row.operands == "" ? row.mnemonic : row.mnemonic + " " + row.operands;
+                            color: root.mnemonic-color(row.category, row.kind);
+                            font-family: "Cascadia Mono";
+                            font-size: 12px;
+                        }
+                    }
+
+                    Rectangle {
+                        horizontal-stretch: 1;
+                        clip: true;
+                        Text {
+                            x: 10px;
+                            y: 5px;
+                            text: row.kind == "instruction" || row.kind == "gap" ? row.comment : "";
+                            color: #8d99aa;
+                            font-family: "Cascadia Mono";
+                            font-size: 12px;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+export component MainWindow inherits Window {
+    in-out property <[UiFunctionItem]> functions;
+    in-out property <[UiLinearRow]> disassembly-rows;
+    in-out property <string> file-name;
+    in-out property <string> status-text;
+    in-out property <string> workspace-message;
+    in-out property <string> current-address;
+    in-out property <string> go-to-text;
+    in-out property <string> row-count-text;
+    in-out property <length> disassembly-viewport-y;
+    in-out property <bool> has-module;
+    in-out property <bool> is-ready;
+    in-out property <int> selected-function-index;
+
+    callback open-requested();
+    callback function-selected(index: int, start-va: string);
+    callback row-selected(index: int, va: string);
+    callback go-to-requested(va: string);
+
+    preferred-width: 1440px;
+    preferred-height: 920px;
+    min-width: 960px;
+    min-height: 640px;
+    title: file-name == "" ? "electron-disassembler (Slint)" : file-name + " - electron-disassembler (Slint)";
+    background: #0e1013;
+
+    VerticalLayout {
+        spacing: 0px;
+
+        Rectangle {
+            background: #191d24;
+            border-width: 1px;
+            border-color: #2a313c;
+            height: 52px;
+
+            HorizontalLayout {
+                spacing: 10px;
+                padding-left: 12px;
+                padding-right: 12px;
+                padding-top: 8px;
+                padding-bottom: 8px;
+
+                Button {
+                    text: "Open";
+                    clicked => {
+                        root.open-requested();
+                    }
+                }
+
+                Text {
+                    text: root.file-name == "" ? "No file loaded" : root.file-name;
+                    vertical-alignment: center;
+                    color: #f1f5f9;
+                    font-size: 14px;
+                    horizontal-stretch: 1;
+                }
+
+                Text {
+                    text: root.row-count-text;
+                    vertical-alignment: center;
+                    color: #8d99aa;
+                }
+
+                LineEdit {
+                    width: 180px;
+                    text <=> root.go-to-text;
+                    placeholder-text: "Go to address";
+                    enabled: root.has-module;
+                    accepted => {
+                        root.go-to-requested(self.text);
+                    }
+                }
+
+                Button {
+                    text: "Go";
+                    enabled: root.has-module;
+                    clicked => {
+                        root.go-to-requested(root.go-to-text);
+                    }
+                }
+            }
+        }
+
+        Rectangle {
+            background: #0f1217;
+            border-width: 1px;
+            border-color: #242b36;
+            horizontal-stretch: 1;
+            vertical-stretch: 1;
+
+            HorizontalLayout {
+                spacing: 0px;
+
+                Rectangle {
+                    width: 280px;
+                    background: #14181f;
+                    border-width: 1px;
+                    border-color: #242b36;
+
+                    VerticalLayout {
+                        spacing: 0px;
+
+                        Rectangle {
+                            height: 34px;
+                            background: #1a1f27;
+                            border-width: 1px;
+                            border-color: #242b36;
+
+                            Text {
+                                x: 12px;
+                                y: 8px;
+                                text: "Functions";
+                                color: #f1f5f9;
+                                font-size: 13px;
+                            }
+                        }
+
+                        ListView {
+                            for function[index] in root.functions : Rectangle {
+                                height: 28px;
+                                background: root.selected-function-index == index ? #20324a : transparent;
+
+                                TouchArea {
+                                    clicked => {
+                                        root.function-selected(index, function.start_va);
+                                    }
+                                }
+
+                                Text {
+                                    x: 12px;
+                                    y: 6px;
+                                    text: function.name;
+                                    color: #d7dce2;
+                                    overflow: elide;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Rectangle {
+                    background: #101319;
+                    horizontal-stretch: 1;
+                    vertical-stretch: 1;
+
+                    if (!root.has-module) : Rectangle {
+                        background: transparent;
+                        Text {
+                            x: 32px;
+                            y: 32px;
+                            text: root.workspace-message;
+                            color: #8d99aa;
+                            font-size: 15px;
+                        }
+                    }
+
+                    if (root.has-module) : VerticalLayout {
+                        spacing: 0px;
+                        DisassemblyPane {
+                            rows <=> root.disassembly-rows;
+                            viewport-y <=> root.disassembly-viewport-y;
+                            row-selected(index, va) => {
+                                root.row-selected(index, va);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Rectangle {
+            background: #191d24;
+            border-width: 1px;
+            border-color: #242b36;
+            height: 28px;
+
+            HorizontalLayout {
+                padding-left: 12px;
+                padding-right: 12px;
+
+                Text {
+                    text: root.status-text;
+                    color: #c7ced8;
+                    vertical-alignment: center;
+                    horizontal-stretch: 1;
+                }
+
+                Text {
+                    text: root.current-address == "" ? "" : "VA " + root.current-address;
+                    color: #8d99aa;
+                    vertical-alignment: center;
+                }
+            }
+        }
+    }
+
+}
